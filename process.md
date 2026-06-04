@@ -1164,3 +1164,15 @@
   - `is_task_request`가 `리마인드` 단어 하나만으로 할 일 요청을 확정하지 않도록 좁혔다.
   - `리마인드 기능은 없나?`는 `help`, `30분 뒤 물 마시라고 알려줘`는 `manage_task`로 라우팅되는 테스트를 추가했다.
   - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - 라우팅 모델 우선 구조 전환
+
+- 작업 이름: Router Agent 모델 우선 판단 적용
+- 진행상황: 완료
+- 진행내용:
+  - 기존에는 고신뢰 휴리스틱이 먼저 실행되어 라우팅 모델 호출을 건너뛰는 구조였음을 확인했다.
+  - `RouterAgent.route`가 현재 메시지와 최근 대화 맥락을 라우팅 모델에 먼저 전달하도록 변경했다.
+  - 휴리스틱 라우팅은 모델 호출 실패 또는 라우터 JSON 파싱 실패 시 fallback으로만 사용하도록 변경했다.
+  - Discord 봇과 로컬 `assistant-admin ask` 경로에서 최근 대화 8개를 라우터 입력에 포함하도록 했다.
+  - 휴리스틱 기준으로는 `manage_task`가 될 수 있는 문장도 모델이 `help`로 판단하면 모델 판단을 따르는 테스트를 추가했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.

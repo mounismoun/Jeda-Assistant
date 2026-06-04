@@ -46,6 +46,8 @@ PDF는 텍스트 추출만 지원한다. 스캔 이미지 OCR은 v1 범위에서
 ### Router Agent
 
 - `gpt-5.4-mini`를 사용한다.
+- 현재 메시지와 최근 대화 맥락을 라우팅 모델에 먼저 전달한다.
+- 휴리스틱 라우팅은 모델 호출 실패 또는 라우터 JSON 파싱 실패 시 fallback으로만 사용한다.
 - 사용자 메시지를 다음 intent 중 하나로 분류한다.
   - `chat`
   - `help`
@@ -234,7 +236,7 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - `assistant-admin export`로 저장된 메모, 문서, 할 일을 전체 또는 user_id 기준으로 JSON 내보내도록 구현했다.
 - `assistant-admin search`로 저장된 메모, 문서, 할 일을 전체 또는 user_id 기준으로 로컬 SQLite에서 키워드 검색하도록 구현했다.
 - `assistant-admin ingest`로 로컬 `.txt`, `.md`, `.pdf` 파일을 Discord 없이 사용자 장기 기억 문서로 저장하도록 구현했다.
-- `assistant-admin route`로 OpenAI 호출 없이 라우팅 intent를 미리 확인하도록 구현했다.
+- `assistant-admin route`로 OpenAI 호출 없이 휴리스틱 fallback intent를 미리 확인하도록 구현했다.
 - `assistant-admin ask`로 Discord를 켜기 전 로컬에서 실제 에이전트, OpenAI, SQLite 흐름을 실행하도록 구현했다.
 - `assistant-admin briefing`으로 사용자별 오늘 브리핑을 SQLite 기준으로 출력하도록 구현했다.
 - `assistant-admin snapshot`으로 사용자별 기억, 할 일, 대기 작업, 최근 대화 위치를 한 번에 점검하도록 구현했다.
@@ -323,7 +325,7 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 
 ### 자동 검증 결과
 
-- `python3 -m pytest`: 통과, 158개 테스트
+- `python3 -m pytest`: 통과, 160개 테스트
 - `python3 -m ruff check .`: 통과
 - `python3 -m compileall assistant_bot tests`: 통과
 - `assistant-admin doctor`, `assistant-admin invite`, `assistant-admin stats`, `assistant-admin export`, `assistant-admin search`, `assistant-admin backup`: 실행 확인

@@ -13,6 +13,7 @@ from assistant_bot.agents import (
     TaskAgent,
     UtilityAgent,
     asks_to_delete_all_memories,
+    format_conversation_context,
     format_task_priority,
     has_substantive_memory_text,
 )
@@ -252,6 +253,9 @@ class AssistantBot(discord.Client):
             text=text,
             has_attachments=bool(supported_attachments),
             scope=scope,
+            conversation_context=format_conversation_context(
+                self.conversations.recent_messages(scope.conversation_id, limit=8)
+            ),
         )
 
         if route.intent == "remember":

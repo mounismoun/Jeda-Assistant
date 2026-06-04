@@ -160,7 +160,8 @@ assistant-admin ingest ./meeting.md --user-id 123456789
 assistant-admin ingest ./notes.md ./plan.pdf --user-id 123456789
 ```
 
-메시지가 어떤 intent로 분류될지 OpenAI 호출 없이 빠르게 확인한다.
+OpenAI 호출 없이 휴리스틱 fallback 기준 intent를 빠르게 확인한다. 실제 봇은 라우팅 모델을 먼저 사용하므로,
+최종 판단은 `assistant-admin ask`나 Discord 실행 경로에서 확인한다.
 
 ```bash
 assistant-admin route "이거 기억해줘: 나는 오전에 집중이 잘 돼"
@@ -444,7 +445,7 @@ python3 -m ruff check .
 
 현재 자동 검증 결과:
 
-- 테스트 158개 통과
+- 테스트 160개 통과
 - Ruff lint 통과
 - `python3 -m compileall assistant_bot tests` 통과
 - `assistant-admin doctor`, `assistant-admin invite`, `assistant-admin stats`, `assistant-admin export`, `assistant-admin search`, `assistant-admin backup` 실행 확인

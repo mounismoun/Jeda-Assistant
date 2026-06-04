@@ -30,40 +30,48 @@ class RouterAgent:
         text: str,
         has_attachments: bool,
         scope: ConversationScope,
+        conversation_context: str | None = None,
     ) -> RoutingResult:
-        heuristic = heuristic_route(text, has_attachments)
-        if heuristic.confidence >= 0.92:
-            self.logs.add(
-                conversation_id=scope.conversation_id,
-                agent="router",
-                intent=heuristic.intent,
-                model=self.config.router_model,
-                reason=f"휴리스틱 라우팅: {heuristic.reason}",
-            )
-            return heuristic
-
         instructions = f"""
 너는 Discord 대화형 비서의 라우터다.
-사용자 메시지를 아래 intent 중 하나로만 분류한다.
+사용자 메시지와 최근 대화 맥락을 읽고 아래 intent 중 하나로만 분류한다.
+단어 하나에 기계적으로 반응하지 말고, 사용자의 실제 의도를 우선 판단한다.
+기능이 있는지, 무엇을 할 수 있는지 묻는 질문은 작업 실행이 아니라 help로 분류한다.
 
 {self.routing_prompt_block}
 
 JSON만 반환한다. 형식: {{"intent":"chat","confidence":0.0,"reason":"짧은 이유"}}
 """
-        output = await self.openai.text_response(
-            model=self.config.router_model,
-            instructions=instructions,
-            input_text=f"첨부 파일 있음: {has_attachments}\n메시지: {text}",
-            temperature=0,
-        )
-        route = parse_routing_result(output, allowed_intents=self.allowed_intents)
-        self.logs.add(
-            conversation_id=scope.conversation_id,
-            agent="router",
-            intent=route.intent,
-            model=self.config.router_model,
-            reason=route.reason,
-        )
-        return route
-
-
+        try:
+            output = await self.openai.text_response(
+                model=self.config.router_model,
+                instructions=instructions,
+                input_text=(
+                    f"대화 ID: {scope.conversation_id}\n"
+                    f"첨부 파일 있음: {has_attachments}\n\n"
+                    f"최근 대화 맥락:\n{conversation_context or '(없음)'}\n\n"
+                    f"현재 사용자 메시지:\n{text}"
+                ),
+                temperature=0,
+            )
+            route = parse_routing_result(output, allowed_intents=self.allowed_intents)
+            if route.reason == "라우터 JSON 파싱 실패":
+                raise ValueError(route.reason)
+            self.logs.add(
+                conversation_id=scope.conversation_id,
+                agent="router",
+                intent=route.intent,
+                model=self.config.router_model,
+                reason=f"모델 라우팅: {route.reason}",
+            )
+            return route
+        except Exception as error:
+            heuristic = heuristic_route(text, has_attachments)
+            self.logs.add(
+                conversation_id=scope.conversation_id,
+                agent="router",
+                intent=heuristic.intent,
+                model=self.config.router_model,
+                reason=f"모델 라우팅 실패 후 휴리스틱 fallback: {error}; {heuristic.reason}",
+            )
+            return heuristic

@@ -24,6 +24,7 @@ from assistant_bot.agents import (
     UtilityAgent,
     asks_to_delete_all_memories,
     compact_preview,
+    format_conversation_context,
     format_conversation_location,
     format_task_detail,
     format_task_priority,
@@ -2363,7 +2364,14 @@ async def run_local_text_interaction(
         pending_memory_deletions=pending_memory_deletions,
     )
     if answer is None:
-        route = await router.route(text=text, has_attachments=False, scope=scope)
+        route = await router.route(
+            text=text,
+            has_attachments=False,
+            scope=scope,
+            conversation_context=format_conversation_context(
+                conversations.recent_messages(scope.conversation_id, limit=8)
+            ),
+        )
         if route.intent == "delete_memory":
             if asks_to_delete_all_memories(text):
                 answer = request_local_memory_deletion_confirmation(
