@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "discord-general-assistant"
+version = "0.1.0"
+description = "Discord 대화형 범용 비서"
+requires-python = ">=3.12"
+dependencies = [
+  "discord.py>=2.5.2",
+  "openai>=1.88.0",
+  "pypdf>=5.6.0",
+  "python-dotenv>=1.1.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.0",
+  "ruff>=0.11.13"
+]
+
+[project.scripts]
+assistant-bot = "assistant_bot.main:main"
+assistant-admin = "assistant_bot.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["assistant_bot*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
