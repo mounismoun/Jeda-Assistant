@@ -6,6 +6,7 @@
 - 슬래시 명령어가 아니라 멘션, 답글, DM을 통해 자연스럽게 대화한다.
 - 첫 전문 기능은 사용자가 명시적으로 저장한 메모와 파일을 기억하고 회상하는 것이다.
 - 이후 전문 에이전트를 쉽게 추가할 수 있도록 처음부터 얇은 멀티 에이전트 구조로 시작한다.
+- 에이전트 목록의 목적, 설명, 예시는 `agent_catalog.json` 설정 파일로 관리한다.
 - 라우팅 모델은 `gpt-5.4-mini`로 고정한다.
 - 각 전문 에이전트는 작업 난이도를 판단한 뒤 답변 모델을 선택한다.
 
@@ -38,6 +39,9 @@ PDF는 텍스트 추출만 지원한다. 스캔 이미지 OCR은 v1 범위에서
 텍스트 파일은 UTF-8로 읽을 수 있어야 하며, 의미 있는 문자 없이 기호만 있는 파일은 저장하지 않는다.
 
 ## 에이전트 구조
+
+에이전트 실행 코드는 `assistant_bot/agents/` 패키지로 분리한다.
+라우터가 참고하는 에이전트 목적, 설명, 예시는 `agent_catalog.json`에서 관리하고, 실제 실행 핸들러는 `assistant_bot/agent_registry.py`에서 연결한다.
 
 ### Router Agent
 
@@ -111,6 +115,19 @@ PDF는 텍스트 추출만 지원한다. 스캔 이미지 OCR은 v1 범위에서
 - 선택한 모델
 - 난이도
 - 모델 선택 이유 요약
+
+## Tool Calling 설계 원칙
+
+앞으로 추가되는 모든 전문 에이전트는 개발 단계부터 OpenAI tool/function calling 적용 여부를 검토한다.
+
+기본 원칙은 다음과 같다.
+
+- 에이전트가 외부 데이터 조회, 저장소 검색, 여러 단계의 정보 수집, 구조화된 작업 실행을 해야 한다면 tool calling 후보로 본다.
+- 모델 판단이 실제 효율을 높이는 복잡한 조회, 다중 검색, 애매한 자연어 해석에는 tool calling을 우선 검토한다.
+- 단순 도움말, 상태 확인, 명확한 CRUD, 삭제 확인, 리마인더 발송처럼 deterministic 제어가 더 안전한 흐름은 Python 직접 실행을 우선한다.
+- destructive 작업은 tool calling으로 바로 실행하지 않고 기존 확인 절차와 권한 제한을 유지한다.
+- 각 에이전트 설계 문서에는 사용 가능한 tool 목록, read-only/mutation 구분, tool 호출 실패 시 fallback 정책을 함께 기록한다.
+- tool calling은 에이전트 카탈로그 기반 라우팅 및 모듈화 계획과 연결해, 장기적으로 `AgentDefinition`에 사용 가능한 tool 목록을 포함하는 방향으로 발전시킨다.
 
 ## 저장소
 
@@ -299,7 +316,7 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 
 ### 자동 검증 결과
 
-- `python3 -m pytest`: 통과, 150개 테스트
+- `python3 -m pytest`: 통과, 154개 테스트
 - `python3 -m ruff check .`: 통과
 - `python3 -m compileall assistant_bot tests`: 통과
 - `assistant-admin doctor`, `assistant-admin invite`, `assistant-admin stats`, `assistant-admin export`, `assistant-admin search`, `assistant-admin backup`: 실행 확인

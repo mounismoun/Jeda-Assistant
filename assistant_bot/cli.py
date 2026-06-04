@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+from assistant_bot.agent_registry import AgentContext, build_agent_registry
 from assistant_bot.agents import (
     ConversationAgent,
     MemoryAgent,
@@ -2307,7 +2308,6 @@ async def run_local_text_interaction(
     pending_memory_deletions = PendingMemoryDeletionStore(database.connection)
     tasks = TaskStore(database.connection)
     memories = MemoryStore(database.connection, openai)
-    router = RouterAgent(config, openai, logs)
     memory_agent = MemoryAgent(
         config=config,
         openai=openai,
@@ -2330,6 +2330,22 @@ async def run_local_text_interaction(
         memories=memories,
         logs=logs,
     )
+    agent_registry = build_agent_registry(
+        memory_agent=memory_agent,
+        utility_agent=utility_agent,
+        task_agent=task_agent,
+        conversation_agent=conversation_agent,
+        pending_attachments=pending_attachments,
+        pending_memory_deletions=pending_memory_deletions,
+        pending_confirmation_ttl_minutes=config.pending_confirmation_ttl_minutes,
+    )
+    router = RouterAgent(
+        config,
+        openai,
+        logs,
+        routing_prompt_block=agent_registry.routing_prompt_block(),
+        allowed_intents=set(agent_registry.intents()),
+    )
     scope = ConversationScope(
         conversation_id=conversation_id or f"local:{user_id}",
         channel_id=channel_id,
@@ -2347,57 +2363,7 @@ async def run_local_text_interaction(
     )
     if answer is None:
         route = await router.route(text=text, has_attachments=False, scope=scope)
-        if route.intent == "remember":
-            answer = await memory_agent.remember_text(
-                text=text,
-                scope=scope,
-                message_id=make_local_message_id(),
-            )
-        elif route.intent == "help":
-            answer = utility_agent.help(scope=scope)
-        elif route.intent == "status":
-            answer = utility_agent.status(
-                scope=scope,
-                pending_count=pending_attachments.unresolved_count(
-                    scope=scope,
-                    ttl_minutes=config.pending_confirmation_ttl_minutes,
-                ),
-                pending_deletion_count=pending_memory_deletions.unresolved_count(
-                    scope=scope,
-                    ttl_minutes=config.pending_confirmation_ttl_minutes,
-                ),
-                location_label=local_location_label(guild_id),
-            )
-        elif route.intent == "daily_briefing":
-            answer = utility_agent.daily_briefing(scope=scope, location_label=local_location_label(guild_id))
-        elif route.intent == "reset_context":
-            answer = utility_agent.reset_context(scope=scope, conversations=conversations)
-        elif route.intent == "manage_task":
-            answer = task_agent.handle(text=text, scope=scope, message_id=make_local_message_id())
-        elif route.intent == "cancel_pending":
-            pending_deletion = pending_memory_deletions.resolve_latest(
-                scope=scope,
-                ttl_minutes=config.pending_confirmation_ttl_minutes,
-            )
-            pending_attachment = pending_attachments.resolve_latest(
-                scope=scope,
-                ttl_minutes=config.pending_confirmation_ttl_minutes,
-            )
-            if pending_deletion is not None:
-                answer = "전체 기억 삭제를 취소했어요."
-            elif pending_attachment is not None:
-                answer = f"`{', '.join(pending_attachment.filenames)}` 첨부 저장을 취소했어요."
-            else:
-                answer = "취소할 대기 작업이 없어요."
-        elif route.intent == "recall":
-            answer = await memory_agent.recall(text=text, scope=scope)
-        elif route.intent == "list_memory":
-            answer = await memory_agent.list_memories(text=text, scope=scope)
-        elif route.intent == "update_memory":
-            answer = await memory_agent.update(text=text, scope=scope)
-        elif route.intent == "restore_memory":
-            answer = memory_agent.restore(text=text, scope=scope)
-        elif route.intent == "delete_memory":
+        if route.intent == "delete_memory":
             if asks_to_delete_all_memories(text):
                 answer = request_local_memory_deletion_confirmation(
                     scope=scope,
@@ -2406,15 +2372,26 @@ async def run_local_text_interaction(
                     pending_memory_deletions=pending_memory_deletions,
                 )
             else:
-                answer = await memory_agent.delete(text=text, scope=scope)
-        elif route.intent == "unsupported":
-            answer = "지금은 그 요청을 처리할 수 없어요. 메모/파일 기억, 회상, 삭제부터 도와드릴 수 있습니다."
+                answer = await agent_registry.dispatch(
+                    route.intent,
+                    AgentContext(
+                        text=text,
+                        scope=scope,
+                        message_id=make_local_message_id(),
+                        author_name=author_name,
+                        location_label=local_location_label(guild_id),
+                    ),
+                )
         else:
-            answer = await conversation_agent.chat(
-                text=text,
-                scope=scope,
-                author_name=author_name,
-                location_label=local_location_label(guild_id),
+            answer = await agent_registry.dispatch(
+                route.intent,
+                AgentContext(
+                    text=text,
+                    scope=scope,
+                    message_id=make_local_message_id(),
+                    author_name=author_name,
+                    location_label=local_location_label(guild_id),
+                ),
             )
 
     conversations.add_message(

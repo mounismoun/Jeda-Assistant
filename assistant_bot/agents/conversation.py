@@ -1,0 +1,109 @@
+from __future__ import annotations
+
+from assistant_bot.config import Config
+from assistant_bot.model_selector import choose_model
+from assistant_bot.models import ConversationScope
+from assistant_bot.openai_service import OpenAIService
+from assistant_bot.stores import AgentLogStore, ConversationStore, MemoryStore
+
+from .common import format_conversation_context, format_memory_context
+
+
+class ConversationAgent:
+    def __init__(
+        self,
+        *,
+        config: Config,
+        openai: OpenAIService,
+        conversations: ConversationStore,
+        memories: MemoryStore,
+        logs: AgentLogStore,
+    ) -> None:
+        self.config = config
+        self.openai = openai
+        self.conversations = conversations
+        self.memories = memories
+        self.logs = logs
+
+    async def chat(
+        self,
+        *,
+        text: str,
+        scope: ConversationScope,
+        author_name: str,
+        location_label: str,
+    ) -> str:
+        recent = self.conversations.recent_messages(scope.conversation_id)
+        summary = self.conversations.latest_summary(scope.conversation_id)
+        related_memories = await self.memories.search(
+            scope=scope,
+            query=text,
+            limit=min(4, self.config.retrieval_limit),
+        )
+        useful_memories = [result for result in related_memories if result.score >= 0.24]
+        memory_context = format_memory_context(useful_memories)
+        conversation_context = format_conversation_context(recent)
+        context = "\n\n".join(
+            part
+            for part in [
+                f"이전 요약:\n{summary}" if summary else "",
+                f"최근 대화:\n{conversation_context}" if conversation_context else "",
+                f"관련 장기 기억:\n{memory_context}" if memory_context else "",
+            ]
+            if part
+        )
+        choice = choose_model(
+            self.config,
+            text,
+            context_chars=len(context),
+            result_count=len(useful_memories),
+        )
+        self.logs.add(
+            conversation_id=scope.conversation_id,
+            agent="conversation",
+            intent="chat",
+            difficulty=choice.difficulty,
+            model=choice.model,
+            reason=choice.reason,
+        )
+
+        instructions = """
+너는 Discord에서 대화하는 개인 비서다.
+말투는 자연스럽고 간결하게 유지한다.
+사용자가 명시적으로 기억해달라고 하지 않은 정보는 장기 기억으로 저장했다고 말하지 않는다.
+저장된 기억을 사용할 때는 자연스럽게 반영하되, 확실하지 않은 내용은 단정하지 않는다.
+"""
+        answer = await self.openai.text_response(
+            model=choice.model,
+            instructions=instructions,
+            input_text=(
+                f"사용자 이름: {author_name}\n\n"
+                f"현재 대화 위치: {location_label}\n"
+                "저장된 기억은 같은 사용자 기준으로 DM과 서버 어디서든 이어진다. "
+                "다만 답변할 때는 현재 대화 위치가 바뀌었음을 고려한다.\n\n"
+                f"컨텍스트:\n{context}\n\n"
+                f"사용자 메시지:\n{text}"
+            ),
+            temperature=0.4,
+        )
+
+        recent_chars = self.conversations.recent_char_count(scope.conversation_id)
+        if recent_chars >= self.config.context_compression_chars:
+            await self.compress_context(scope.conversation_id)
+
+        return answer
+
+    async def compress_context(self, conversation_id: str) -> None:
+        recent = self.conversations.recent_messages(conversation_id, limit=80)
+        context = format_conversation_context(recent)
+        if not context:
+            return
+        summary = await self.openai.text_response(
+            model=self.config.easy_model,
+            instructions="대화의 핵심 맥락, 사용자 선호, 미해결 작업만 짧게 한글로 요약한다.",
+            input_text=context,
+            temperature=0.1,
+        )
+        self.conversations.add_summary(conversation_id, summary)
+
+

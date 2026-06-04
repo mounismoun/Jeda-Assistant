@@ -1105,3 +1105,27 @@
   - `agent_modularization_plan.md`를 새로 만들어 에이전트 목록화, 모듈화, registry dispatch, 라우터 프롬프트 자동 구성 계획을 정리했다.
   - 현재 구조의 수동 연결 지점과 목표 구조를 구분해 기록했다.
   - 새 에이전트 추가 절차, 테스트 계획, 적용 순서, 제외 범위, 결정된 기본값을 문서에 포함했다.
+
+## 2026-06-05 - Tool Calling 도입 계획 문서화
+
+- 작업 이름: 선택적 tool/function calling 도입 계획 정리
+- 진행상황: 완료
+- 진행내용:
+  - `plan.md`에 앞으로 추가되는 모든 전문 에이전트는 개발 단계부터 tool calling 적용 여부를 검토한다는 설계 원칙을 추가했다.
+  - `tool_calling_plan.md`를 새로 만들어 tool calling을 사용할 때와 사용하지 않을 때의 판단 기준을 정리했다.
+  - Memory, Task, Conversation 계열에 선택적으로 tool calling을 도입하고 Router, Utility, 리마인더 루프, destructive 작업은 제외한다는 기본 정책을 기록했다.
+  - `OpenAIService.tool_response`, tool executor, 에이전트별 allowlist, 테스트 계획, 에이전트 모듈화 계획과의 관계를 문서에 포함했다.
+
+## 2026-06-05 - 에이전트 JSON 카탈로그 및 모듈화 적용
+
+- 작업 이름: 에이전트 레지스트리 리팩터링 실행
+- 진행상황: 완료
+- 진행내용:
+  - `agent_catalog.json`을 추가해 에이전트 intent, 이름, 목적, 설명, 예시를 JSON 설정 파일로 관리하도록 했다.
+  - `assistant_bot/agent_registry.py`를 추가해 JSON 카탈로그를 로딩하고, Python handler map으로 실제 에이전트 실행 함수를 연결하도록 했다.
+  - `RouterAgent`가 JSON 카탈로그 기반 `routing_prompt_block()`과 허용 intent 목록을 사용하도록 변경했다.
+  - Discord 봇과 로컬 CLI의 일반 intent 실행 경로를 `AgentRegistry.dispatch()`로 통합했다.
+  - 기존 `assistant_bot/agents.py`를 `assistant_bot/agents/` 패키지로 분리하고 `__init__.py`에서 기존 import 호환성을 유지했다.
+  - `tests/test_agent_registry.py`를 추가해 카탈로그 로딩, prompt block 생성, fallback dispatch, handler 누락 검증을 테스트했다.
+  - `README.md`, `plan.md`, `agent_modularization_plan.md`를 JSON 카탈로그 기반 구조와 현재 검증 결과에 맞춰 갱신했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.

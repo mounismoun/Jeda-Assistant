@@ -2,13 +2,14 @@
 
 ## 목적
 
-현재 구현은 `RouterAgent`, `MemoryAgent`, `TaskAgent`, `ConversationAgent`, `UtilityAgent`처럼 에이전트 책임이 클래스 단위로 분리되어 있다. 다만 대부분의 에이전트 코드가 `assistant_bot/agents.py`에 모여 있고, 라우팅 intent 설명과 실행 분기가 `agents.py`, `bot.py`, `cli.py`, `models.py`에 수동으로 흩어져 있다.
+초기 구현은 `RouterAgent`, `MemoryAgent`, `TaskAgent`, `ConversationAgent`, `UtilityAgent`처럼 에이전트 책임이 클래스 단위로 분리되어 있었지만, 대부분의 코드가 `assistant_bot/agents.py`에 모여 있었고 라우팅 intent 설명과 실행 분기가 `agents.py`, `bot.py`, `cli.py`, `models.py`에 수동으로 흩어져 있었다.
 
 이 계획의 목적은 새 에이전트를 추가할 때 다음 흐름에 가깝게 만드는 것이다.
 
 ```text
 새 에이전트 구현
-에이전트 목록에 목적, 설명, 예시, 핸들러 등록
+`agent_catalog.json`에 목적, 설명, 예시 등록
+Python registry에서 핸들러 연결
 라우터가 에이전트 목록을 참고
 등록된 핸들러가 실행
 ```
@@ -25,7 +26,7 @@
 
 ## 현재 구조
 
-현재 에이전트 클래스는 `assistant_bot/agents.py` 안에 있다.
+현재 에이전트 클래스는 `assistant_bot/agents/` 패키지 안에 파일 단위로 분리되어 있다.
 
 - `RouterAgent`: 사용자 메시지를 intent로 분류한다.
 - `MemoryAgent`: 기억 저장, 조회, 수정, 삭제, 복구를 처리한다.
@@ -33,12 +34,14 @@
 - `ConversationAgent`: 일반 대화와 기억 기반 답변을 처리한다.
 - `UtilityAgent`: 도움말, 상태 확인, 오늘 브리핑, 대화 맥락 초기화를 처리한다.
 
-현재 실행 연결은 다음 위치에 수동으로 들어가 있다.
+현재 실행 연결은 다음 위치로 정리되어 있다.
 
 - `assistant_bot/models.py`: `RouteIntent` 타입 정의
-- `assistant_bot/agents.py`: 라우터 프롬프트, 휴리스틱 라우팅, 에이전트 클래스
-- `assistant_bot/bot.py`: Discord 메시지 처리 분기
-- `assistant_bot/cli.py`: 로컬 `assistant-admin ask` 처리 분기
+- `agent_catalog.json`: 라우터가 참고하는 에이전트 목적, 설명, 예시
+- `assistant_bot/agent_registry.py`: JSON 카탈로그 로딩, 핸들러 바인딩, 공통 dispatch
+- `assistant_bot/agents/`: 라우터, 기억, 할 일, 대화, 유틸리티 에이전트와 공통 휴리스틱
+- `assistant_bot/bot.py`: Discord orchestration과 registry dispatch 연결
+- `assistant_bot/cli.py`: 로컬 `assistant-admin ask`의 registry dispatch 연결
 
 ## 목표 구조
 
@@ -54,7 +57,7 @@ assistant_bot/agents/
   task.py
   conversation.py
   utility.py
-  heuristics.py
+  common.py
 ```
 
 역할은 다음과 같이 둔다.
@@ -64,7 +67,7 @@ assistant_bot/agents/
 - `task.py`: 할 일 에이전트
 - `conversation.py`: 대화 에이전트
 - `utility.py`: 유틸리티 에이전트
-- `heuristics.py`: 휴리스틱 라우팅, 자연어 판별, 텍스트 추출 헬퍼
+- `common.py`: 휴리스틱 라우팅, 자연어 판별, 텍스트 추출 헬퍼
 
 기존 import 호환성을 유지하기 위해 `assistant_bot/agents/__init__.py`에서 주요 클래스와 함수를 re-export한다.
 
@@ -93,6 +96,8 @@ class AgentDefinition:
 - `description`: 라우터가 참고할 상세 설명
 - `examples`: 해당 에이전트로 보내야 하는 대표 사용자 발화
 - `handler`: 실제 실행 함수
+
+`intent`, `name`, `purpose`, `description`, `examples`는 `agent_catalog.json`에서 읽고, `handler`는 Python registry factory에서 연결한다.
 
 ### 3. 에이전트 레지스트리 추가
 
@@ -138,7 +143,7 @@ Discord 전용 객체인 `discord.Message`는 일반 에이전트 dispatch에 �
 
 ### 5. 라우터 프롬프트를 카탈로그 기반으로 변경
 
-현재 `RouterAgent` 프롬프트에는 intent 목록이 직접 쓰여 있다. 이를 `AgentRegistry.routing_prompt_block()` 결과로 대체한다.
+`RouterAgent` 프롬프트의 intent 목록은 `AgentRegistry.routing_prompt_block()` 결과를 사용한다. 이 prompt block은 `agent_catalog.json`의 목적, 설명, 예시를 기반으로 생성한다.
 
 라우터는 여전히 다음 형식을 반환한다.
 
@@ -177,29 +182,23 @@ if definition is not None:
 
 1. `assistant_bot/agents/calendar.py`에 `CalendarAgent`를 구현한다.
 2. 필요하면 `RouteIntent`에 `calendar`를 추가한다.
-3. registry 구성 함수에 `AgentDefinition`을 추가한다.
-4. `purpose`, `description`, `examples`를 작성한다.
+3. `agent_catalog.json`에 `calendar`의 `intent`, `name`, `purpose`, `description`, `examples`를 추가한다.
+4. registry 구성 함수의 handler map에 `calendar_agent.handle`을 연결한다.
 5. 라우팅 테스트와 dispatch 테스트를 추가한다.
 
-등록 예시는 다음과 같다.
+카탈로그 등록 예시는 다음과 같다.
 
-```python
-registry.register(
-    AgentDefinition(
-        intent="calendar",
-        name="Calendar Agent",
-        purpose="일정 조회와 일정 등록을 처리한다.",
-        description="사용자가 약속, 일정, 미팅 시간, 캘린더를 관리하려는 요청을 처리한다.",
-        examples=(
-            "내일 오후 3시에 미팅 일정 잡아줘",
-            "이번 주 일정 보여줘",
-        ),
-        handler=calendar_agent.handle,
-    )
-)
+```json
+{
+  "intent": "calendar",
+  "name": "Calendar Agent",
+  "purpose": "일정 조회와 일정 등록을 처리한다.",
+  "description": "사용자가 약속, 일정, 미팅 시간, 캘린더를 관리하려는 요청을 처리한다.",
+  "examples": ["내일 오후 3시에 미팅 일정 잡아줘", "이번 주 일정 보여줘"]
+}
 ```
 
-이 등록 후 라우터는 `calendar` 설명과 예시를 프롬프트에서 참고하고, dispatch는 등록된 handler를 호출한다.
+이 등록 후 라우터는 `calendar` 설명과 예시를 프롬프트에서 참고한다. 실제 실행은 registry의 handler map에 연결된 `CalendarAgent` 핸들러가 담당한다.
 
 ## 테스트 계획
 
@@ -249,15 +248,24 @@ python3 -m compileall assistant_bot tests
 
 ## 제외 범위
 
-- 외부 YAML/JSON 기반 플러그인 시스템은 이번 단계에서 제외한다.
+- 런타임 플러그인용 외부 YAML/JSON 시스템은 이번 단계에서 제외한다.
 - 런타임 동적 import 기반 플러그인 로딩은 제외한다.
 - `RouteIntent` 타입 자동 생성은 제외한다.
 - 기존 사용자-facing 기능 변경은 제외한다.
 
 ## 결정된 기본값
 
-- 에이전트 목록은 Python 코드 기반 registry로 관리한다.
+- 에이전트 목록 메타데이터는 `agent_catalog.json`으로 관리한다.
+- 실제 handler 바인딩은 Python 코드 기반 registry로 관리한다.
 - `RouteIntent`는 타입 안정성을 위해 당분간 수동으로 유지한다.
 - Discord 특수 흐름은 `AssistantBot` orchestration에 남긴다.
 - 라우터 모델은 계속 `gpt-5.4-mini`를 사용한다.
 - 이 작업은 기능 추가가 아니라 확장성 리팩터링으로 진행한다.
+
+## 적용 상태
+
+- `assistant_bot/agents.py`를 `assistant_bot/agents/` 패키지로 분리했다.
+- `agent_catalog.json`을 추가해 에이전트 목적, 설명, 예시를 JSON 설정으로 관리한다.
+- `assistant_bot/agent_registry.py`에서 JSON 카탈로그를 로딩하고 handler를 연결한다.
+- Discord 봇과 로컬 CLI의 일반 intent 실행 경로를 `AgentRegistry.dispatch()`로 통합했다.
+- `tests/test_agent_registry.py`를 추가해 JSON 카탈로그, prompt block, fallback dispatch, handler 누락 검증을 테스트한다.

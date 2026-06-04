@@ -1,0 +1,100 @@
+[
+  {
+    "intent": "chat",
+    "name": "Conversation Agent",
+    "purpose": "일반 대화와 기억 기반 답변을 처리한다.",
+    "description": "저장된 기억이나 최근 대화 맥락을 참고해 자연스럽게 답한다.",
+    "examples": ["요즘 내가 말한 내용 기준으로 정리해줘", "전에 말한 선호를 반영해서 답해줘"]
+  },
+  {
+    "intent": "help",
+    "name": "Utility Agent",
+    "purpose": "사용법과 도움말을 제공한다.",
+    "description": "사용자가 봇 기능, 사용법, 예시를 물을 때 처리한다.",
+    "examples": ["도움말 보여줘", "뭘 할 수 있어?"]
+  },
+  {
+    "intent": "status",
+    "name": "Utility Agent",
+    "purpose": "봇 상태와 저장소 현황을 보여준다.",
+    "description": "현재 대화 위치, 기억 수, 할 일 수, 모델 설정, 대기 작업 수를 안내한다.",
+    "examples": ["상태 확인해줘", "어떤 모델 쓰고 있어?"]
+  },
+  {
+    "intent": "cancel_pending",
+    "name": "Utility Agent",
+    "purpose": "대기 중인 확인 작업을 취소한다.",
+    "description": "첨부 저장 대기나 전체 기억 삭제 확인 대기를 취소한다.",
+    "examples": ["취소해", "저장하지 마"]
+  },
+  {
+    "intent": "remember",
+    "name": "Memory Agent",
+    "purpose": "사용자가 명시적으로 요청한 내용을 장기 기억에 저장한다.",
+    "description": "텍스트 메모나 직전 발화를 사용자 기준 장기 기억으로 저장한다.",
+    "examples": ["이거 기억해줘: 오전에 집중이 잘 돼", "그거 기억해줘"]
+  },
+  {
+    "intent": "recall",
+    "name": "Memory Agent",
+    "purpose": "저장된 기억이나 문서를 근거로 답한다.",
+    "description": "저장된 메모, 문서, 회의록, 파일 내용을 검색해 답해야 하는 질문을 처리한다.",
+    "examples": ["전에 저장한 회의록 기준으로 정리해줘", "메모 3 보여줘"]
+  },
+  {
+    "intent": "list_memory",
+    "name": "Memory Agent",
+    "purpose": "저장 기억 목록과 검색 결과를 보여준다.",
+    "description": "무엇을 기억하는지, 특정 키워드와 관련된 기억이 있는지 조회한다.",
+    "examples": ["지금 뭘 기억하고 있어?", "운동 관련 기억 찾아줘"]
+  },
+  {
+    "intent": "update_memory",
+    "name": "Memory Agent",
+    "purpose": "저장된 텍스트 메모를 수정한다.",
+    "description": "ID나 관련 키워드로 찾은 텍스트 메모를 새 내용으로 바꾼다.",
+    "examples": ["메모 3을 새 내용으로 바꿔줘", "방금 저장한 메모를 수정해줘"]
+  },
+  {
+    "intent": "delete_memory",
+    "name": "Memory Agent",
+    "purpose": "저장된 기억이나 문서를 삭제한다.",
+    "description": "ID, 키워드, 최근 저장 항목 기준으로 기억을 삭제한다. 전체 삭제 확인은 orchestration에서 처리한다.",
+    "examples": ["운동 관련 기억 삭제해줘", "방금 저장한 거 지워줘"]
+  },
+  {
+    "intent": "restore_memory",
+    "name": "Memory Agent",
+    "purpose": "삭제한 기억을 조회하거나 복구한다.",
+    "description": "삭제한 기억 목록을 보여주거나 특정 ID, 최근 삭제 항목을 복구한다.",
+    "examples": ["삭제한 기억 목록 보여줘", "방금 지운 거 복구해줘"]
+  },
+  {
+    "intent": "reset_context",
+    "name": "Utility Agent",
+    "purpose": "현재 대화 컨텍스트를 초기화한다.",
+    "description": "현재 DM, 채널, 스레드의 최근 대화 기록과 요약만 삭제하고 장기 기억은 유지한다.",
+    "examples": ["대화 맥락 초기화해줘", "컨텍스트 초기화해줘"]
+  },
+  {
+    "intent": "manage_task",
+    "name": "Task Agent",
+    "purpose": "개인 할 일을 추가, 조회, 수정, 완료, 미루기, 삭제한다.",
+    "description": "자연어 할 일 관리와 리마인더 요청을 처리한다.",
+    "examples": ["오늘 할 일 뭐야?", "30분 뒤 물 마시라고 알려줘", "할 일 3 완료했어"]
+  },
+  {
+    "intent": "daily_briefing",
+    "name": "Utility Agent",
+    "purpose": "오늘 브리핑을 제공한다.",
+    "description": "오늘까지 할 일, 열린/완료 작업 수, 최근 기억, 최근 대화 위치를 요약한다.",
+    "examples": ["오늘 브리핑 해줘", "일일 브리핑 보여줘"]
+  },
+  {
+    "intent": "unsupported",
+    "name": "Fallback",
+    "purpose": "지원하지 않는 요청을 안내한다.",
+    "description": "현재 비서가 처리할 수 없는 요청에 대해 가능한 기능을 짧게 안내한다.",
+    "examples": ["음성 통화 걸어줘", "지원하지 않는 파일 처리해줘"]
+  }
+]

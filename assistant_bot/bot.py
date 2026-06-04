@@ -5,6 +5,7 @@ import logging
 
 import discord
 
+from assistant_bot.agent_registry import AgentContext, build_agent_registry
 from assistant_bot.agents import (
     ConversationAgent,
     MemoryAgent,
@@ -52,7 +53,6 @@ class AssistantBot(discord.Client):
         self.pending_memory_deletions = PendingMemoryDeletionStore(self.database.connection)
         self.tasks = TaskStore(self.database.connection)
         self.memories = MemoryStore(self.database.connection, self.openai)
-        self.router = RouterAgent(config, self.openai, self.logs)
         self.memory_agent = MemoryAgent(
             config=config,
             openai=self.openai,
@@ -79,6 +79,22 @@ class AssistantBot(discord.Client):
             conversations=self.conversations,
             memories=self.memories,
             logs=self.logs,
+        )
+        self.agent_registry = build_agent_registry(
+            memory_agent=self.memory_agent,
+            utility_agent=self.utility_agent,
+            task_agent=self.task_agent,
+            conversation_agent=self.conversation_agent,
+            pending_attachments=self.pending_attachments,
+            pending_memory_deletions=self.pending_memory_deletions,
+            pending_confirmation_ttl_minutes=self.config.pending_confirmation_ttl_minutes,
+        )
+        self.router = RouterAgent(
+            config,
+            self.openai,
+            self.logs,
+            routing_prompt_block=self.agent_registry.routing_prompt_block(),
+            allowed_intents=set(self.agent_registry.intents()),
         )
         self._task_reminder_started = False
 
@@ -245,75 +261,25 @@ class AssistantBot(discord.Client):
                 scope=scope,
             )
 
-        if route.intent == "help":
-            return self.utility_agent.help(scope=scope)
-
-        if route.intent == "status":
-            pending_count = self.pending_attachments.unresolved_count(
-                scope=scope,
-                ttl_minutes=self.config.pending_confirmation_ttl_minutes,
-            )
-            pending_deletion_count = self.pending_memory_deletions.unresolved_count(
-                scope=scope,
-                ttl_minutes=self.config.pending_confirmation_ttl_minutes,
-            )
-            return self.utility_agent.status(
-                scope=scope,
-                pending_count=pending_count,
-                pending_deletion_count=pending_deletion_count,
-                location_label=describe_message_location(message),
-            )
-
-        if route.intent == "daily_briefing":
-            return self.utility_agent.daily_briefing(
-                scope=scope,
-                location_label=describe_message_location(message),
-            )
-
-        if route.intent == "reset_context":
-            return self.utility_agent.reset_context(scope=scope, conversations=self.conversations)
-
-        if route.intent == "manage_task":
-            return self.task_agent.handle(text=text, scope=scope, message_id=str(message.id))
-
-        if route.intent == "cancel_pending":
-            pending_deletion = self.pending_memory_deletions.resolve_latest(
-                scope=scope,
-                ttl_minutes=self.config.pending_confirmation_ttl_minutes,
-            )
-            if pending_deletion is not None:
-                return "전체 기억 삭제를 취소했어요."
-            pending = self.pending_attachments.resolve_latest(
-                scope=scope,
-                ttl_minutes=self.config.pending_confirmation_ttl_minutes,
-            )
-            if pending is None:
-                return "취소할 대기 작업이 없어요."
-            filenames = ", ".join(pending.filenames)
-            return f"`{filenames}` 첨부 저장을 취소했어요."
-
-        if route.intent == "recall":
-            return await self.memory_agent.recall(text=text, scope=scope)
-
-        if route.intent == "list_memory":
-            return await self.memory_agent.list_memories(text=text, scope=scope)
-
-        if route.intent == "update_memory":
-            return await self.memory_agent.update(text=text, scope=scope)
-
-        if route.intent == "restore_memory":
-            return self.memory_agent.restore(text=text, scope=scope)
-
         if route.intent == "delete_memory":
             if asks_to_delete_all_memories(text):
                 return self.request_memory_deletion_confirmation(
                     message_id=str(message.id),
                     scope=scope,
                 )
-            return await self.memory_agent.delete(text=text, scope=scope)
 
         if route.intent == "unsupported":
-            return "지금은 그 요청을 처리할 수 없어요. 메모/파일 기억, 회상, 삭제부터 도와드릴 수 있습니다."
+            return await self.agent_registry.dispatch(
+                route.intent,
+                AgentContext(
+                    text=text,
+                    scope=scope,
+                    message_id=str(message.id),
+                    author_name=author_name,
+                    location_label=describe_message_location(message),
+                    has_attachments=bool(supported_attachments),
+                ),
+            )
 
         if supported_attachments and not asks_to_remember(text):
             filenames = ", ".join(attachment.filename for attachment in supported_attachments)
@@ -334,11 +300,16 @@ class AssistantBot(discord.Client):
                 "현재는 `.txt`, `.md`, `.pdf` 파일만 기억할 수 있습니다."
             )
 
-        return await self.conversation_agent.chat(
-            text=text,
-            scope=scope,
-            author_name=author_name,
-            location_label=describe_message_location(message),
+        return await self.agent_registry.dispatch(
+            route.intent,
+            AgentContext(
+                text=text,
+                scope=scope,
+                message_id=str(message.id),
+                author_name=author_name,
+                location_label=describe_message_location(message),
+                has_attachments=bool(supported_attachments),
+            ),
         )
 
     def handle_pending_memory_deletion_confirmation(self, *, text: str, scope: ConversationScope) -> str | None:
