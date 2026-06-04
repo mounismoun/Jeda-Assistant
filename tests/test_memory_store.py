@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from assistant_bot.agents import MemoryAgent, ReminderAgent, TaskAgent
+from assistant_bot.agents import ConversationAgent, MemoryAgent, ReminderAgent, TaskAgent
 from assistant_bot.config import Config
 from assistant_bot.database import AppDatabase
 from assistant_bot.models import ConversationScope
@@ -1362,6 +1362,42 @@ async def test_memory_agent_general_recall_uses_read_only_tools() -> None:
     assert openai.tool_calls
     tool_names = {tool.name for tool in openai.tool_calls[0]["tools"]}
     assert {"search_memories", "get_memory_detail", "get_document_detail"}.issubset(tool_names)
+
+
+@pytest.mark.anyio
+async def test_conversation_agent_includes_current_time_context() -> None:
+    database = AppDatabase(":memory:")
+    openai = FakeOpenAI()
+    memories = MemoryStore(database.connection, openai)  # type: ignore[arg-type]
+    conversations = ConversationStore(database.connection)
+    tasks = TaskStore(database.connection)
+    agent = ConversationAgent(
+        config=make_test_config(),
+        openai=openai,  # type: ignore[arg-type]
+        conversations=conversations,
+        memories=memories,
+        tasks=tasks,
+        logs=AgentLogStore(database.connection),
+    )
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+
+    response = await agent.chat(
+        text="지금 몇시야?",
+        scope=scope,
+        author_name="사용자",
+        location_label="DM",
+    )
+
+    assert response == "도구 기반 회상 답변"
+    assert openai.tool_calls
+    input_text = str(openai.tool_calls[0]["input_text"])
+    assert "현재 날짜와 시간" in input_text
+    assert "Asia/Seoul" in input_text
 
 
 @pytest.mark.anyio

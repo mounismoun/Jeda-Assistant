@@ -19,3 +19,9 @@ def now_in_timezone(timezone_name: str | None = None) -> datetime:
 
 def today_string(timezone_name: str | None = None) -> str:
     return now_in_timezone(timezone_name).strftime("%Y-%m-%d")
+
+
+def current_time_context(timezone_name: str | None = None) -> str:
+    timezone = resolve_timezone(timezone_name)
+    now = datetime.now(timezone)
+    return f"{now.strftime('%Y-%m-%d %H:%M:%S')} ({timezone.key})"

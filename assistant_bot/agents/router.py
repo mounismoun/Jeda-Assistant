@@ -5,6 +5,7 @@ from assistant_bot.config import Config
 from assistant_bot.models import ConversationScope, RoutingResult
 from assistant_bot.openai_service import OpenAIService
 from assistant_bot.stores import AgentLogStore
+from assistant_bot.time_utils import current_time_context
 
 from .common import DEFAULT_ALLOWED_INTENTS, DEFAULT_ROUTING_PROMPT_BLOCK, heuristic_route, parse_routing_result
 
@@ -55,6 +56,7 @@ JSON만 반환한다. 형식: {{"intent":"chat","confidence":0.0,"reason":"짧�
                 input_text=(
                     f"대화 ID: {scope.conversation_id}\n"
                     f"첨부 파일 있음: {has_attachments}\n\n"
+                    f"현재 날짜와 시간:\n{current_time_context(self.config.timezone)}\n\n"
                     f"최근 대화 맥락:\n{conversation_context or '(없음)'}\n\n"
                     f"현재 사용자 메시지:\n{text}"
                 ),

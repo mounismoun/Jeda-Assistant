@@ -4,7 +4,7 @@ from assistant_bot.capabilities import help_lines
 from assistant_bot.config import Config
 from assistant_bot.models import ConversationScope
 from assistant_bot.stores import AgentLogStore, ConversationStore, MemoryStore, TaskStore
-from assistant_bot.time_utils import today_string
+from assistant_bot.time_utils import current_time_context, today_string
 
 from .common import compact_preview, format_conversation_location, format_task_priority
 
@@ -58,6 +58,7 @@ class UtilityAgent:
             [
                 "현재 상태입니다.",
                 f"- 현재 대화 위치: {location_label}",
+                f"- 현재 날짜와 시간: {current_time_context(self.config.timezone)}",
                 f"- 기억: 메모 {stats['memories']}개, 문서 {stats['documents']}개, chunk {stats['chunks']}개",
                 f"- 할 일: 열린 작업 {task_stats['open']}개, 완료 {task_stats['completed']}개",
                 f"- 저장 확인 대기 첨부: {pending_count}개",
@@ -149,4 +150,3 @@ class UtilityAgent:
             f"이전 메시지 {counts['messages']}개와 요약 {counts['summaries']}개를 지웠고, "
             "장기 기억은 그대로 유지됩니다."
         )
-

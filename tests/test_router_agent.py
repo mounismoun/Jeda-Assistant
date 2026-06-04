@@ -29,6 +29,8 @@ async def test_router_agent_prefers_model_route_over_heuristic() -> None:
 
     assert route.intent == "help"
     assert "최근 대화 맥락" in openai.requests[0]["input_text"]
+    assert "현재 날짜와 시간" in openai.requests[0]["input_text"]
+    assert "Asia/Seoul" in openai.requests[0]["input_text"]
     assert "현재 코드로 제공되지 않는 기능" in openai.requests[0]["instructions"]
     assert "Discord 음성 통화" in openai.requests[0]["instructions"]
 
