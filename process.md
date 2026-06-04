@@ -1289,3 +1289,14 @@
   - `AgentRegistry`가 레거시 문자열도 `OperationResult`로 감싸도록 변경해 전체 응답 흐름을 구조화 결과 기반으로 전환할 발판을 만들었다.
   - `ReminderAgent`와 `UtilityAgent`는 알림 ID, 예약 시각, 상태, 현재 시간, 상태 통계 같은 실행 사실을 구조화 결과로 반환하도록 1차 전환했다.
   - `ResponseComposer`는 공통 persona와 구조화 실행 결과를 기반으로 최종 답변을 작성하도록 강화했다.
+
+## 2026-06-05 - Task Agent 구조화 결과 2차 전환
+
+- 작업 이름: 할 일 에이전트의 고정 문자열 노출 축소
+- 진행상황: 2차 완료
+- 진행내용:
+  - `TaskAgent`의 할 일 생성, 중복 확인, 목록 조회, 완료 일괄 처리, 삭제 목록, 검색, 상세 조회, 기한 목록, 최근 대화 기반 할 일 추출/저장 경로를 `OperationResult` 기반으로 전환했다.
+  - 할 일 ID, 제목, 상태, 우선순위, 기한, 사람이 읽기 쉬운 기한 표현을 구조화 필드로 전달해 최종 응답 작성자가 같은 persona로 자연스럽게 말할 수 있게 했다.
+  - 첨부 저장 확인, 지원하지 않는 첨부 안내, 전체 기억 삭제 확인/취소/완료 같은 봇 직접 응답도 `OperationResult`를 반환하도록 바꿨다.
+  - `TaskAgent`가 구조화 결과를 반환하는지 확인하는 테스트를 추가했다.
+  - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.

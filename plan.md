@@ -373,3 +373,5 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - 최종 사용자 답변은 공통 `ResponseComposer`가 공통 persona와 최근 대화 맥락을 기준으로 작성한다.
 - 새 에이전트를 추가할 때도 `OperationResult` 기반 반환을 우선 사용하고, 레거시 문자열 반환은 임시 호환용으로만 둔다.
 - 정확성이 필요한 ID, 숫자, 파일명, 상태, 예약 시각은 구조화 필드에 보존하고, 표현만 자연스럽게 바꾼다.
+- 현재 `ReminderAgent`, `UtilityAgent`, `TaskAgent`의 주요 사용자-facing 경로는 `OperationResult` 기반으로 전환했다.
+- 남은 핵심 전환 대상은 `MemoryAgent`와 일부 예외/오류 fallback 경로다.

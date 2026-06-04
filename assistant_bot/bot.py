@@ -23,6 +23,7 @@ from assistant_bot.database import AppDatabase
 from assistant_bot.file_extractor import extract_attachment_text, is_supported_attachment
 from assistant_bot.models import ConversationScope
 from assistant_bot.openai_service import OpenAIService
+from assistant_bot.operation_result import AgentOutput, OperationResult
 from assistant_bot.response_composer import ResponseComposer
 from assistant_bot.stores import (
     AgentLogStore,
@@ -289,7 +290,7 @@ class AssistantBot(discord.Client):
         scope: ConversationScope,
         author_name: str,
         conversation_context: str,
-    ) -> str:
+    ) -> AgentOutput:
         supported_attachments = [
             attachment for attachment in attachments if is_supported_attachment(attachment.filename)
         ]
@@ -339,16 +340,38 @@ class AssistantBot(discord.Client):
                 message_id=str(message.id),
                 filenames=[attachment.filename for attachment in supported_attachments],
             )
-            return (
+            fallback = (
                 f"`{filenames}` 첨부를 확인했어요. 기억해두길 원하면 이 메시지에 "
                 "“응, 기억해줘”라고 답장해 주세요. 저장하지 않으려면 “취소해”라고 답장하면 됩니다."
+            )
+            return OperationResult(
+                agent="bot",
+                intent="remember",
+                status="confirm_required",
+                summary="첨부 파일 기억 저장 확인 대기",
+                facts={"filenames": [attachment.filename for attachment in supported_attachments]},
+                next_actions=("기억하려면 확인 답장을 요청한다", "저장하지 않으려면 취소 답장을 안내한다"),
+                preserve_values=tuple(attachment.filename for attachment in supported_attachments),
+                fallback_text=fallback,
             )
 
         if attachments and not supported_attachments:
             filenames = ", ".join(attachment.filename for attachment in attachments)
-            return (
+            fallback = (
                 f"`{filenames}` 첨부는 아직 읽을 수 없어요. "
                 "현재는 `.txt`, `.md`, `.pdf` 파일만 기억할 수 있습니다."
+            )
+            return OperationResult(
+                agent="bot",
+                intent="remember",
+                status="unsupported",
+                summary="지원하지 않는 첨부 파일 형식",
+                facts={
+                    "filenames": [attachment.filename for attachment in attachments],
+                    "supported_extensions": [".txt", ".md", ".pdf"],
+                },
+                preserve_values=tuple(attachment.filename for attachment in attachments),
+                fallback_text=fallback,
             )
 
         return await self.agent_registry.dispatch(
@@ -363,7 +386,9 @@ class AssistantBot(discord.Client):
             ),
         )
 
-    def handle_pending_memory_deletion_confirmation(self, *, text: str, scope: ConversationScope) -> str | None:
+    def handle_pending_memory_deletion_confirmation(
+        self, *, text: str, scope: ConversationScope
+    ) -> OperationResult | None:
         expired_count = self.pending_memory_deletions.resolve_expired(
             scope=scope,
             ttl_minutes=self.config.pending_confirmation_ttl_minutes,
@@ -371,11 +396,28 @@ class AssistantBot(discord.Client):
         pending = self.pending_memory_deletions.latest(scope=scope)
         if pending is None:
             if expired_count and (is_positive_confirmation(text) or is_negative_confirmation(text)):
-                return "전체 기억 삭제 확인 시간이 만료됐어요. 삭제하려면 다시 `내 기억 전부 삭제해줘`라고 말해 주세요."
+                fallback = (
+                    "전체 기억 삭제 확인 시간이 만료됐어요. "
+                    "삭제하려면 다시 `내 기억 전부 삭제해줘`라고 말해 주세요."
+                )
+                return OperationResult(
+                    agent="memory",
+                    intent="delete_memory",
+                    status="confirm_required",
+                    summary="전체 기억 삭제 확인 시간 만료",
+                    next_actions=("삭제하려면 다시 전체 기억 삭제를 요청하도록 안내한다",),
+                    fallback_text=fallback,
+                )
             return None
         if is_negative_confirmation(text):
             self.pending_memory_deletions.resolve(pending.id)
-            return "전체 기억 삭제를 취소했어요."
+            return OperationResult(
+                agent="memory",
+                intent="delete_memory",
+                status="success",
+                summary="전체 기억 삭제 취소",
+                fallback_text="전체 기억 삭제를 취소했어요.",
+            )
         if not is_memory_deletion_confirmation(text):
             return None
 
@@ -390,25 +432,63 @@ class AssistantBot(discord.Client):
             reason="사용자 전체 장기 기억 삭제 확인 후 실행",
         )
         if deleted_count == 0:
-            return "삭제할 저장 기억이 없어요."
-        return f"확인했어요. 사용자 기준 저장 기억 {deleted_count}개를 모두 삭제 처리했어요."
+            return OperationResult(
+                agent="memory",
+                intent="delete_memory",
+                status="not_found",
+                summary="삭제할 저장 기억 없음",
+                fallback_text="삭제할 저장 기억이 없어요.",
+            )
+        return OperationResult(
+            agent="memory",
+            intent="delete_memory",
+            status="success",
+            summary="사용자 기준 저장 기억 전체 삭제 완료",
+            facts={"deleted_count": deleted_count},
+            preserve_values=(str(deleted_count),),
+            fallback_text=f"확인했어요. 사용자 기준 저장 기억 {deleted_count}개를 모두 삭제 처리했어요.",
+        )
 
-    def request_memory_deletion_confirmation(self, *, message_id: str, scope: ConversationScope) -> str:
+    def request_memory_deletion_confirmation(self, *, message_id: str, scope: ConversationScope) -> OperationResult:
         stats = self.memories.stats(scope=scope)
         total = stats["memories"] + stats["documents"]
         if total == 0:
-            return "삭제할 저장 기억이 없어요."
+            return OperationResult(
+                agent="memory",
+                intent="delete_memory",
+                status="not_found",
+                summary="삭제할 저장 기억 없음",
+                fallback_text="삭제할 저장 기억이 없어요.",
+            )
         self.pending_memory_deletions.add(
             scope=scope,
             message_id=message_id,
             memory_count=stats["memories"],
             document_count=stats["documents"],
         )
-        return (
+        fallback = (
             f"정말 사용자 기준 저장 기억 전체를 삭제할까요? "
             f"현재 텍스트 기억 {stats['memories']}개, 문서 {stats['documents']}개가 대상입니다. "
             f"{self.config.pending_confirmation_ttl_minutes}분 안에 이 메시지에 `응, 전부 삭제해`라고 답장해 주세요. "
             "취소하려면 `취소해`라고 답장하면 됩니다."
+        )
+        return OperationResult(
+            agent="memory",
+            intent="delete_memory",
+            status="confirm_required",
+            summary="사용자 기준 저장 기억 전체 삭제 확인 필요",
+            facts={
+                "memory_count": stats["memories"],
+                "document_count": stats["documents"],
+                "ttl_minutes": self.config.pending_confirmation_ttl_minutes,
+            },
+            next_actions=("정해진 시간 안에 삭제 확인 답장을 요청한다", "취소할 수 있음을 안내한다"),
+            preserve_values=(
+                str(stats["memories"]),
+                str(stats["documents"]),
+                str(self.config.pending_confirmation_ttl_minutes),
+            ),
+            fallback_text=fallback,
         )
 
     async def handle_remember(

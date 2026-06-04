@@ -8,6 +8,7 @@ from assistant_bot.agents import ConversationAgent, MemoryAgent, ReminderAgent, 
 from assistant_bot.config import Config
 from assistant_bot.database import AppDatabase
 from assistant_bot.models import ConversationScope
+from assistant_bot.operation_result import OperationResult
 from assistant_bot.stores import (
     AgentLogStore,
     ConversationStore,
@@ -147,6 +148,11 @@ def test_task_agent_does_not_save_duplicate_open_task() -> None:
     first_response = agent.handle(text="할 일 추가: 2026-06-10까지 제안서 초안 작성", scope=scope)
     duplicate_response = agent.handle(text="할 일 추가: 제안서 초안 작성", scope=scope)
 
+    assert isinstance(first_response, OperationResult)
+    assert isinstance(duplicate_response, OperationResult)
+    assert first_response.facts["task_id"] == 1
+    assert first_response.facts["title"] == "제안서 초안 작성"
+    assert duplicate_response.facts["duplicate_task"]["task_id"] == 1
     assert "할 일 `1`로 추가했어요" in first_response
     assert "이미 같은 열린 할 일이 있어요" in duplicate_response
     assert "기존 할 일 ID는 `1`" in duplicate_response
@@ -390,6 +396,11 @@ def test_task_agent_lists_completed_and_all_tasks() -> None:
     completed_response = agent.handle(text="완료한 할 일 보여줘", scope=scope)
     all_response = agent.handle(text="전체 할 일 목록 보여줘", scope=scope)
 
+    assert isinstance(completed_response, OperationResult)
+    assert isinstance(all_response, OperationResult)
+    assert completed_response.summary == "할 일 목록 조회"
+    assert all_response.summary == "할 일 목록 조회"
+    assert completed_response.items[0]["task_id"] == completed_id
     assert "완료한 할 일 1개" in completed_response
     assert f"할 일 `{completed_id}` · 회의록 정리" in completed_response
     assert f"할 일 `{open_id}` · 제안서 초안 작성" not in completed_response
