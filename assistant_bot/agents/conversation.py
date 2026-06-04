@@ -6,6 +6,7 @@ from assistant_bot.config import Config
 from assistant_bot.model_selector import choose_model
 from assistant_bot.models import ConversationScope
 from assistant_bot.openai_service import OpenAIService
+from assistant_bot.persona import ASSISTANT_PERSONA
 from assistant_bot.stores import AgentLogStore, ConversationStore, MemoryStore, TaskStore
 from assistant_bot.time_utils import current_time_context
 
@@ -65,8 +66,8 @@ class ConversationAgent:
         )
 
         instructions = f"""
-너는 Discord에서 대화하는 개인 비서다.
-말투는 자연스럽고 간결하게 유지한다.
+{ASSISTANT_PERSONA}
+
 사용자가 명시적으로 기억해달라고 하지 않은 정보는 장기 기억으로 저장했다고 말하지 않는다.
 저장된 기억을 사용할 때는 자연스럽게 반영하되, 확실하지 않은 내용은 단정하지 않는다.
 저장된 기억, 문서, 할 일 정보가 필요하면 제공된 read-only 도구를 사용한다.

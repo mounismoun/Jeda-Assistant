@@ -8,6 +8,7 @@ from assistant_bot.agent_registry import (
     load_agent_catalog,
 )
 from assistant_bot.models import ConversationScope
+from assistant_bot.operation_result import OperationResult
 
 
 @pytest.fixture
@@ -78,6 +79,9 @@ async def test_registry_dispatch_falls_back_to_chat() -> None:
     )
 
     assert answer == "chat:안녕"
+    assert isinstance(answer, OperationResult)
+    assert answer.intent == "chat"
+    assert answer.fallback_text == "chat:안녕"
 
 
 def test_catalog_entry_requires_matching_handler() -> None:

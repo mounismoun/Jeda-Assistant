@@ -2,6 +2,7 @@ import pytest
 
 from assistant_bot.config import Config
 from assistant_bot.models import ConversationScope
+from assistant_bot.operation_result import OperationResult
 from assistant_bot.response_composer import ResponseComposer
 
 
@@ -26,6 +27,39 @@ async def test_response_composer_uses_model_output() -> None:
     assert answer == "자연스럽게 다시 쓴 답변"
     assert "실행 결과" in openai.requests[0]["input_text"]
     assert "2026-06-05 07:04" in openai.requests[0]["input_text"]
+    assert "친근한 존댓말" in openai.requests[0]["instructions"]
+
+
+@pytest.mark.anyio
+async def test_response_composer_prefers_structured_operation_result() -> None:
+    openai = FakeComposerOpenAI("알림 등록해뒀어요. 오늘 오전 7시 4분에 DM으로 알려드릴게요.")
+    composer = ResponseComposer(config=make_config(), openai=openai)  # type: ignore[arg-type]
+
+    answer = await composer.compose(
+        user_text="1분 뒤 알림 보내줘",
+        raw_response=OperationResult(
+            agent="reminder",
+            intent="manage_reminder",
+            status="success",
+            summary="사용자 알림 등록 완료",
+            facts={
+                "reminder_id": 1,
+                "remind_at": "2026-06-05 07:04",
+                "human_remind_at": "오늘 오전 7시 4분",
+                "delivery": "DM",
+            },
+            fallback_text="알림 `1`로 등록했어요. `2026-06-05 07:04`에 DM으로 알려드릴게요.",
+        ),
+        scope=make_scope(),
+        location_label="DM",
+        conversation_context="assistant: 알림 `1`로 등록했어요.",
+    )
+
+    assert answer == "알림 등록해뒀어요. 오늘 오전 7시 4분에 DM으로 알려드릴게요."
+    request = openai.requests[0]
+    assert "구조화된 실행 결과" in request["input_text"]
+    assert '"agent": "reminder"' in request["input_text"]
+    assert "fallback_text나 기존 문장을 그대로 복사하지 않는다" in request["instructions"]
 
 
 @pytest.mark.anyio

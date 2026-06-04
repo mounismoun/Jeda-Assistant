@@ -9,6 +9,7 @@ from typing import Any
 
 from assistant_bot.capabilities import unsupported_message
 from assistant_bot.models import ConversationScope
+from assistant_bot.operation_result import AgentOutput, OperationResult
 
 DEFAULT_AGENT_CATALOG_PATH = Path("agent_catalog.json")
 
@@ -23,7 +24,7 @@ class AgentContext:
     has_attachments: bool = False
 
 
-AgentHandler = Callable[[AgentContext], Awaitable[str] | str]
+AgentHandler = Callable[[AgentContext], Awaitable[AgentOutput] | AgentOutput]
 
 
 @dataclass(frozen=True)
@@ -68,14 +69,27 @@ class AgentRegistry:
                 lines.append(f"  사용 가능 도구: {', '.join(definition.tool_names)}")
         return "\n".join(lines)
 
-    async def dispatch(self, intent: str, context: AgentContext) -> str:
+    async def dispatch(self, intent: str, context: AgentContext) -> OperationResult:
         definition = self.get(intent) or self.get("chat")
         if definition is None:
-            return "지금은 그 요청을 처리할 수 없어요."
+            return OperationResult(
+                agent="registry",
+                intent=intent,
+                status="unsupported",
+                summary="처리 가능한 에이전트를 찾지 못함",
+                fallback_text="지금은 그 요청을 처리할 수 없어요.",
+            )
         result = definition.handler(context)
         if inspect.isawaitable(result):
-            return await result
-        return result
+            result = await result
+        if isinstance(result, OperationResult):
+            return result
+        return OperationResult.legacy(
+            str(result),
+            agent=definition.name,
+            intent=definition.intent,
+            status="success",
+        )
 
 
 def load_agent_catalog(path: str | Path = DEFAULT_AGENT_CATALOG_PATH) -> list[dict[str, Any]]:

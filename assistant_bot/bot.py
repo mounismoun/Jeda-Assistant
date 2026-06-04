@@ -34,7 +34,7 @@ from assistant_bot.stores import (
     TaskStore,
 )
 from assistant_bot.text_utils import split_discord_message, strip_bot_mentions
-from assistant_bot.time_utils import now_in_timezone, today_string
+from assistant_bot.time_utils import humanize_datetime_text, now_in_timezone, today_string
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +141,7 @@ class AssistantBot(discord.Client):
             message = (
                 "알림입니다.\n"
                 f"- 알림 `{reminder.id}` · {reminder.text}\n"
-                f"- 예약 시각: {reminder.remind_at}"
+                f"- 예약 시각: {humanize_datetime_text(reminder.remind_at, self.config.timezone)}"
             )
             await destination.send(message)
             self.reminders.mark_sent(reminder.id)
