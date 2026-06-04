@@ -7,6 +7,7 @@ RouteIntent = Literal[
     "chat",
     "help",
     "status",
+    "current_time",
     "cancel_pending",
     "remember",
     "recall",

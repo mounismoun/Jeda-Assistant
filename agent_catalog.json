@@ -22,6 +22,13 @@
     "examples": ["상태 확인해줘", "어떤 모델 쓰고 있어?"]
   },
   {
+    "intent": "current_time",
+    "name": "Utility Agent",
+    "purpose": "설정 타임존 기준 현재 날짜와 시간을 알려준다.",
+    "description": "사용자가 지금 몇 시인지, 오늘 날짜가 무엇인지 묻는 요청을 처리한다.",
+    "examples": ["지금 몇시야?", "현재 시간 알려줘", "오늘 날짜가 뭐야?"]
+  },
+  {
     "intent": "cancel_pending",
     "name": "Utility Agent",
     "purpose": "대기 중인 확인 작업을 취소한다.",

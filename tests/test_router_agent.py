@@ -72,6 +72,24 @@ async def test_router_agent_falls_back_to_heuristic_when_model_fails() -> None:
     assert route.intent == "manage_reminder"
 
 
+@pytest.mark.anyio
+async def test_router_agent_falls_back_to_current_time() -> None:
+    router = RouterAgent(
+        config=make_config(),
+        openai=FailingRouterOpenAI(),  # type: ignore[arg-type]
+        logs=FakeLogs(),  # type: ignore[arg-type]
+        allowed_intents={"current_time", "help", "manage_task", "manage_reminder", "chat"},
+    )
+
+    route = await router.route(
+        text="지금 몇시야?",
+        has_attachments=False,
+        scope=make_scope(),
+    )
+
+    assert route.intent == "current_time"
+
+
 def make_scope() -> ConversationScope:
     return ConversationScope(
         conversation_id="dm:user-1",

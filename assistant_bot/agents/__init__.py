@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .common import DEFAULT_ALLOWED_INTENTS as DEFAULT_ALLOWED_INTENTS
 from .common import DEFAULT_ROUTING_PROMPT_BLOCK as DEFAULT_ROUTING_PROMPT_BLOCK
+from .common import asks_current_time as asks_current_time
 from .common import asks_for_daily_briefing as asks_for_daily_briefing
 from .common import asks_to_clear_task_due as asks_to_clear_task_due
 from .common import asks_to_complete_task as asks_to_complete_task

@@ -1220,3 +1220,15 @@
   - Conversation Agent 입력에 현재 날짜와 시간을 포함해 일반 답변에서도 설정 타임존 기준 현재 시각을 답할 수 있도록 했다.
   - Utility Agent 상태 응답에도 현재 날짜와 시간을 표시하도록 했다.
   - 라우터와 일반 대화 에이전트의 모델 입력에 현재 시간 컨텍스트가 포함되는지 테스트를 추가했다.
+
+## 2026-06-05 - 현재 시간 요청 라우팅 수정
+
+- 작업 이름: `지금 몇시야` unsupported 오분류 수정
+- 진행상황: 완료
+- 진행내용:
+  - 현재 시간 컨텍스트를 제공했지만 capability 목록과 에이전트 카탈로그에 현재 시간 안내 기능이 없어 라우터가 unsupported로 분류할 수 있음을 확인했다.
+  - `current_time` intent를 추가하고 Router Agent 카탈로그, RouteIntent, 휴리스틱 fallback, Agent Registry에 연결했다.
+  - Utility Agent가 설정 타임존 기준 현재 날짜와 시간을 짧게 직접 답하도록 `current_time` 응답을 추가했다.
+  - capability prompt, 도움말, unsupported 안내에 현재 시간 확인 기능을 반영했다.
+  - `지금 몇시야?`가 `current_time`으로 라우팅되는 테스트와 카탈로그/capability 테스트를 추가했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.

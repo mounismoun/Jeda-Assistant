@@ -20,6 +20,7 @@ def test_agent_catalog_contains_router_metadata() -> None:
     intents = {entry["intent"] for entry in catalog}
 
     assert "chat" in intents
+    assert "current_time" in intents
     assert "manage_task" in intents
     assert "manage_reminder" in intents
     assert "unsupported" in intents
@@ -37,6 +38,8 @@ def test_registry_prompt_block_uses_catalog_examples() -> None:
 
     assert "- manage_task: Task Agent" in prompt_block
     assert "- manage_reminder: Reminder Agent" in prompt_block
+    assert "- current_time: Utility Agent" in prompt_block
+    assert "지금 몇시야?" in prompt_block
     assert "30분 뒤 물 마시라고 알려줘" in prompt_block
     assert "삭제한 기억 목록 보여줘" in prompt_block
     assert "사용 가능 도구: search_memories" in prompt_block

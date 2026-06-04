@@ -74,6 +74,17 @@ class UtilityAgent:
             ]
         )
 
+    def current_time(self, *, scope: ConversationScope) -> str:
+        self.logs.add(
+            conversation_id=scope.conversation_id,
+            agent="utility",
+            intent="current_time",
+            difficulty="easy",
+            model=self.config.easy_model,
+            reason="현재 날짜/시간 조회",
+        )
+        return f"현재 날짜와 시간은 {current_time_context(self.config.timezone)}입니다."
+
     def daily_briefing(self, *, scope: ConversationScope, location_label: str) -> str:
         today = today_string(self.config.timezone)
         memory_stats = self.memories.stats(scope=scope)

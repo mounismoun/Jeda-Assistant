@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from assistant_bot.agents import (
+    asks_current_time,
     asks_to_clear_task_due,
     asks_to_complete_task,
     asks_to_complete_task_batch,
@@ -69,6 +70,13 @@ def test_heuristic_route_status() -> None:
     route = heuristic_route("상태 확인해줘", False)
 
     assert route.intent == "status"
+
+
+def test_heuristic_route_current_time() -> None:
+    route = heuristic_route("지금 몇시야?", False)
+
+    assert route.intent == "current_time"
+    assert asks_current_time("오늘 날짜가 뭐야?")
 
 
 def test_heuristic_route_daily_briefing() -> None:

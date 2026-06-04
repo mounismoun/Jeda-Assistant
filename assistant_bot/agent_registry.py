@@ -171,6 +171,9 @@ def build_agent_registry(
             location_label=context.location_label,
         )
 
+    def current_time(context: AgentContext) -> str:
+        return utility_agent.current_time(scope=context.scope)
+
     def daily_briefing(context: AgentContext) -> str:
         return utility_agent.daily_briefing(scope=context.scope, location_label=context.location_label)
 
@@ -212,6 +215,7 @@ def build_agent_registry(
     handlers: dict[str, AgentHandler] = {
         "cancel_pending": cancel_pending,
         "chat": chat,
+        "current_time": current_time,
         "daily_briefing": daily_briefing,
         "delete_memory": delete_memory,
         "help": help_agent,

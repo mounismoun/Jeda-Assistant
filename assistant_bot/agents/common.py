@@ -12,6 +12,7 @@ DEFAULT_ALLOWED_INTENTS = {
     "chat",
     "help",
     "status",
+    "current_time",
     "cancel_pending",
     "remember",
     "recall",
@@ -31,6 +32,7 @@ DEFAULT_ROUTING_PROMPT_BLOCK = "\n".join(
         "- chat: 일반 대화, 도움 요청, 저장된 기억이 필요 없는 질문",
         "- help: 사용법, 할 수 있는 일, 예시를 묻는 요청",
         "- status: 봇 상태, 설정 모델, 저장소 상태, 현재 동작 상태를 묻는 요청",
+        "- current_time: 현재 날짜, 현재 시간, 오늘 날짜를 묻는 요청",
         "- cancel_pending: 직전 첨부 저장 확인이나 대기 중인 저장 요청을 취소하는 요청",
         "- remember: 사용자가 무언가를 기억/저장하라고 명시적으로 요청",
         "- recall: 저장된 기억이나 문서에 근거해 답해야 하는 질문",
@@ -70,6 +72,8 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
     list_markers = ["목록", "리스트", "뭘 기억", "무엇을 기억", "기억 상태", "저장 상태", "list memories"]
     recall_markers = ["기억", "저장한", "전에", "문서", "파일", "회의록", "recall"]
 
+    if asks_current_time(text):
+        return RoutingResult("current_time", 0.98, "현재 날짜/시간 요청 감지")
     if asks_for_daily_briefing(text):
         return RoutingResult("daily_briefing", 0.96, "오늘 브리핑 요청 감지")
     if any(marker in normalized for marker in help_markers):
@@ -107,6 +111,33 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
     if any(marker in normalized for marker in recall_markers):
         return RoutingResult("recall", 0.78, "저장 정보 회상 가능성 감지")
     return RoutingResult("chat", 0.7, "일반 대화로 판단")
+
+
+def asks_current_time(text: str) -> bool:
+    normalized = text.casefold()
+    compact = re.sub(r"\s+", "", normalized)
+    time_markers = [
+        "몇시",
+        "몇 시",
+        "현재 시간",
+        "현재 시각",
+        "지금 시간",
+        "지금 시각",
+        "시간 알려",
+        "what time",
+        "current time",
+    ]
+    date_markers = [
+        "오늘 날짜",
+        "현재 날짜",
+        "지금 날짜",
+        "며칠",
+        "몇일",
+        "날짜 알려",
+        "what date",
+        "current date",
+    ]
+    return any(marker in normalized or marker in compact for marker in [*time_markers, *date_markers])
 
 
 def parse_routing_result(output: str, *, allowed_intents: set[str] | None = None) -> RoutingResult:
