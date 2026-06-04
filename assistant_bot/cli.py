@@ -2372,7 +2372,7 @@ async def run_local_text_interaction(
             has_attachments=False,
             scope=scope,
             conversation_context=format_conversation_context(
-                conversations.recent_messages(scope.conversation_id, limit=8)
+                conversations.recent_messages(scope.conversation_id, limit=16)
             ),
         )
         if route.intent == "delete_memory":

@@ -288,7 +288,7 @@ class AssistantBot(discord.Client):
             has_attachments=bool(supported_attachments),
             scope=scope,
             conversation_context=format_conversation_context(
-                self.conversations.recent_messages(scope.conversation_id, limit=8)
+                self.conversations.recent_messages(scope.conversation_id, limit=16)
             ),
         )
 

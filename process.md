@@ -1201,3 +1201,11 @@
   - ID 없는 `30분 뒤 다시 알려줘`는 새 알림 예약으로 보고, 할 일 미루기는 `할 일 3 30분 뒤 다시 알려줘`처럼 대상 할 일을 명시하는 흐름으로 정리했다.
   - README, plan, capability 도움말 문구를 할 일/알림 분리 정책에 맞게 갱신했다.
   - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - 라우터 최근 대화 컨텍스트 확대
+
+- 작업 이름: Router Agent 최근 대화 입력 16개 적용
+- 진행상황: 완료
+- 진행내용:
+  - Discord 봇 메시지 처리 경로에서 라우터 모델에 전달하는 최근 대화 개수를 8개에서 16개로 늘렸다.
+  - 로컬 `assistant-admin ask` 경로도 같은 기준을 쓰도록 최근 대화 개수를 16개로 맞췄다.
