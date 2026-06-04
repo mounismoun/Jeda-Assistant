@@ -214,14 +214,35 @@ def build_agent_registry(
             ttl_minutes=pending_confirmation_ttl_minutes,
         )
         if pending_deletion is not None:
-            return "전체 기억 삭제를 취소했어요."
+            return OperationResult(
+                agent="registry",
+                intent="cancel_pending",
+                status="success",
+                summary="전체 기억 삭제 대기 작업 취소",
+                fallback_text="전체 기억 삭제를 취소했어요.",
+            )
         pending = pending_attachments.resolve_latest(
             scope=context.scope,
             ttl_minutes=pending_confirmation_ttl_minutes,
         )
         if pending is None:
-            return "취소할 대기 작업이 없어요."
-        return f"`{', '.join(pending.filenames)}` 첨부 저장을 취소했어요."
+            return OperationResult(
+                agent="registry",
+                intent="cancel_pending",
+                status="not_found",
+                summary="취소할 대기 작업 없음",
+                fallback_text="취소할 대기 작업이 없어요.",
+            )
+        filenames = ", ".join(pending.filenames)
+        return OperationResult(
+            agent="registry",
+            intent="cancel_pending",
+            status="success",
+            summary="첨부 저장 대기 작업 취소",
+            facts={"filenames": list(pending.filenames)},
+            preserve_values=tuple(pending.filenames),
+            fallback_text=f"`{filenames}` 첨부 저장을 취소했어요.",
+        )
 
     def unsupported(_: AgentContext) -> str:
         return unsupported_message()

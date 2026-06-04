@@ -1231,6 +1231,10 @@ async def test_memory_agent_does_not_save_duplicate_text_memory() -> None:
     first = await agent.remember_text(text="이거 기억해줘: 나는 오전에 집중이 잘 된다", scope=scope, message_id="m1")
     second = await agent.remember_text(text="기억해줘: 나는 오전에 집중이 잘 된다", scope=scope, message_id="m2")
 
+    assert isinstance(first, OperationResult)
+    assert isinstance(second, OperationResult)
+    assert first.facts["memory_id"] == 1
+    assert second.facts["duplicate_memory"]["id"] == 1
     assert "저장 ID는 `1`" in first
     assert "이미 같은 내용을 기억하고 있어요" in second
     assert "기존 메모 ID는 `1`" in second
@@ -1356,6 +1360,9 @@ async def test_memory_agent_searches_saved_memories_as_list() -> None:
 
     response = await agent.list_memories(text="운동 관련 기억 찾아줘", scope=scope)
 
+    assert isinstance(response, OperationResult)
+    assert response.summary == "저장 기억 검색 결과 조회"
+    assert response.items[0]["id"] == memory_id
     assert "`운동` 관련 저장 기억" in response
     assert f"메모 `{memory_id}`" in response
     assert "자세히 보려면" in response
@@ -1562,6 +1569,9 @@ async def test_memory_agent_deletes_latest_saved_item() -> None:
 
     response = await agent.delete(text="방금 저장한 거 지워줘", scope=scope)
 
+    assert isinstance(response, OperationResult)
+    assert response.summary == "최근 저장 기억 삭제 완료"
+    assert response.facts["deleted_item"]["id"] == memory_id
     assert f"메모 `{memory_id}`" in response
     assert store.stats(scope=scope)["memories"] == 0
 
@@ -1587,6 +1597,9 @@ async def test_memory_agent_restores_latest_deleted_item() -> None:
 
     response = agent.restore(text="방금 지운 거 복구해줘", scope=scope)
 
+    assert isinstance(response, OperationResult)
+    assert response.summary == "최근 삭제 기억 복구 완료"
+    assert response.facts["restored_item"]["id"] == memory_id
     assert f"메모 `{memory_id}`" in response
     assert store.stats(scope=scope)["memories"] == 1
 

@@ -93,7 +93,11 @@ class TaskAgent:
             if asks_to_reference_latest_added_task(text):
                 latest_task = self.tasks.latest(scope=scope)
                 if latest_task is None or latest_task.status != "open":
-                    return "기한을 없앨 최근 열린 할 일이 없어요."
+                    return self._result(
+                        "기한을 없앨 최근 열린 할 일이 없어요.",
+                        status="not_found",
+                        summary="기한 제거 대상 없음",
+                    )
                 task_ids = [latest_task.id]
             else:
                 task_ids, resolution_error = self.resolve_task_ids_from_text(
@@ -108,22 +112,47 @@ class TaskAgent:
                     return resolution_error
             cleared = self.tasks.clear_due(scope=scope, task_ids=task_ids)
             if cleared == 0:
-                return "기한을 없앨 열린 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요."
-            return f"할 일 {cleared}개에서 기한과 리마인더 예약을 제거했어요."
+                return self._result(
+                    "기한을 없앨 열린 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요.",
+                    status="not_found",
+                    summary="기한 제거 대상 없음",
+                    facts={"task_ids": task_ids},
+                    preserve_values=tuple(str(task_id) for task_id in task_ids),
+                )
+            return self._result(
+                f"할 일 {cleared}개에서 기한과 리마인더 예약을 제거했어요.",
+                summary="할 일 기한과 리마인더 제거 완료",
+                facts={"changed_count": cleared, "task_ids": task_ids},
+                preserve_values=(str(cleared),) + tuple(str(task_id) for task_id in task_ids),
+            )
 
         if asks_to_postpone_task(text):
             due_at = extract_due_at(text, timezone_name=self.config.timezone)
             if due_at is None:
-                return "언제로 미룰지 알려주세요. 예: `할 일 3 내일 다시 알려줘`"
+                return self._result(
+                    "언제로 미룰지 알려주세요. 예: `할 일 3 내일 다시 알려줘`",
+                    status="needs_input",
+                    summary="미룰 시각 필요",
+                    next_actions=("언제로 미룰지 물어본다",),
+                )
             if asks_to_reference_latest_added_task(text):
                 latest_task = self.tasks.latest(scope=scope)
                 if latest_task is None or latest_task.status != "open":
-                    return "미룰 최근 열린 할 일이 없어요."
+                    return self._result(
+                        "미룰 최근 열린 할 일이 없어요.",
+                        status="not_found",
+                        summary="미룰 최근 열린 할 일 없음",
+                    )
                 task_ids = [latest_task.id]
             elif asks_to_snooze_latest_reminded_task(text):
                 latest_task = self.tasks.latest_reminded_open(scope=scope)
                 if latest_task is None:
-                    return "다시 알려줄 최근 리마인더가 없어요. `할 일 3 30분 뒤 다시 알려줘`처럼 ID를 알려주세요."
+                    return self._result(
+                        "다시 알려줄 최근 리마인더가 없어요. `할 일 3 30분 뒤 다시 알려줘`처럼 ID를 알려주세요.",
+                        status="not_found",
+                        summary="스누즈할 최근 리마인더 없음",
+                        next_actions=("대상 할 일 ID를 물어본다",),
+                    )
                 task_ids = [latest_task.id]
             else:
                 task_ids, resolution_error = self.resolve_task_ids_from_text(
@@ -138,33 +167,84 @@ class TaskAgent:
                     return resolution_error
             postponed = self.tasks.postpone(scope=scope, task_ids=task_ids, due_at=due_at)
             if postponed == 0:
-                return "미룰 열린 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요."
-            return f"할 일 {postponed}개를 `{due_at}`로 미뤘어요. 리마인더도 다시 예약했습니다."
+                return self._result(
+                    "미룰 열린 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요.",
+                    status="not_found",
+                    summary="미룰 열린 할 일 없음",
+                    facts={"task_ids": task_ids, "due_at": due_at},
+                    preserve_values=tuple(str(task_id) for task_id in task_ids),
+                )
+            return self._result(
+                f"할 일 {postponed}개를 `{due_at}`로 미뤘어요. 리마인더도 다시 예약했습니다.",
+                summary="할 일 미루기 완료",
+                facts={
+                    "changed_count": postponed,
+                    "task_ids": task_ids,
+                    "due_at": due_at,
+                    "human_due_at": humanize_datetime_text(due_at, self.config.timezone),
+                    "reminder_rescheduled": True,
+                },
+                preserve_values=(str(postponed), due_at) + tuple(str(task_id) for task_id in task_ids),
+            )
 
         if asks_to_rename_task(text):
             title = extract_task_rename_title(text)
             if not title:
-                return "새 할 일 제목을 알려주세요. 예: `할 일 3을 고객 미팅 준비로 바꿔줘`"
+                return self._result(
+                    "새 할 일 제목을 알려주세요. 예: `할 일 3을 고객 미팅 준비로 바꿔줘`",
+                    status="needs_input",
+                    summary="새 할 일 제목 필요",
+                    next_actions=("새 제목을 물어본다",),
+                )
             if asks_to_reference_latest_added_task(text):
                 latest_task = self.tasks.latest(scope=scope)
                 if latest_task is None or latest_task.status != "open":
-                    return "제목을 바꿀 최근 열린 할 일이 없어요."
+                    return self._result(
+                        "제목을 바꿀 최근 열린 할 일이 없어요.",
+                        status="not_found",
+                        summary="제목 변경 대상 없음",
+                    )
                 task_ids = [latest_task.id]
             elif not task_ids:
-                return "수정할 할 일 ID를 알려주세요. 예: `할 일 3을 고객 미팅 준비로 바꿔줘`"
+                return self._result(
+                    "수정할 할 일 ID를 알려주세요. 예: `할 일 3을 고객 미팅 준비로 바꿔줘`",
+                    status="needs_input",
+                    summary="제목 변경 대상 ID 필요",
+                    next_actions=("수정할 할 일 ID를 물어본다",),
+                )
             renamed = self.tasks.rename(scope=scope, task_ids=task_ids, title=title)
             if renamed == 0:
-                return "수정할 열린 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요."
-            return f"할 일 {renamed}개 제목을 `{title}`로 바꿨어요."
+                return self._result(
+                    "수정할 열린 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요.",
+                    status="not_found",
+                    summary="제목 변경 대상 없음",
+                    facts={"task_ids": task_ids, "title": title},
+                    preserve_values=tuple(str(task_id) for task_id in task_ids),
+                )
+            return self._result(
+                f"할 일 {renamed}개 제목을 `{title}`로 바꿨어요.",
+                summary="할 일 제목 변경 완료",
+                facts={"changed_count": renamed, "task_ids": task_ids, "title": title},
+                preserve_values=(str(renamed), title) + tuple(str(task_id) for task_id in task_ids),
+            )
 
         if asks_to_set_task_priority(text):
             priority = extract_task_priority(text)
             if priority is None:
-                return "우선순위를 높음, 보통, 낮음 중 하나로 알려주세요. 예: `할 일 3 우선순위 높음`"
+                return self._result(
+                    "우선순위를 높음, 보통, 낮음 중 하나로 알려주세요. 예: `할 일 3 우선순위 높음`",
+                    status="needs_input",
+                    summary="우선순위 값 필요",
+                    next_actions=("높음, 보통, 낮음 중 하나를 물어본다",),
+                )
             if asks_to_reference_latest_added_task(text):
                 latest_task = self.tasks.latest(scope=scope)
                 if latest_task is None or latest_task.status != "open":
-                    return "우선순위를 바꿀 최근 열린 할 일이 없어요."
+                    return self._result(
+                        "우선순위를 바꿀 최근 열린 할 일이 없어요.",
+                        status="not_found",
+                        summary="우선순위 변경 대상 없음",
+                    )
                 task_ids = [latest_task.id]
             else:
                 task_ids, resolution_error = self.resolve_task_ids_from_text(
@@ -179,15 +259,41 @@ class TaskAgent:
                     return resolution_error
             changed = self.tasks.set_priority(scope=scope, task_ids=task_ids, priority=priority)
             if changed == 0:
-                return "우선순위를 바꿀 열린 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요."
-            return f"할 일 {changed}개 우선순위를 `{format_task_priority(priority)}`으로 바꿨어요."
+                return self._result(
+                    "우선순위를 바꿀 열린 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요.",
+                    status="not_found",
+                    summary="우선순위 변경 대상 없음",
+                    facts={"task_ids": task_ids, "priority": priority},
+                    preserve_values=tuple(str(task_id) for task_id in task_ids),
+                )
+            priority_label = format_task_priority(priority)
+            return self._result(
+                f"할 일 {changed}개 우선순위를 `{priority_label}`으로 바꿨어요.",
+                summary="할 일 우선순위 변경 완료",
+                facts={
+                    "changed_count": changed,
+                    "task_ids": task_ids,
+                    "priority": priority,
+                    "priority_label": priority_label,
+                },
+                preserve_values=(str(changed), priority_label) + tuple(str(task_id) for task_id in task_ids),
+            )
 
         if asks_to_reopen_task(text):
             if asks_to_reopen_latest_completed_task(text):
                 reopened_task = self.tasks.reopen_latest_completed(scope=scope)
                 if reopened_task is None:
-                    return "다시 열 최근 완료 할 일이 없어요."
-                return f"가장 최근에 완료한 할 일 `{reopened_task.id}` · {reopened_task.title}을 다시 열었어요."
+                    return self._result(
+                        "다시 열 최근 완료 할 일이 없어요.",
+                        status="not_found",
+                        summary="다시 열 최근 완료 할 일 없음",
+                    )
+                return self._result(
+                    f"가장 최근에 완료한 할 일 `{reopened_task.id}` · {reopened_task.title}을 다시 열었어요.",
+                    summary="최근 완료 할 일 다시 열기 완료",
+                    facts={"task": self._task_item(reopened_task)},
+                    preserve_values=(str(reopened_task.id), reopened_task.title),
+                )
             task_ids, resolution_error = self.resolve_task_ids_from_text(
                 text=text,
                 scope=scope,
@@ -200,19 +306,50 @@ class TaskAgent:
                 return resolution_error
             reopened = self.tasks.reopen(scope=scope, task_ids=task_ids)
             if reopened == 0:
-                return "다시 열 완료된 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요."
-            return f"할 일 {reopened}개를 다시 열었어요."
+                return self._result(
+                    "다시 열 완료된 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요.",
+                    status="not_found",
+                    summary="다시 열 완료 할 일 없음",
+                    facts={"task_ids": task_ids},
+                    preserve_values=tuple(str(task_id) for task_id in task_ids),
+                )
+            return self._result(
+                f"할 일 {reopened}개를 다시 열었어요.",
+                summary="할 일 다시 열기 완료",
+                facts={"changed_count": reopened, "task_ids": task_ids},
+                preserve_values=(str(reopened),) + tuple(str(task_id) for task_id in task_ids),
+            )
 
         if asks_to_restore_task(text):
             if task_ids:
                 restored = self.tasks.restore(scope=scope, task_ids=task_ids)
                 if restored == 0:
-                    return "복구할 삭제된 할 일을 찾지 못했어요. `삭제한 할 일 목록 보여줘`로 ID를 확인해 주세요."
-                return f"삭제한 할 일 {restored}개를 복구했어요."
+                    return self._result(
+                        "복구할 삭제된 할 일을 찾지 못했어요. `삭제한 할 일 목록 보여줘`로 ID를 확인해 주세요.",
+                        status="not_found",
+                        summary="복구할 삭제 할 일 없음",
+                        facts={"task_ids": task_ids},
+                        preserve_values=tuple(str(task_id) for task_id in task_ids),
+                    )
+                return self._result(
+                    f"삭제한 할 일 {restored}개를 복구했어요.",
+                    summary="삭제한 할 일 복구 완료",
+                    facts={"restored_count": restored, "task_ids": task_ids},
+                    preserve_values=(str(restored),) + tuple(str(task_id) for task_id in task_ids),
+                )
             restored_task = self.tasks.restore_latest_deleted(scope=scope)
             if restored_task is None:
-                return "복구할 삭제된 할 일이 없어요."
-            return f"가장 최근에 삭제한 할 일 `{restored_task.id}` · {restored_task.title}을 복구했어요."
+                return self._result(
+                    "복구할 삭제된 할 일이 없어요.",
+                    status="not_found",
+                    summary="최근 복구 대상 삭제 할 일 없음",
+                )
+            return self._result(
+                f"가장 최근에 삭제한 할 일 `{restored_task.id}` · {restored_task.title}을 복구했어요.",
+                summary="최근 삭제 할 일 복구 완료",
+                facts={"task": self._task_item(restored_task)},
+                preserve_values=(str(restored_task.id), restored_task.title),
+            )
 
         if asks_to_complete_task(text):
             if asks_to_complete_task_batch(text):
@@ -229,20 +366,46 @@ class TaskAgent:
                 return resolution_error
             completed = self.tasks.complete(scope=scope, task_ids=task_ids)
             if completed == 0:
-                return "완료할 열린 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요."
-            return f"할 일 {completed}개를 완료 처리했어요."
+                return self._result(
+                    "완료할 열린 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요.",
+                    status="not_found",
+                    summary="완료할 열린 할 일 없음",
+                    facts={"task_ids": task_ids},
+                    preserve_values=tuple(str(task_id) for task_id in task_ids),
+                )
+            return self._result(
+                f"할 일 {completed}개를 완료 처리했어요.",
+                summary="할 일 완료 처리",
+                facts={"completed_count": completed, "task_ids": task_ids},
+                preserve_values=(str(completed),) + tuple(str(task_id) for task_id in task_ids),
+            )
 
         if asks_to_delete_task(text):
             if asks_to_delete_latest_task(text):
                 item = self.tasks.latest(scope=scope)
                 if item is None:
-                    return "삭제할 최근 할 일이 없어요."
+                    return self._result(
+                        "삭제할 최근 할 일이 없어요.",
+                        status="not_found",
+                        summary="삭제할 최근 할 일 없음",
+                    )
                 deleted = self.tasks.delete(scope=scope, task_ids=[item.id])
                 if deleted == 0:
-                    return "삭제할 최근 할 일을 찾지 못했어요."
-                return (
+                    return self._result(
+                        "삭제할 최근 할 일을 찾지 못했어요.",
+                        status="not_found",
+                        summary="삭제할 최근 할 일 없음",
+                    )
+                fallback = (
                     f"가장 최근에 추가한 할 일 `{item.id}` · {item.title}을 삭제했어요. "
                     f"실수라면 `할 일 {item.id} 복구해줘`라고 말해 주세요."
+                )
+                return self._result(
+                    fallback,
+                    summary="최근 추가 할 일 삭제 완료",
+                    facts={"deleted_count": deleted, "task": self._task_item(item)},
+                    preserve_values=(str(item.id), item.title),
+                    next_actions=("실수한 경우 복구할 수 있음을 짧게 안내한다",),
                 )
             task_ids, resolution_error = self.resolve_task_ids_from_text(
                 text=text,
@@ -256,8 +419,20 @@ class TaskAgent:
                 return resolution_error
             deleted = self.tasks.delete(scope=scope, task_ids=task_ids)
             if deleted == 0:
-                return "삭제할 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요."
-            return f"할 일 {deleted}개를 삭제했어요."
+                return self._result(
+                    "삭제할 할 일을 찾지 못했어요. `할 일 목록 보여줘`로 ID를 확인해 주세요.",
+                    status="not_found",
+                    summary="삭제할 할 일 없음",
+                    facts={"task_ids": task_ids},
+                    preserve_values=tuple(str(task_id) for task_id in task_ids),
+                )
+            return self._result(
+                f"할 일 {deleted}개를 삭제했어요.",
+                summary="할 일 삭제 완료",
+                facts={"deleted_count": deleted, "task_ids": task_ids},
+                preserve_values=(str(deleted),) + tuple(str(task_id) for task_id in task_ids),
+                next_actions=("실수한 경우 복구할 수 있음을 필요할 때만 안내한다",),
+            )
 
         if asks_to_create_task_from_recent_message(text):
             return self.create_task_from_recent_message(text=text, scope=scope, message_id=message_id)

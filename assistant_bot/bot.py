@@ -498,8 +498,8 @@ class AssistantBot(discord.Client):
         text: str,
         attachments: list[discord.Attachment],
         scope: ConversationScope,
-    ) -> str:
-        saved_messages: list[str] = []
+    ) -> AgentOutput:
+        saved_results: list[OperationResult] = []
         effective_attachments = attachments
         source_message_id = str(message.id)
         pending_request_id: int | None = None
@@ -525,7 +525,7 @@ class AssistantBot(discord.Client):
                     pending_request_id = pending.id
 
         if text.strip() and (not effective_attachments or has_substantive_memory_text(text)):
-            saved_messages.append(
+            saved_results.append(
                 await self.memory_agent.remember_text(
                     text=text,
                     scope=scope,
@@ -540,7 +540,17 @@ class AssistantBot(discord.Client):
                     max_bytes=self.config.max_attachment_bytes,
                 )
             except ValueError as error:
-                saved_messages.append(f"`{attachment.filename}`은 저장하지 못했어요. {error}")
+                saved_results.append(
+                    OperationResult(
+                        agent="memory",
+                        intent="remember",
+                        status="unsupported",
+                        summary="첨부 파일 저장 실패",
+                        facts={"filename": attachment.filename, "error": str(error)},
+                        preserve_values=(attachment.filename,),
+                        fallback_text=f"`{attachment.filename}`은 저장하지 못했어요. {error}",
+                    )
+                )
                 continue
 
             duplicate = self.memories.find_duplicate_document(scope=scope, text=extracted.text)
@@ -553,9 +563,24 @@ class AssistantBot(discord.Client):
                     model=self.config.easy_model,
                     reason="동일한 문서 내용 중복 저장 방지",
                 )
-                saved_messages.append(
+                fallback = (
                     f"`{extracted.filename}`과 같은 내용을 이미 기억하고 있어요. "
                     f"기존 문서 ID는 `{duplicate.id}`, 저장 위치는 {duplicate.source_location}입니다."
+                )
+                saved_results.append(
+                    OperationResult(
+                        agent="memory",
+                        intent="remember",
+                        status="success",
+                        summary="중복 문서 기억 확인",
+                        facts={
+                            "filename": extracted.filename,
+                            "duplicate_document_id": duplicate.id,
+                            "source_location": duplicate.source_location,
+                        },
+                        preserve_values=(extracted.filename, str(duplicate.id), duplicate.source_location),
+                        fallback_text=fallback,
+                    )
                 )
                 continue
 
@@ -566,17 +591,67 @@ class AssistantBot(discord.Client):
                 text=extracted.text,
                 source_message_id=source_message_id,
             )
-            saved_messages.append(
-                f"`{extracted.filename}` 문서를 기억해둘게요. 문서 ID는 `{document_id}`, chunk는 {chunk_count}개입니다."
+            fallback = (
+                f"`{extracted.filename}` 문서를 기억해둘게요. "
+                f"문서 ID는 `{document_id}`, chunk는 {chunk_count}개입니다."
+            )
+            saved_results.append(
+                OperationResult(
+                    agent="memory",
+                    intent="remember",
+                    status="success",
+                    summary="문서 기억 저장 완료",
+                    facts={
+                        "filename": extracted.filename,
+                        "document_id": document_id,
+                        "chunk_count": chunk_count,
+                        "content_type": extracted.content_type,
+                    },
+                    preserve_values=(extracted.filename, str(document_id), str(chunk_count)),
+                    fallback_text=fallback,
+                )
             )
 
-        if not saved_messages:
-            return "기억할 내용을 찾지 못했어요. 텍스트나 지원하는 첨부 파일과 함께 다시 말해 주세요."
+        if not saved_results:
+            return OperationResult(
+                agent="memory",
+                intent="remember",
+                status="needs_input",
+                summary="기억할 내용 없음",
+                next_actions=("텍스트나 지원하는 첨부 파일과 함께 다시 말해 달라고 안내한다",),
+                fallback_text="기억할 내용을 찾지 못했어요. 텍스트나 지원하는 첨부 파일과 함께 다시 말해 주세요.",
+            )
 
-        if pending_request_id is not None and any("문서" in message for message in saved_messages):
+        if pending_request_id is not None and any("문서" in result for result in saved_results):
             self.pending_attachments.resolve(pending_request_id)
 
-        return "\n".join(saved_messages)
+        if len(saved_results) == 1:
+            return saved_results[0]
+
+        fallback = "\n".join(str(result) for result in saved_results)
+        return OperationResult(
+            agent="memory",
+            intent="remember",
+            status="success",
+            summary="기억 저장 결과 묶음",
+            facts={"result_count": len(saved_results)},
+            items=tuple(
+                {
+                    "agent": result.agent,
+                    "intent": result.intent,
+                    "status": result.status,
+                    "summary": result.summary,
+                    "facts": result.facts,
+                }
+                for result in saved_results
+            ),
+            preserve_values=tuple(
+                value
+                for result in saved_results
+                for value in result.preserve_values
+            ),
+            fallback_text=fallback,
+        )
 
 
 def asks_to_remember(text: str) -> bool:
