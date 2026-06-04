@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from assistant_bot.agent_toolkits import build_memory_read_tools
 from assistant_bot.config import Config
 from assistant_bot.model_selector import choose_model
 from assistant_bot.models import ConversationScope
@@ -25,7 +26,6 @@ from .common import (
     extract_update_query,
     extract_update_text,
     format_detail,
-    format_memory_context,
 )
 
 
@@ -118,18 +118,11 @@ class MemoryAgent:
                 document_ids=exact_document_ids,
             )
 
-        results = await self.memories.search(
-            scope=scope,
-            query=text,
-            limit=self.config.retrieval_limit,
-        )
-        useful_results = [result for result in results if result.score >= 0.18]
-        context = format_memory_context(useful_results)
         choice = choose_model(
             self.config,
             text,
-            context_chars=len(context),
-            result_count=len(useful_results),
+            context_chars=len(text),
+            result_count=0,
         )
         self.logs.add(
             conversation_id=scope.conversation_id,
@@ -140,22 +133,17 @@ class MemoryAgent:
             reason=choice.reason,
         )
 
-        if not useful_results:
-            return (
-                "저장된 기억과 문서에서는 답을 찾지 못했어요. "
-                "필요한 내용을 기억해두라고 알려주면 다음부터 근거로 사용할 수 있습니다."
-            )
-
         instructions = """
 너는 사용자의 저장된 기억과 문서에 근거해 답하는 개인 비서다.
-반드시 제공된 근거를 우선한다.
-근거에 없는 내용은 추측이라고 분리해서 말하거나, 모른다고 말한다.
+답하기 전에 반드시 제공된 read-only 도구로 저장된 기억이나 문서를 조회한다.
+도구 결과에 없는 내용은 추측이라고 분리해서 말하거나, 모른다고 말한다.
 답변 마지막에는 참고한 파일명이나 기억 제목을 짧게 적는다.
 """
-        return await self.openai.text_response(
+        return await self.openai.tool_response(
             model=choice.model,
             instructions=instructions,
-            input_text=f"질문:\n{text}\n\n저장된 근거:\n{context}",
+            input_text=f"질문:\n{text}",
+            tools=build_memory_read_tools(config=self.config, memories=self.memories, scope=scope),
             temperature=0.2,
         )
 
@@ -447,5 +435,4 @@ class MemoryAgent:
         memory_id = memory_candidates[0].id
         await self.memories.update_text_memory(scope=scope, memory_id=memory_id, text=replacement)
         return f"가장 관련 있어 보이는 메모 `{memory_id}`를 수정했어요."
-
 

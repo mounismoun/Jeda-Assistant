@@ -21,6 +21,9 @@ from assistant_bot.time_utils import now_in_timezone
 
 
 class FakeOpenAI:
+    def __init__(self) -> None:
+        self.tool_calls: list[dict[str, object]] = []
+
     async def embedding(self, text: str) -> list[float]:
         lowered = text.lower()
         return [
@@ -28,6 +31,10 @@ class FakeOpenAI:
             1.0 if "회의" in lowered or "meeting" in lowered else 0.0,
             1.0,
         ]
+
+    async def tool_response(self, **kwargs) -> str:
+        self.tool_calls.append(kwargs)
+        return "도구 기반 회상 답변"
 
 
 @pytest.fixture
@@ -1331,6 +1338,33 @@ async def test_memory_agent_recalls_latest_saved_item() -> None:
     assert f"메모 `{second_id}`" in response
     assert "방금 저장한 메모" in response
     assert f"메모 `{first_id}`" not in response
+
+
+@pytest.mark.anyio
+async def test_memory_agent_general_recall_uses_read_only_tools() -> None:
+    database = AppDatabase(":memory:")
+    openai = FakeOpenAI()
+    store = MemoryStore(database.connection, openai)  # type: ignore[arg-type]
+    agent = MemoryAgent(
+        config=make_test_config(),
+        openai=openai,  # type: ignore[arg-type]
+        memories=store,
+        logs=AgentLogStore(database.connection),
+    )
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+    await store.save_text_memory(scope=scope, text="운동은 월수금 저녁에 한다", source_message_id="m1")
+
+    response = await agent.recall(text="운동 관련 기억 기준으로 알려줘", scope=scope)
+
+    assert response == "도구 기반 회상 답변"
+    assert openai.tool_calls
+    tool_names = {tool.name for tool in openai.tool_calls[0]["tools"]}
+    assert {"search_memories", "get_memory_detail", "get_document_detail"}.issubset(tool_names)
 
 
 @pytest.mark.anyio

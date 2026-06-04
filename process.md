@@ -1142,3 +1142,14 @@
   - `agent_catalog.json`과 `AgentDefinition`에 tool 이름 목록을 추가해 새 에이전트 설계 시 tool allowlist를 함께 관리할 수 있도록 했다.
   - `tests/test_openai_service.py`, `tests/test_agent_toolkits.py`, `tests/test_agent_registry.py`에 tool calling 실행 루프, read-only tool 실행, 카탈로그 tool 메타데이터 테스트를 추가했다.
   - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - Memory Agent Tool Calling 적용
+
+- 작업 이름: 일반 기억 회상 경로 tool calling 전환
+- 진행상황: 완료
+- 진행내용:
+  - `assistant_bot/agent_toolkits.py`를 `build_memory_read_tools`, `build_task_read_tools`, `build_conversation_read_tools`로 분리해 에이전트별 도구 조합이 가능하도록 했다.
+  - `get_memory_detail`, `get_document_detail` read-only tool을 추가했다.
+  - `MemoryAgent.recall`의 최근 항목/ID 상세 조회는 deterministic 경로로 유지하고, 일반 자연어 회상 경로는 `OpenAIService.tool_response`를 사용하도록 변경했다.
+  - `agent_catalog.json`의 `chat`, `recall` tool 목록에 memory detail 도구를 반영했다.
+  - 일반 recall이 read-only tool 목록을 전달하는 테스트를 추가했다.

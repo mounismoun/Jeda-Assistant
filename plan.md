@@ -132,7 +132,8 @@ PDF는 텍스트 추출만 지원한다. 스캔 이미지 OCR은 v1 범위에서
 현재 1차 적용 상태는 다음과 같다.
 
 - `OpenAIService.tool_response`와 `ToolSpec` 기반 tool executor를 구현했다.
-- `ConversationAgent`는 `search_memories`, `list_recent_memories`, `search_tasks`, `list_tasks`, `list_due_tasks` read-only tool을 사용할 수 있다.
+- `ConversationAgent`는 `search_memories`, `list_recent_memories`, `get_memory_detail`, `get_document_detail`, `search_tasks`, `list_tasks`, `list_due_tasks` read-only tool을 사용할 수 있다.
+- `MemoryAgent.recall`의 일반 자연어 회상 경로는 `search_memories`, `list_recent_memories`, `get_memory_detail`, `get_document_detail` read-only tool을 사용한다.
 - 명확한 CRUD, 삭제, 복구, 리마인더 발송은 기존 Python 직접 실행 흐름을 유지한다.
 
 ## 저장소
@@ -322,7 +323,7 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 
 ### 자동 검증 결과
 
-- `python3 -m pytest`: 통과, 156개 테스트
+- `python3 -m pytest`: 통과, 157개 테스트
 - `python3 -m ruff check .`: 통과
 - `python3 -m compileall assistant_bot tests`: 통과
 - `assistant-admin doctor`, `assistant-admin invite`, `assistant-admin stats`, `assistant-admin export`, `assistant-admin search`, `assistant-admin backup`: 실행 확인

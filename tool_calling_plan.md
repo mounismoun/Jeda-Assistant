@@ -43,7 +43,7 @@ tool calling을 쓰지 않는 편이 좋은 경우도 명확히 구분한다.
 
 ### 1차 도입 대상
 
-1차 도입은 `ConversationAgent`의 read-only 조회 도구부터 적용한다. `MemoryAgent`, `TaskAgent`는 다음 단계 후보로 둔다.
+1차 도입은 `ConversationAgent`와 `MemoryAgent.recall`의 read-only 조회 도구부터 적용한다. `TaskAgent`는 다음 단계 후보로 둔다.
 
 ### Conversation Agent
 
@@ -67,11 +67,12 @@ tool calling을 쓰지 않는 편이 좋은 경우도 명확히 구분한다.
 
 ### Memory Agent
 
-단순 recall은 기존 embedding 검색을 유지한다. 다만 검색이 여러 번 필요하거나 특정 문서 상세 조회가 필요한 질문은 tool calling 후보로 둔다.
+최근 항목 조회나 ID 기반 상세 조회는 기존 deterministic 경로를 유지한다. 일반 자연어 recall은 read-only tool calling을 사용한다.
 
-후보 tool:
+적용 tool:
 
-- `search_memory(query, limit)`
+- `search_memories(query, limit)`
+- `list_recent_memories(limit)`
 - `get_memory_detail(memory_id)`
 - `get_document_detail(document_id)`
 
@@ -206,7 +207,7 @@ Discord/CLI로 응답
 ### 권한 테스트
 
 - `ConversationAgent`에는 mutation tool이 전달되지 않는다.
-- `MemoryAgent.recall`에는 삭제/수정 tool이 전달되지 않는다.
+- `MemoryAgent.recall`에는 삭제/수정 tool이 전달되지 않는다. 완료
 - `TaskAgent` mutation tool은 `manage_task` intent 안에서만 사용된다.
 - destructive memory tool은 1차 도입 tool 목록에 없다.
 
@@ -251,7 +252,7 @@ AgentDefinition(
 2. `OpenAIService.tool_response`와 tool executor 구조를 구현한다. 완료
 3. read-only memory/task tool schema와 executor를 만든다. 완료
 4. `ConversationAgent`의 복합 질문에 read-only tool calling을 먼저 적용한다. 완료
-5. `MemoryAgent.recall`에 선택적 read-only tool calling을 적용한다.
+5. `MemoryAgent.recall`에 선택적 read-only tool calling을 적용한다. 완료
 6. `TaskAgent`에는 parser 실패 fallback부터 제한적으로 적용한다.
 7. mutation tool은 충분한 테스트 후 task intent 안에서만 허용한다.
 8. 문서와 테스트를 갱신한다.
