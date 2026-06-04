@@ -122,7 +122,7 @@ class AssistantBot(discord.Client):
                 await self.send_due_reminders()
             except Exception:
                 logger.exception("알림 처리 중 오류")
-            await asyncio.sleep(max(1, self.config.task_reminder_interval_minutes) * 60)
+            await asyncio.sleep(min(max(1, self.config.task_reminder_interval_minutes) * 60, 15))
 
     async def send_due_reminders(self) -> int:
         now_text = now_in_timezone(self.config.timezone).strftime("%Y-%m-%d %H:%M")

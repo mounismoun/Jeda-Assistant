@@ -195,6 +195,45 @@ def test_reminder_agent_creates_reminder_from_relative_time_request() -> None:
     assert len(items[0].remind_at) == len("2026-06-05 09:00")
 
 
+def test_reminder_agent_lists_pending_reminders() -> None:
+    database = AppDatabase(":memory:")
+    reminders = ReminderStore(database.connection)
+    logs = AgentLogStore(database.connection)
+    agent = ReminderAgent(config=make_test_config(), reminders=reminders, logs=logs)
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+    reminders.add(scope=scope, text="물 마시기", remind_at="2026-06-05 07:04")
+
+    response = agent.handle(text="현재 등록되어 있는 알림 목록", scope=scope)
+
+    assert "현재 등록된 미발송 알림 1개" in response
+    assert "2026-06-05 07:04" in response
+    assert "물 마시기" in response
+
+
+def test_reminder_agent_shows_latest_reminder_time() -> None:
+    database = AppDatabase(":memory:")
+    reminders = ReminderStore(database.connection)
+    logs = AgentLogStore(database.connection)
+    agent = ReminderAgent(config=make_test_config(), reminders=reminders, logs=logs)
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+    reminders.add(scope=scope, text="알림", remind_at="2026-06-05 07:04")
+
+    response = agent.handle(text="내가 아까 몇시에 알림 보내달라고 했지?", scope=scope)
+
+    assert "가장 최근 등록한 알림" in response
+    assert "2026-06-05 07:04" in response
+
+
 def test_task_agent_creates_task_from_recent_user_message() -> None:
     database = AppDatabase(":memory:")
     tasks = TaskStore(database.connection)

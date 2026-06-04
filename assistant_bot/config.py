@@ -52,7 +52,7 @@ def load_config() -> Config:
         openai_timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "30")),
         openai_max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "2")),
         pending_confirmation_ttl_minutes=int(os.getenv("PENDING_CONFIRMATION_TTL_MINUTES", "10")),
-        task_reminder_interval_minutes=int(os.getenv("TASK_REMINDER_INTERVAL_MINUTES", "60")),
+        task_reminder_interval_minutes=int(os.getenv("TASK_REMINDER_INTERVAL_MINUTES", "1")),
         task_reminder_batch_size=int(os.getenv("TASK_REMINDER_BATCH_SIZE", "20")),
         timezone=os.getenv("ASSISTANT_TIMEZONE", "Asia/Seoul"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),

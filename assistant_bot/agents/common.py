@@ -72,6 +72,8 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
     list_markers = ["목록", "리스트", "뭘 기억", "무엇을 기억", "기억 상태", "저장 상태", "list memories"]
     recall_markers = ["기억", "저장한", "전에", "문서", "파일", "회의록", "recall"]
 
+    if is_reminder_request(text):
+        return RoutingResult("manage_reminder", 0.95, "사용자 알림 요청 감지")
     if asks_current_time(text):
         return RoutingResult("current_time", 0.98, "현재 날짜/시간 요청 감지")
     if asks_for_daily_briefing(text):
@@ -80,8 +82,6 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
         return RoutingResult("help", 0.96, "도움말 요청 감지")
     if asks_about_capability(text):
         return RoutingResult("help", 0.95, "기능 문의 감지")
-    if is_reminder_request(text):
-        return RoutingResult("manage_reminder", 0.95, "사용자 알림 예약 요청 감지")
     if is_task_request(text):
         return RoutingResult("manage_task", 0.95, "할 일 관리 요청 감지")
     if any(marker in normalized for marker in status_markers):
@@ -370,6 +370,8 @@ def is_task_request(text: str) -> bool:
 
 
 def is_reminder_request(text: str) -> bool:
+    if asks_to_list_reminders(text) or asks_to_show_recent_reminder(text):
+        return True
     if not asks_to_create_reminder(text):
         return False
     normalized = text.casefold()
@@ -384,6 +386,29 @@ def is_reminder_request(text: str) -> bool:
     if any(marker in normalized or marker in compact for marker in task_markers):
         return False
     return True
+
+
+def asks_to_list_reminders(text: str) -> bool:
+    normalized = text.casefold()
+    compact = re.sub(r"\s+", "", normalized)
+    reminder_markers = ["알림", "리마인더", "리마인드", "reminder", "reminders"]
+    list_markers = ["목록", "리스트", "등록", "예약", "현재", "보여", "조회", "확인", "list", "show"]
+    return any(marker in normalized or marker in compact for marker in reminder_markers) and any(
+        marker in normalized or marker in compact for marker in list_markers
+    )
+
+
+def asks_to_show_recent_reminder(text: str) -> bool:
+    normalized = text.casefold()
+    compact = re.sub(r"\s+", "", normalized)
+    reminder_markers = ["알림", "리마인더", "리마인드", "reminder"]
+    recent_markers = ["아까", "방금", "최근", "마지막", "전에", "latest", "last"]
+    time_markers = ["몇시", "몇 시", "언제", "시간", "시각", "when", "time"]
+    return (
+        any(marker in normalized or marker in compact for marker in reminder_markers)
+        and any(marker in normalized or marker in compact for marker in recent_markers)
+        and any(marker in normalized or marker in compact for marker in time_markers)
+    )
 
 
 def asks_about_capability(text: str) -> bool:

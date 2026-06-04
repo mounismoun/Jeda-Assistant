@@ -1232,3 +1232,15 @@
   - capability prompt, 도움말, unsupported 안내에 현재 시간 확인 기능을 반영했다.
   - `지금 몇시야?`가 `current_time`으로 라우팅되는 테스트와 카탈로그/capability 테스트를 추가했다.
   - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - 알림 조회와 발송 지연 개선
+
+- 작업 이름: 알림 목록/최근 예약 조회 및 루프 간격 개선
+- 진행상황: 완료
+- 진행내용:
+  - `ReminderStore`에 사용자별 미발송 알림 목록 조회와 최근 등록 알림 조회를 추가했다.
+  - `ReminderAgent`가 `현재 등록되어 있는 알림 목록`, `내가 아까 몇시에 알림 보내달라고 했지?` 같은 조회형 요청에 답하도록 했다.
+  - Router 휴리스틱과 `agent_catalog.json`에 알림 목록/최근 예약 시각 조회 예시를 반영했다.
+  - 알림 발송 루프가 설정값이 커도 최대 15초 간격으로 대기 알림을 확인하도록 변경해 예약 시각보다 늦게 도착하는 폭을 줄였다.
+  - 기본 `TASK_REMINDER_INTERVAL_MINUTES` 값을 60분에서 1분으로 낮추고 문서와 `.env.example`을 갱신했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.

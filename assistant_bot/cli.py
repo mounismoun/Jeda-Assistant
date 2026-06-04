@@ -485,7 +485,7 @@ def run_doctor(env: Mapping[str, str]) -> DoctorResult:
         "RETRIEVAL_LIMIT": 8,
         "OPENAI_MAX_RETRIES": 2,
         "PENDING_CONFIRMATION_TTL_MINUTES": 10,
-        "TASK_REMINDER_INTERVAL_MINUTES": 60,
+        "TASK_REMINDER_INTERVAL_MINUTES": 1,
         "TASK_REMINDER_BATCH_SIZE": 20,
     }
     for name, default in numeric_checks.items():
@@ -2283,7 +2283,7 @@ def load_cli_config(env: Mapping[str, str]) -> Config:
         openai_timeout_seconds=float(env.get("OPENAI_TIMEOUT_SECONDS", "30")),
         openai_max_retries=int(env.get("OPENAI_MAX_RETRIES", "2")),
         pending_confirmation_ttl_minutes=int(env.get("PENDING_CONFIRMATION_TTL_MINUTES", "10")),
-        task_reminder_interval_minutes=int(env.get("TASK_REMINDER_INTERVAL_MINUTES", "60")),
+        task_reminder_interval_minutes=int(env.get("TASK_REMINDER_INTERVAL_MINUTES", "1")),
         task_reminder_batch_size=int(env.get("TASK_REMINDER_BATCH_SIZE", "20")),
         timezone=env.get("ASSISTANT_TIMEZONE", "Asia/Seoul"),
         log_level=env.get("LOG_LEVEL", "INFO"),
@@ -2613,7 +2613,7 @@ def make_cli_utility_config(database_path: str) -> Config:
         openai_timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "30")),
         openai_max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "2")),
         pending_confirmation_ttl_minutes=int(os.getenv("PENDING_CONFIRMATION_TTL_MINUTES", "10")),
-        task_reminder_interval_minutes=int(os.getenv("TASK_REMINDER_INTERVAL_MINUTES", "60")),
+        task_reminder_interval_minutes=int(os.getenv("TASK_REMINDER_INTERVAL_MINUTES", "1")),
         task_reminder_batch_size=int(os.getenv("TASK_REMINDER_BATCH_SIZE", "20")),
         timezone=os.getenv("ASSISTANT_TIMEZONE", "Asia/Seoul"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),

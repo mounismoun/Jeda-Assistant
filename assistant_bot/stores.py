@@ -962,6 +962,43 @@ class ReminderStore:
         ).fetchall()
         return [reminder_item_from_row(row) for row in rows]
 
+    def list_recent(
+        self,
+        *,
+        scope: ConversationScope,
+        pending_only: bool = True,
+        limit: int = 10,
+    ) -> list[ReminderItem]:
+        where = ["user_id = ?"]
+        params: list[object] = [scope.user_id]
+        if pending_only:
+            where.append("sent_at IS NULL")
+        params.append(max(1, limit))
+        rows = self.connection.execute(
+            f"""
+            SELECT {REMINDER_COLUMNS}
+            FROM reminders
+            WHERE {" AND ".join(where)}
+            ORDER BY remind_at ASC, id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        return [reminder_item_from_row(row) for row in rows]
+
+    def latest(self, *, scope: ConversationScope) -> ReminderItem | None:
+        row = self.connection.execute(
+            f"""
+            SELECT {REMINDER_COLUMNS}
+            FROM reminders
+            WHERE user_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """,
+            (scope.user_id,),
+        ).fetchone()
+        return reminder_item_from_row(row) if row else None
+
     def mark_sent(self, reminder_id: int) -> None:
         self.connection.execute(
             """

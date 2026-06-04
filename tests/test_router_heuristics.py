@@ -15,6 +15,7 @@ from assistant_bot.agents import (
     asks_to_list_deleted_memories,
     asks_to_list_deleted_tasks,
     asks_to_list_due_tasks,
+    asks_to_list_reminders,
     asks_to_reference_latest_added_task,
     asks_to_remember_recent_message,
     asks_to_reopen_latest_completed_task,
@@ -23,6 +24,7 @@ from assistant_bot.agents import (
     asks_to_search_tasks,
     asks_to_show_latest_memory,
     asks_to_show_latest_task_detail,
+    asks_to_show_recent_reminder,
     asks_to_show_task_detail,
     asks_to_snooze_latest_reminded_task,
     asks_to_update_latest_memory,
@@ -107,6 +109,13 @@ def test_heuristic_route_manage_reminder() -> None:
     route = heuristic_route("30분 뒤 물 마시라고 알려줘", False)
 
     assert route.intent == "manage_reminder"
+
+
+def test_heuristic_route_reminder_lookup() -> None:
+    assert heuristic_route("현재 등록되어 있는 알림 목록", False).intent == "manage_reminder"
+    assert heuristic_route("내가 아까 몇시에 알림 보내달라고 했지?", False).intent == "manage_reminder"
+    assert asks_to_list_reminders("현재 등록되어 있는 알림 목록")
+    assert asks_to_show_recent_reminder("내가 아까 몇시에 알림 보내달라고 했지?")
 
 
 def test_heuristic_route_delete() -> None:
