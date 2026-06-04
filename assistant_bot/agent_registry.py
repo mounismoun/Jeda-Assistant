@@ -123,6 +123,7 @@ def build_agent_registry(
     memory_agent,
     utility_agent,
     task_agent,
+    reminder_agent,
     conversation_agent,
     pending_attachments,
     pending_memory_deletions,
@@ -179,6 +180,9 @@ def build_agent_registry(
     def manage_task(context: AgentContext) -> str:
         return task_agent.handle(text=context.text, scope=context.scope, message_id=context.message_id)
 
+    def manage_reminder(context: AgentContext) -> str:
+        return reminder_agent.handle(text=context.text, scope=context.scope, message_id=context.message_id)
+
     async def chat(context: AgentContext) -> str:
         return await conversation_agent.chat(
             text=context.text,
@@ -212,6 +216,7 @@ def build_agent_registry(
         "delete_memory": delete_memory,
         "help": help_agent,
         "list_memory": list_memory,
+        "manage_reminder": manage_reminder,
         "manage_task": manage_task,
         "recall": recall,
         "remember": remember,

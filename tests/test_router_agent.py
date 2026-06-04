@@ -17,7 +17,7 @@ async def test_router_agent_prefers_model_route_over_heuristic() -> None:
         config=make_config(),
         openai=openai,  # type: ignore[arg-type]
         logs=FakeLogs(),  # type: ignore[arg-type]
-        allowed_intents={"help", "manage_task", "chat"},
+        allowed_intents={"help", "manage_task", "manage_reminder", "chat"},
     )
 
     route = await router.route(
@@ -58,7 +58,7 @@ async def test_router_agent_falls_back_to_heuristic_when_model_fails() -> None:
         config=make_config(),
         openai=FailingRouterOpenAI(),  # type: ignore[arg-type]
         logs=FakeLogs(),  # type: ignore[arg-type]
-        allowed_intents={"help", "manage_task", "chat"},
+        allowed_intents={"help", "manage_task", "manage_reminder", "chat"},
     )
 
     route = await router.route(
@@ -67,7 +67,7 @@ async def test_router_agent_falls_back_to_heuristic_when_model_fails() -> None:
         scope=make_scope(),
     )
 
-    assert route.intent == "manage_task"
+    assert route.intent == "manage_reminder"
 
 
 def make_scope() -> ConversationScope:

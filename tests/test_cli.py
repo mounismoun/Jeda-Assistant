@@ -393,30 +393,30 @@ def test_generate_cli_briefing_includes_due_tasks_and_recent_memories(tmp_path) 
     assert "채널 `777`" in output
 
 
-def test_list_due_reminders_previews_unsent_due_tasks(tmp_path) -> None:
+def test_list_due_reminders_previews_unsent_due_reminders(tmp_path) -> None:
     database_path = tmp_path / "assistant.sqlite"
     database = AppDatabase(str(database_path))
     connection = database.connection
     connection.execute(
         """
-        INSERT INTO tasks (user_id, conversation_id, channel_id, title, priority, due_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO reminders (user_id, conversation_id, channel_id, text, remind_at)
+        VALUES (?, ?, ?, ?, ?)
         """,
-        ("user-1", "dm:user-1", "dm", "곧 보낼 리마인더", "high", "2026-06-05 09:00"),
+        ("user-1", "dm:user-1", "dm", "곧 보낼 리마인더", "2026-06-05 09:00"),
     )
     connection.execute(
         """
-        INSERT INTO tasks (user_id, conversation_id, channel_id, title, priority, due_at, reminder_sent_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO reminders (user_id, conversation_id, channel_id, text, remind_at, sent_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        ("user-1", "dm:user-1", "dm", "이미 보낸 리마인더", "normal", "2026-06-05 08:00", "2026-06-05 08:01"),
+        ("user-1", "dm:user-1", "dm", "이미 보낸 리마인더", "2026-06-05 08:00", "2026-06-05 08:01"),
     )
     connection.execute(
         """
-        INSERT INTO tasks (user_id, conversation_id, channel_id, title, priority, due_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO reminders (user_id, conversation_id, channel_id, text, remind_at)
+        VALUES (?, ?, ?, ?, ?)
         """,
-        ("user-2", "dm:user-2", "dm", "다른 사용자 리마인더", "normal", "2026-06-05 09:00"),
+        ("user-2", "dm:user-2", "dm", "다른 사용자 리마인더", "2026-06-05 09:00"),
     )
     connection.commit()
 
@@ -428,7 +428,7 @@ def test_list_due_reminders_previews_unsent_due_tasks(tmp_path) -> None:
     output = format_due_reminders(result)
 
     assert result["as_of"] == "2026-06-05 09:30"
-    assert [item.title for item in result["items"]] == ["곧 보낼 리마인더"]
+    assert [item.text for item in result["items"]] == ["곧 보낼 리마인더"]
     assert "리마인더 발송 대상 1개" in output
     assert "곧 보낼 리마인더" in output
     assert "이미 보낸 리마인더" not in output

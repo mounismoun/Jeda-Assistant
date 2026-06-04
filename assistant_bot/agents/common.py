@@ -21,6 +21,7 @@ DEFAULT_ALLOWED_INTENTS = {
     "restore_memory",
     "reset_context",
     "manage_task",
+    "manage_reminder",
     "daily_briefing",
     "unsupported",
 }
@@ -39,6 +40,7 @@ DEFAULT_ROUTING_PROMPT_BLOCK = "\n".join(
         "- restore_memory: 삭제한 기억이나 문서를 복구하거나, 삭제한 기억 목록을 보려는 요청",
         "- reset_context: 현재 대화의 최근 메시지와 압축 요약을 초기화하라는 요청. 장기 기억 삭제가 아님",
         "- manage_task: 할 일 추가, 조회, 완료, 삭제 요청",
+        "- manage_reminder: 특정 시각에 사용자 DM으로 알림을 보내 달라는 요청",
         "- daily_briefing: 오늘 브리핑, 오늘 할 일과 최근 기억 요약 요청",
         "- unsupported: 처리할 수 없는 요청",
     ]
@@ -74,6 +76,8 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
         return RoutingResult("help", 0.96, "도움말 요청 감지")
     if asks_about_capability(text):
         return RoutingResult("help", 0.95, "기능 문의 감지")
+    if is_reminder_request(text):
+        return RoutingResult("manage_reminder", 0.95, "사용자 알림 예약 요청 감지")
     if is_task_request(text):
         return RoutingResult("manage_task", 0.95, "할 일 관리 요청 감지")
     if any(marker in normalized for marker in status_markers):
@@ -327,11 +331,28 @@ def is_task_request(text: str) -> bool:
         return False
     if any(marker in normalized for marker in task_markers) or any(marker in compact for marker in ["할일"]):
         return True
-    if asks_to_create_reminder(text):
-        return True
+    if is_reminder_request(text):
+        return False
     return any(marker in normalized for marker in reminder_markers) and any(
         marker in normalized or marker in compact for marker in reminder_action_markers
     )
+
+
+def is_reminder_request(text: str) -> bool:
+    if not asks_to_create_reminder(text):
+        return False
+    normalized = text.casefold()
+    compact = re.sub(r"\s+", "", normalized)
+    if any(marker in normalized or marker in compact for marker in ["방금 추가한", "최근 추가한", "latest task"]):
+        return False
+    if re.search(r"(?:할\s*일|할일|태스크|task|todo|to-do)\s*#?\d+", normalized):
+        return False
+    if re.search(r"#?\d+\s*번", normalized):
+        return False
+    task_markers = ["할 일", "할일", "태스크", "task", "todo", "to-do", "체크리스트"]
+    if any(marker in normalized or marker in compact for marker in task_markers):
+        return False
+    return True
 
 
 def asks_about_capability(text: str) -> bool:
@@ -904,6 +925,18 @@ def extract_task_creation(
     cleaned = remove_due_time_text(cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" :：-.,")
     return cleaned, due_at
+
+
+def extract_reminder_text(
+    text: str,
+    *,
+    timezone_name: str | None = None,
+    now: datetime | None = None,
+) -> tuple[str, str | None]:
+    reminder_text, remind_at = extract_task_creation(text, timezone_name=timezone_name, now=now)
+    if not reminder_text:
+        reminder_text = "요청하신 알림"
+    return reminder_text, remind_at
 
 
 def normalize_context_task_title(text: str) -> str:

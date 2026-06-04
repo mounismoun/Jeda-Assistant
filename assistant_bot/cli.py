@@ -19,6 +19,7 @@ from assistant_bot.agent_registry import AgentContext, build_agent_registry
 from assistant_bot.agents import (
     ConversationAgent,
     MemoryAgent,
+    ReminderAgent,
     RouterAgent,
     TaskAgent,
     UtilityAgent,
@@ -41,6 +42,7 @@ from assistant_bot.stores import (
     MemoryStore,
     PendingAttachmentStore,
     PendingMemoryDeletionStore,
+    ReminderStore,
     TaskStore,
 )
 from assistant_bot.time_utils import now_in_timezone, today_string
@@ -186,7 +188,7 @@ def main() -> None:
     logs_parser.add_argument("--limit", "-n", type=int, default=20, help="최대 결과 수")
     logs_parser.add_argument("--agent", help="특정 에이전트 로그만 조회한다")
     logs_parser.add_argument("--conversation-id", help="특정 conversation_id 로그만 조회한다")
-    reminders_parser = subparsers.add_parser("reminders", help="기한 도래 리마인더 발송 대상을 미리 확인한다")
+    reminders_parser = subparsers.add_parser("reminders", help="발송 대기 중인 사용자 알림 대상을 미리 확인한다")
     reminders_parser.add_argument("--limit", "-n", type=int, default=20, help="최대 결과 수")
     reminders_parser.add_argument("--user-id", help="특정 Discord user_id의 리마인더만 조회한다")
     reminders_parser.add_argument("--as-of", help="기준 날짜/시각. 예: 2026-06-10 또는 2026-06-10 09:30")
@@ -2057,9 +2059,9 @@ def list_due_reminders(
     timezone_name: str | None = None,
 ) -> dict[str, object]:
     database = AppDatabase(database_path)
-    tasks = TaskStore(database.connection)
+    reminders = ReminderStore(database.connection)
     cutoff = normalize_reminder_as_of(as_of, timezone_name=timezone_name)
-    items = tasks.due_for_reminder(today=cutoff, limit=limit, user_id=user_id)
+    items = reminders.due_for_delivery(as_of=cutoff, limit=limit, user_id=user_id)
     return {
         "database_path": database_path,
         "user_id": user_id,
@@ -2083,11 +2085,9 @@ def format_due_reminders(result: dict[str, object]) -> str:
     lines = [f"{result['as_of']} 기준 리마인더 발송 대상 {len(items)}개{scope}:"]
     for item in items:
         channel_text = item.channel_id or "-"
-        due_text = item.due_at or "-"
         lines.append(
-            f"- 할 일 `{item.id}` · {item.title} · user `{item.user_id}` · "
-            f"우선순위: {format_task_priority(item.priority)} · 기한: {due_text} · "
-            f"채널: {channel_text} · 저장 위치: {item.source_location}"
+            f"- 알림 `{item.id}` · {item.text} · user `{item.user_id}` · "
+            f"예약 시각: {item.remind_at} · 채널: {channel_text} · 저장 위치: {item.source_location}"
         )
     lines.append("실제 발송은 봇의 자동 리마인더 루프에서 수행됩니다.")
     return "\n".join(lines)
@@ -2308,6 +2308,7 @@ async def run_local_text_interaction(
     pending_attachments = PendingAttachmentStore(database.connection)
     pending_memory_deletions = PendingMemoryDeletionStore(database.connection)
     tasks = TaskStore(database.connection)
+    reminders = ReminderStore(database.connection)
     memories = MemoryStore(database.connection, openai)
     memory_agent = MemoryAgent(
         config=config,
@@ -2324,6 +2325,7 @@ async def run_local_text_interaction(
         conversations=conversations,
     )
     task_agent = TaskAgent(config=config, tasks=tasks, conversations=conversations, logs=logs)
+    reminder_agent = ReminderAgent(config=config, reminders=reminders, logs=logs)
     conversation_agent = ConversationAgent(
         config=config,
         openai=openai,
@@ -2336,6 +2338,7 @@ async def run_local_text_interaction(
         memory_agent=memory_agent,
         utility_agent=utility_agent,
         task_agent=task_agent,
+        reminder_agent=reminder_agent,
         conversation_agent=conversation_agent,
         pending_attachments=pending_attachments,
         pending_memory_deletions=pending_memory_deletions,

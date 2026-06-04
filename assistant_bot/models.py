@@ -16,6 +16,7 @@ RouteIntent = Literal[
     "restore_memory",
     "reset_context",
     "manage_task",
+    "manage_reminder",
     "daily_briefing",
     "unsupported",
 ]
@@ -125,5 +126,19 @@ class TaskItem:
     completed_at: str | None = None
     reminder_sent_at: str | None = None
     deleted_at: str | None = None
+    source_message_id: str | None = None
+    source_location: str = "DM"
+
+
+@dataclass(frozen=True)
+class ReminderItem:
+    id: int
+    user_id: str
+    conversation_id: str
+    channel_id: str | None
+    text: str
+    remind_at: str
+    created_at: str
+    sent_at: str | None = None
     source_message_id: str | None = None
     source_location: str = "DM"

@@ -42,6 +42,7 @@ from assistant_bot.agents import (
     extract_update_text,
     has_substantive_memory_text,
     heuristic_route,
+    is_reminder_request,
     is_task_request,
 )
 
@@ -92,6 +93,12 @@ def test_heuristic_route_manage_task() -> None:
     route = heuristic_route("할 일 추가: 금요일까지 제안서 초안 작성", False)
 
     assert route.intent == "manage_task"
+
+
+def test_heuristic_route_manage_reminder() -> None:
+    route = heuristic_route("30분 뒤 물 마시라고 알려줘", False)
+
+    assert route.intent == "manage_reminder"
 
 
 def test_heuristic_route_delete() -> None:
@@ -229,7 +236,8 @@ def test_task_request_helpers() -> None:
     assert asks_to_clear_task_due("할 일 3 기한 없애줘")
     assert asks_to_clear_task_due("방금 추가한 할 일 리마인더 제거해줘")
     assert asks_to_create_reminder("내일 오전 9시에 물 마시라고 알려줘")
-    assert is_task_request("내일 오전 9시에 물 마시라고 알려줘")
+    assert is_reminder_request("내일 오전 9시에 물 마시라고 알려줘")
+    assert not is_task_request("내일 오전 9시에 물 마시라고 알려줘")
     assert asks_to_complete_task("오늘 할 일 다 했어")
     assert asks_to_complete_task_batch("오늘 할 일 다 했어")
     assert asks_to_complete_task_batch("모든 할 일 완료했어")
@@ -243,8 +251,8 @@ def test_task_request_helpers() -> None:
     assert asks_to_create_task_from_recent_message("this as a task add")
     assert not asks_to_create_task_from_recent_message("방금 추가한 할 일 보여줘")
     assert not asks_to_create_task_from_recent_message("할 일 추가: 제안서 작성")
-    assert asks_to_snooze_latest_reminded_task("30분 뒤 다시 알려줘")
-    assert asks_to_snooze_latest_reminded_task("2시간 후 나중에 알려줘")
+    assert not asks_to_snooze_latest_reminded_task("30분 뒤 다시 알려줘")
+    assert not asks_to_snooze_latest_reminded_task("2시간 후 나중에 알려줘")
     assert not asks_to_snooze_latest_reminded_task("할 일 3 30분 뒤 다시 알려줘")
     assert not asks_to_snooze_latest_reminded_task("방금 추가한 할 일 30분 뒤 다시 알려줘")
     assert extract_task_rename_title("방금 추가한 할 일을 고객 미팅 준비로 바꿔줘") == "고객 미팅 준비"

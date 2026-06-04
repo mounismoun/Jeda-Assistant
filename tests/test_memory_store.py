@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from assistant_bot.agents import MemoryAgent, TaskAgent
+from assistant_bot.agents import MemoryAgent, ReminderAgent, TaskAgent
 from assistant_bot.config import Config
 from assistant_bot.database import AppDatabase
 from assistant_bot.models import ConversationScope
@@ -14,6 +14,7 @@ from assistant_bot.stores import (
     MemoryStore,
     PendingAttachmentStore,
     PendingMemoryDeletionStore,
+    ReminderStore,
     TaskStore,
     document_content_hash,
 )
@@ -152,12 +153,11 @@ def test_task_agent_does_not_save_duplicate_open_task() -> None:
     assert len(tasks.list_open(scope=scope)) == 1
 
 
-def test_task_agent_creates_task_from_natural_reminder() -> None:
+def test_reminder_agent_creates_reminder_from_natural_request() -> None:
     database = AppDatabase(":memory:")
-    tasks = TaskStore(database.connection)
+    reminders = ReminderStore(database.connection)
     logs = AgentLogStore(database.connection)
-    conversations = ConversationStore(database.connection)
-    agent = TaskAgent(config=make_test_config(), tasks=tasks, conversations=conversations, logs=logs)
+    agent = ReminderAgent(config=make_test_config(), reminders=reminders, logs=logs)
     scope = ConversationScope(
         conversation_id="dm:user-1",
         channel_id="dm",
@@ -167,20 +167,18 @@ def test_task_agent_creates_task_from_natural_reminder() -> None:
 
     response = agent.handle(text="내일 오전 9시에 물 마시라고 알려줘", scope=scope)
 
-    items = tasks.list_recent(user_id=scope.user_id, status="open")
-    assert "할 일 `1`로 추가했어요" in response
+    items = reminders.due_for_delivery(as_of="2999-01-01", user_id=scope.user_id)
+    assert "알림 `1`로 등록했어요" in response
     assert len(items) == 1
-    assert items[0].title == "물 마시"
-    assert items[0].due_at is not None
-    assert items[0].due_at.endswith("09:00")
+    assert items[0].text == "물 마시"
+    assert items[0].remind_at.endswith("09:00")
 
 
-def test_task_agent_creates_task_from_relative_time_reminder() -> None:
+def test_reminder_agent_creates_reminder_from_relative_time_request() -> None:
     database = AppDatabase(":memory:")
-    tasks = TaskStore(database.connection)
+    reminders = ReminderStore(database.connection)
     logs = AgentLogStore(database.connection)
-    conversations = ConversationStore(database.connection)
-    agent = TaskAgent(config=make_test_config(), tasks=tasks, conversations=conversations, logs=logs)
+    agent = ReminderAgent(config=make_test_config(), reminders=reminders, logs=logs)
     scope = ConversationScope(
         conversation_id="dm:user-1",
         channel_id="dm",
@@ -190,12 +188,11 @@ def test_task_agent_creates_task_from_relative_time_reminder() -> None:
 
     response = agent.handle(text="30분 뒤 물 마시라고 알려줘", scope=scope)
 
-    items = tasks.list_recent(user_id=scope.user_id, status="open")
-    assert "할 일 `1`로 추가했어요" in response
+    items = reminders.due_for_delivery(as_of="2999-01-01", user_id=scope.user_id)
+    assert "알림 `1`로 등록했어요" in response
     assert len(items) == 1
-    assert items[0].title == "물 마시"
-    assert items[0].due_at is not None
-    assert len(items[0].due_at) == len("2026-06-05 09:00")
+    assert items[0].text == "물 마시"
+    assert len(items[0].remind_at) == len("2026-06-05 09:00")
 
 
 def test_task_agent_creates_task_from_recent_user_message() -> None:
@@ -226,7 +223,7 @@ def test_task_agent_creates_task_from_recent_user_message() -> None:
     assert items[0].due_at is not None
 
 
-def test_task_agent_snoozes_latest_reminded_task_without_id() -> None:
+def test_task_agent_postpones_task_with_explicit_id() -> None:
     database = AppDatabase(":memory:")
     tasks = TaskStore(database.connection)
     logs = AgentLogStore(database.connection)
@@ -241,7 +238,7 @@ def test_task_agent_snoozes_latest_reminded_task_without_id() -> None:
     task_id = tasks.add(scope=scope, title="물 마시기", due_at="2026-06-05 09:00")
     tasks.mark_reminded(task_id)
 
-    response = agent.handle(text="30분 뒤 다시 알려줘", scope=scope)
+    response = agent.handle(text=f"할 일 {task_id} 30분 뒤 다시 알려줘", scope=scope)
 
     item = tasks.get(scope=scope, task_id=task_id)
     assert item is not None

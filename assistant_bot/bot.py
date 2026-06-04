@@ -9,6 +9,7 @@ from assistant_bot.agent_registry import AgentContext, build_agent_registry
 from assistant_bot.agents import (
     ConversationAgent,
     MemoryAgent,
+    ReminderAgent,
     RouterAgent,
     TaskAgent,
     UtilityAgent,
@@ -28,6 +29,7 @@ from assistant_bot.stores import (
     MemoryStore,
     PendingAttachmentStore,
     PendingMemoryDeletionStore,
+    ReminderStore,
     TaskStore,
 )
 from assistant_bot.text_utils import split_discord_message, strip_bot_mentions
@@ -53,6 +55,7 @@ class AssistantBot(discord.Client):
         self.pending_attachments = PendingAttachmentStore(self.database.connection)
         self.pending_memory_deletions = PendingMemoryDeletionStore(self.database.connection)
         self.tasks = TaskStore(self.database.connection)
+        self.reminders = ReminderStore(self.database.connection)
         self.memories = MemoryStore(self.database.connection, self.openai)
         self.memory_agent = MemoryAgent(
             config=config,
@@ -74,6 +77,11 @@ class AssistantBot(discord.Client):
             conversations=self.conversations,
             logs=self.logs,
         )
+        self.reminder_agent = ReminderAgent(
+            config=config,
+            reminders=self.reminders,
+            logs=self.logs,
+        )
         self.conversation_agent = ConversationAgent(
             config=config,
             openai=self.openai,
@@ -86,6 +94,7 @@ class AssistantBot(discord.Client):
             memory_agent=self.memory_agent,
             utility_agent=self.utility_agent,
             task_agent=self.task_agent,
+            reminder_agent=self.reminder_agent,
             conversation_agent=self.conversation_agent,
             pending_attachments=self.pending_attachments,
             pending_memory_deletions=self.pending_memory_deletions,
@@ -110,12 +119,37 @@ class AssistantBot(discord.Client):
         await self.wait_until_ready()
         while not self.is_closed():
             try:
-                await self.send_due_task_reminders()
+                await self.send_due_reminders()
             except Exception:
-                logger.exception("할 일 리마인더 처리 중 오류")
+                logger.exception("알림 처리 중 오류")
             await asyncio.sleep(max(1, self.config.task_reminder_interval_minutes) * 60)
 
+    async def send_due_reminders(self) -> int:
+        now_text = now_in_timezone(self.config.timezone).strftime("%Y-%m-%d %H:%M")
+        due_reminders = self.reminders.due_for_delivery(
+            as_of=now_text,
+            limit=self.config.task_reminder_batch_size,
+        )
+        sent_count = 0
+        for reminder in due_reminders:
+            destination = await self.resolve_task_destination(None, reminder.user_id)
+            if destination is None:
+                logger.warning("알림 %s 대상 사용자를 찾지 못했습니다", reminder.id)
+                continue
+            message = (
+                "알림입니다.\n"
+                f"- 알림 `{reminder.id}` · {reminder.text}\n"
+                f"- 예약 시각: {reminder.remind_at}"
+            )
+            await destination.send(message)
+            self.reminders.mark_sent(reminder.id)
+            sent_count += 1
+        return sent_count
+
     async def send_due_task_reminders(self) -> int:
+        return await self.send_due_reminders()
+
+    async def send_due_task_deadline_reminders(self) -> int:
         today = today_string(self.config.timezone)
         now_text = now_in_timezone(self.config.timezone).strftime("%Y-%m-%d %H:%M")
         due_tasks = self.tasks.due_for_reminder(

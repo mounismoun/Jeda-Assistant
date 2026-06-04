@@ -15,7 +15,7 @@ def test_help_and_unsupported_messages_disclose_limits() -> None:
     help_text = "\n".join(help_lines())
     unsupported = unsupported_message()
 
-    assert "리마인더가 있는 할 일 저장" in help_text
+    assert "할 일과 분리된 DM 알림 예약" in help_text
     assert "음성 통화/녹음" in help_text
     assert "실시간 웹 검색" in help_text
     assert "현재 코드로 직접 실행할 수 없어요" in unsupported

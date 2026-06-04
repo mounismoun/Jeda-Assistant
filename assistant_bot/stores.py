@@ -12,6 +12,7 @@ from assistant_bot.models import (
     MemorySearchResult,
     PendingAttachmentRequest,
     PendingMemoryDeletion,
+    ReminderItem,
     TaskItem,
 )
 from assistant_bot.openai_service import OpenAIService
@@ -20,6 +21,10 @@ from assistant_bot.text_utils import chunk_text, cosine_similarity
 TASK_COLUMNS = """
 id, user_id, guild_id, conversation_id, channel_id, title, status, priority,
 due_at, source_message_id, created_at, completed_at, reminder_sent_at, deleted_at
+"""
+
+REMINDER_COLUMNS = """
+id, user_id, guild_id, conversation_id, channel_id, text, remind_at, source_message_id, created_at, sent_at
 """
 
 
@@ -894,6 +899,81 @@ class TaskStore:
         self.connection.commit()
 
 
+class ReminderStore:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.connection = connection
+
+    def add(
+        self,
+        *,
+        scope: ConversationScope,
+        text: str,
+        remind_at: str,
+        source_message_id: str | None = None,
+    ) -> int:
+        created_at = current_timestamp()
+        cursor = self.connection.execute(
+            """
+            INSERT INTO reminders (
+              user_id, guild_id, conversation_id, channel_id, text, remind_at, source_message_id, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                scope.user_id,
+                scope.guild_id,
+                scope.conversation_id,
+                scope.channel_id,
+                text,
+                remind_at,
+                source_message_id,
+                created_at,
+            ),
+        )
+        self.connection.commit()
+        return int(cursor.lastrowid)
+
+    def due_for_delivery(
+        self,
+        *,
+        as_of: str,
+        limit: int = 50,
+        user_id: str | None = None,
+    ) -> list[ReminderItem]:
+        cutoff = normalize_due_cutoff(as_of)
+        where = [
+            "sent_at IS NULL",
+            "remind_at <= ?",
+        ]
+        params: list[object] = [cutoff]
+        if user_id:
+            where.append("user_id = ?")
+            params.append(user_id)
+        params.append(max(1, limit))
+        rows = self.connection.execute(
+            f"""
+            SELECT {REMINDER_COLUMNS}
+            FROM reminders
+            WHERE {" AND ".join(where)}
+            ORDER BY remind_at ASC, id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        return [reminder_item_from_row(row) for row in rows]
+
+    def mark_sent(self, reminder_id: int) -> None:
+        self.connection.execute(
+            """
+            UPDATE reminders
+            SET sent_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (reminder_id,),
+        )
+        self.connection.commit()
+
+
 class MemoryStore:
     def __init__(self, connection: sqlite3.Connection, openai: OpenAIService) -> None:
         self.connection = connection
@@ -1564,6 +1644,21 @@ def task_item_from_row(row: sqlite3.Row) -> TaskItem:
         completed_at=str(row["completed_at"]) if row["completed_at"] else None,
         reminder_sent_at=str(row["reminder_sent_at"]) if row["reminder_sent_at"] else None,
         deleted_at=str(row["deleted_at"]) if row["deleted_at"] else None,
+        source_message_id=str(row["source_message_id"]) if row["source_message_id"] else None,
+        source_location=source_location(row["guild_id"]),
+    )
+
+
+def reminder_item_from_row(row: sqlite3.Row) -> ReminderItem:
+    return ReminderItem(
+        id=int(row["id"]),
+        user_id=str(row["user_id"]),
+        conversation_id=str(row["conversation_id"]),
+        channel_id=str(row["channel_id"]) if row["channel_id"] else None,
+        text=str(row["text"]),
+        remind_at=str(row["remind_at"]),
+        created_at=str(row["created_at"]),
+        sent_at=str(row["sent_at"]) if row["sent_at"] else None,
         source_message_id=str(row["source_message_id"]) if row["source_message_id"] else None,
         source_location=source_location(row["guild_id"]),
     )

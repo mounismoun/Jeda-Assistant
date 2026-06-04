@@ -119,6 +119,19 @@ class AppDatabase:
               reminder_sent_at TEXT,
               deleted_at TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS reminders (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id TEXT NOT NULL,
+              guild_id TEXT,
+              conversation_id TEXT NOT NULL,
+              channel_id TEXT,
+              text TEXT NOT NULL,
+              remind_at TEXT NOT NULL,
+              source_message_id TEXT,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              sent_at TEXT
+            );
             """
         )
         self.add_column_if_missing("documents", "content_hash", "TEXT")

@@ -1188,3 +1188,16 @@
   - 도움말과 unsupported 응답이 같은 capability 기준을 참조하도록 변경했다.
   - capability prompt, 도움말/unsupported 제한 안내, unavailable action 라우팅 테스트를 추가했다.
   - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - 할 일과 알림 요청 분리
+
+- 작업 이름: 할 일 저장과 사용자 알림 예약 분리
+- 진행상황: 완료
+- 진행내용:
+  - `reminders` SQLite 테이블과 `ReminderStore`, `ReminderAgent`를 추가해 `30분 뒤 물 마시라고 알려줘` 같은 요청이 할 일 목록이 아니라 알림 전용 저장소에 저장되도록 했다.
+  - `agent_catalog.json`에 `manage_reminder` intent를 추가하고 `manage_task` 설명에서 알림 예약 책임을 분리해 라우팅 모델이 두 작업을 구분해 참조하도록 했다.
+  - 자동 발송 루프와 `assistant-admin reminders`가 기한 있는 할 일이 아니라 알림 전용 저장소의 발송 대기 항목을 조회하도록 변경했다.
+  - 알림은 요청 위치가 DM, 서버, 스레드 어디든 사용자 DM으로만 발송되도록 유지했다.
+  - ID 없는 `30분 뒤 다시 알려줘`는 새 알림 예약으로 보고, 할 일 미루기는 `할 일 3 30분 뒤 다시 알려줘`처럼 대상 할 일을 명시하는 흐름으로 정리했다.
+  - README, plan, capability 도움말 문구를 할 일/알림 분리 정책에 맞게 갱신했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
