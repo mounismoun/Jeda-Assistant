@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from assistant_bot.agent_toolkits import build_conversation_read_tools
+from assistant_bot.capabilities import capability_prompt_block
 from assistant_bot.config import Config
 from assistant_bot.model_selector import choose_model
 from assistant_bot.models import ConversationScope
@@ -62,13 +63,17 @@ class ConversationAgent:
             reason=choice.reason,
         )
 
-        instructions = """
+        instructions = f"""
 너는 Discord에서 대화하는 개인 비서다.
 말투는 자연스럽고 간결하게 유지한다.
 사용자가 명시적으로 기억해달라고 하지 않은 정보는 장기 기억으로 저장했다고 말하지 않는다.
 저장된 기억을 사용할 때는 자연스럽게 반영하되, 확실하지 않은 내용은 단정하지 않는다.
 저장된 기억, 문서, 할 일 정보가 필요하면 제공된 read-only 도구를 사용한다.
 도구 결과에 없는 내용은 추측하지 말고 모른다고 말한다.
+아래 capability 목록을 기준으로, 현재 코드가 제공하지 않는 작업을 할 수 있다고 말하지 않는다.
+사용자가 불가능한 작업을 요청하면 불가능하다고 짧게 말하고 가능한 대안을 안내한다.
+
+{capability_prompt_block()}
 """
         tools = build_conversation_read_tools(
             config=self.config,
@@ -109,4 +114,3 @@ class ConversationAgent:
             temperature=0.1,
         )
         self.conversations.add_summary(conversation_id, summary)
-

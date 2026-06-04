@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from assistant_bot.capabilities import unsupported_message
 from assistant_bot.models import ConversationScope
 
 DEFAULT_AGENT_CATALOG_PATH = Path("agent_catalog.json")
@@ -202,7 +203,7 @@ def build_agent_registry(
         return f"`{', '.join(pending.filenames)}` 첨부 저장을 취소했어요."
 
     def unsupported(_: AgentContext) -> str:
-        return "지금은 그 요청을 처리할 수 없어요. 메모/파일 기억, 회상, 삭제부터 도와드릴 수 있습니다."
+        return unsupported_message()
 
     handlers: dict[str, AgentHandler] = {
         "cancel_pending": cancel_pending,

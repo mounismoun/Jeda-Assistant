@@ -29,6 +29,27 @@ async def test_router_agent_prefers_model_route_over_heuristic() -> None:
 
     assert route.intent == "help"
     assert "최근 대화 맥락" in openai.requests[0]["input_text"]
+    assert "현재 코드로 제공되지 않는 기능" in openai.requests[0]["instructions"]
+    assert "Discord 음성 통화" in openai.requests[0]["instructions"]
+
+
+@pytest.mark.anyio
+async def test_router_agent_accepts_unsupported_for_unavailable_actions() -> None:
+    openai = FakeRouterOpenAI('{"intent":"unsupported","confidence":0.97,"reason":"음성 통화는 지원하지 않음"}')
+    router = RouterAgent(
+        config=make_config(),
+        openai=openai,  # type: ignore[arg-type]
+        logs=FakeLogs(),  # type: ignore[arg-type]
+        allowed_intents={"help", "manage_task", "chat", "unsupported"},
+    )
+
+    route = await router.route(
+        text="음성 통화 걸어줘",
+        has_attachments=False,
+        scope=make_scope(),
+    )
+
+    assert route.intent == "unsupported"
 
 
 @pytest.mark.anyio

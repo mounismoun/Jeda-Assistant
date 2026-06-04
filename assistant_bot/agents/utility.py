@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from assistant_bot.capabilities import help_lines
 from assistant_bot.config import Config
 from assistant_bot.models import ConversationScope
 from assistant_bot.stores import AgentLogStore, ConversationStore, MemoryStore, TaskStore
@@ -33,29 +34,7 @@ class UtilityAgent:
             model=self.config.easy_model,
             reason="도움말 조회",
         )
-        return "\n".join(
-            [
-                "제가 지금 도와드릴 수 있는 일은 이렇습니다.",
-                "- `이거 기억해줘: ...`로 메모를 장기 기억에 저장",
-                "- `.txt`, `.md`, `.pdf`를 첨부하고 `이 파일 기억해줘`로 문서 저장",
-                "- 첨부만 보낸 뒤 제 확인 메시지에 `응, 기억해줘`라고 답장해서 저장",
-                "- `전에 저장한 회의 문서 기준으로 정리해줘`처럼 기억 기반 질문",
-                "- `지금 뭘 기억하고 있어?`로 기억 목록 확인",
-                "- `메모 3 보여줘`, `문서 2 보여줘`로 저장 항목 상세 확인",
-                "- `메모 3을 새 내용으로 수정해줘`로 텍스트 메모 수정",
-                "- `운동 관련 기억 삭제해줘`, `메모 3 삭제해줘`, `문서 2 삭제해줘`로 삭제",
-                "- `방금 저장한 거 지워줘`로 가장 최근 저장 항목 삭제",
-                "- `방금 지운 거 복구해줘`로 가장 최근 삭제 항목 복구",
-                "- `대화 맥락 초기화해줘`로 현재 대화 기록과 요약 초기화",
-                "- `오늘 브리핑 해줘`로 오늘까지 할 일과 최근 기억 확인",
-                "- `할 일 추가: 금요일까지 제안서 초안 작성`으로 개인 할 일 저장",
-                "- `할 일 목록 보여줘`, `할 일 3 완료했어`로 작업 관리",
-                "- `내 기억 전부 삭제해줘`로 사용자 기준 장기 기억 전체 삭제",
-                "",
-                "같은 사용자의 장기 기억은 DM, 서버, 스레드 어디서든 이어집니다.",
-                "저는 멘션, 제 메시지에 대한 답글, DM에서만 반응합니다.",
-            ]
-        )
+        return "\n".join(help_lines())
 
     def status(
         self,
@@ -170,5 +149,4 @@ class UtilityAgent:
             f"이전 메시지 {counts['messages']}개와 요약 {counts['summaries']}개를 지웠고, "
             "장기 기억은 그대로 유지됩니다."
         )
-
 

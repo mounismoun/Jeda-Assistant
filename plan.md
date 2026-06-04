@@ -47,6 +47,7 @@ PDF는 텍스트 추출만 지원한다. 스캔 이미지 OCR은 v1 범위에서
 
 - `gpt-5.4-mini`를 사용한다.
 - 현재 메시지와 최근 대화 맥락을 라우팅 모델에 먼저 전달한다.
+- `assistant_bot/capabilities.py`의 지원/미지원 기능 목록을 함께 전달해 코드로 제공하지 않는 실행 요청은 `unsupported`로 분류한다.
 - 휴리스틱 라우팅은 모델 호출 실패 또는 라우터 JSON 파싱 실패 시 fallback으로만 사용한다.
 - 사용자 메시지를 다음 intent 중 하나로 분류한다.
   - `chat`
@@ -325,7 +326,7 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 
 ### 자동 검증 결과
 
-- `python3 -m pytest`: 통과, 160개 테스트
+- `python3 -m pytest`: 통과, 163개 테스트
 - `python3 -m ruff check .`: 통과
 - `python3 -m compileall assistant_bot tests`: 통과
 - `assistant-admin doctor`, `assistant-admin invite`, `assistant-admin stats`, `assistant-admin export`, `assistant-admin search`, `assistant-admin backup`: 실행 확인

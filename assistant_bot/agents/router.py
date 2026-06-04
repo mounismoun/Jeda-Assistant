@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from assistant_bot.capabilities import capability_prompt_block
 from assistant_bot.config import Config
 from assistant_bot.models import ConversationScope, RoutingResult
 from assistant_bot.openai_service import OpenAIService
@@ -37,6 +38,11 @@ class RouterAgent:
 사용자 메시지와 최근 대화 맥락을 읽고 아래 intent 중 하나로만 분류한다.
 단어 하나에 기계적으로 반응하지 말고, 사용자의 실제 의도를 우선 판단한다.
 기능이 있는지, 무엇을 할 수 있는지 묻는 질문은 작업 실행이 아니라 help로 분류한다.
+현재 코드로 제공되지 않는 기능을 실제 실행하라는 요청은 unsupported로 분류한다.
+OpenAI 모델이 일반적으로 할 수 있어 보이는 일이라도 아래 "현재 코드로 제공되는 기능"에 없으면
+가능한 것처럼 분류하지 않는다.
+
+{capability_prompt_block()}
 
 {self.routing_prompt_block}
 

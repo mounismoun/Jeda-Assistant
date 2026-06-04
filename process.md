@@ -1176,3 +1176,15 @@
   - Discord 봇과 로컬 `assistant-admin ask` 경로에서 최근 대화 8개를 라우터 입력에 포함하도록 했다.
   - 휴리스틱 기준으로는 `manage_task`가 될 수 있는 문장도 모델이 `help`로 판단하면 모델 판단을 따르는 테스트를 추가했다.
   - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - 봇 기능 인식 기준 통합
+
+- 작업 이름: 지원/미지원 기능 단일 소스 적용
+- 진행상황: 완료
+- 진행내용:
+  - `assistant_bot/capabilities.py`를 추가해 봇이 코드로 제공하는 기능과 제공하지 않는 기능을 한 곳에서 관리하도록 했다.
+  - Router Agent 프롬프트에 지원/미지원 기능 목록을 주입해, OpenAI 모델이 일반적으로 할 수 있어 보이는 일이라도 현재 코드가 제공하지 않으면 `unsupported`로 분류하도록 했다.
+  - Conversation Agent 프롬프트에도 같은 capability 목록을 주입해, 일반 대화에서 불가능한 작업을 가능하다고 말하지 않도록 했다.
+  - 도움말과 unsupported 응답이 같은 capability 기준을 참조하도록 변경했다.
+  - capability prompt, 도움말/unsupported 제한 안내, unavailable action 라우팅 테스트를 추가했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.

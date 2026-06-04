@@ -33,6 +33,7 @@ Discord에서 멘션, 답글, DM으로 대화하는 개인 비서다. 사용자�
 - 지원하지 않는 첨부 파일 안내
 - `방금 말한 거 기억해줘`, `그거 기억해줘`처럼 직전 발화를 장기 기억으로 저장
 - `Router Agent`, `Conversation Agent`, `Memory Agent`, `Task Agent`, `Utility Agent` 구조
+- 봇이 할 수 있는 일과 할 수 없는 일을 `assistant_bot/capabilities.py` 기준으로 일관되게 판단
 - 에이전트 목적, 설명, 예시는 `agent_catalog.json`에서 관리
 - `Conversation Agent`와 `Memory Agent` 일반 회상은 필요할 때 read-only tool calling으로 기억/할 일 조회
 - 라우터는 `gpt-5.4-mini` 고정 사용
@@ -445,7 +446,7 @@ python3 -m ruff check .
 
 현재 자동 검증 결과:
 
-- 테스트 160개 통과
+- 테스트 163개 통과
 - Ruff lint 통과
 - `python3 -m compileall assistant_bot tests` 통과
 - `assistant-admin doctor`, `assistant-admin invite`, `assistant-admin stats`, `assistant-admin export`, `assistant-admin search`, `assistant-admin backup` 실행 확인
