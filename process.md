@@ -1153,3 +1153,14 @@
   - `MemoryAgent.recall`의 최근 항목/ID 상세 조회는 deterministic 경로로 유지하고, 일반 자연어 회상 경로는 `OpenAIService.tool_response`를 사용하도록 변경했다.
   - `agent_catalog.json`의 `chat`, `recall` tool 목록에 memory detail 도구를 반영했다.
   - 일반 recall이 read-only tool 목록을 전달하는 테스트를 추가했다.
+
+## 2026-06-05 - 리마인더 기능 문의 라우팅 보정
+
+- 작업 이름: 리마인드 기능 질문 오분류 수정
+- 진행상황: 완료
+- 진행내용:
+  - `리마인드 기능은 없나?` 같은 기능 문의가 `manage_task`로 라우팅되어 할 일을 저장하려는 문제를 재현했다.
+  - 기능, 지원, 가능, 없나, 있나 같은 표현은 `help` intent로 먼저 라우팅하도록 보정했다.
+  - `is_task_request`가 `리마인드` 단어 하나만으로 할 일 요청을 확정하지 않도록 좁혔다.
+  - `리마인드 기능은 없나?`는 `help`, `30분 뒤 물 마시라고 알려줘`는 `manage_task`로 라우팅되는 테스트를 추가했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.

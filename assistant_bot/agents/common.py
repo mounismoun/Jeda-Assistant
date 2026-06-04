@@ -70,10 +70,12 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
 
     if asks_for_daily_briefing(text):
         return RoutingResult("daily_briefing", 0.96, "오늘 브리핑 요청 감지")
-    if is_task_request(text):
-        return RoutingResult("manage_task", 0.95, "할 일 관리 요청 감지")
     if any(marker in normalized for marker in help_markers):
         return RoutingResult("help", 0.96, "도움말 요청 감지")
+    if asks_about_capability(text):
+        return RoutingResult("help", 0.95, "기능 문의 감지")
+    if is_task_request(text):
+        return RoutingResult("manage_task", 0.95, "할 일 관리 요청 감지")
     if any(marker in normalized for marker in status_markers):
         return RoutingResult("status", 0.94, "상태 조회 요청 감지")
     if any(marker in normalized for marker in cancel_markers):
@@ -320,11 +322,41 @@ def is_task_request(text: str) -> bool:
     compact = re.sub(r"\s+", "", normalized)
     task_markers = ["할 일", "할일", "태스크", "task", "todo", "to-do", "체크리스트"]
     reminder_markers = ["리마인드", "remind", "나중에 알려", "다시 알려", "챙겨"]
+    reminder_action_markers = ["알려", "말해", "챙겨", "remind me"]
+    if asks_about_capability(text):
+        return False
     if any(marker in normalized for marker in task_markers) or any(marker in compact for marker in ["할일"]):
         return True
     if asks_to_create_reminder(text):
         return True
-    return any(marker in normalized for marker in reminder_markers)
+    return any(marker in normalized for marker in reminder_markers) and any(
+        marker in normalized or marker in compact for marker in reminder_action_markers
+    )
+
+
+def asks_about_capability(text: str) -> bool:
+    normalized = text.casefold()
+    compact = re.sub(r"\s+", "", normalized)
+    capability_markers = [
+        "기능",
+        "지원",
+        "가능",
+        "할수",
+        "할 수",
+        "되나",
+        "돼",
+        "되냐",
+        "없나",
+        "있나",
+        "되나요",
+        "가능해",
+        "can you",
+        "do you support",
+    ]
+    question_markers = ["?", "뭐", "무엇", "어떻게", "있", "없", "되", "가능", "can", "support"]
+    return any(marker in normalized or marker in compact for marker in capability_markers) and any(
+        marker in normalized or marker in compact for marker in question_markers
+    )
 
 
 def asks_to_create_reminder(text: str) -> bool:

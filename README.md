@@ -444,7 +444,7 @@ python3 -m ruff check .
 
 현재 자동 검증 결과:
 
-- 테스트 157개 통과
+- 테스트 158개 통과
 - Ruff lint 통과
 - `python3 -m compileall assistant_bot tests` 통과
 - `assistant-admin doctor`, `assistant-admin invite`, `assistant-admin stats`, `assistant-admin export`, `assistant-admin search`, `assistant-admin backup` 실행 확인

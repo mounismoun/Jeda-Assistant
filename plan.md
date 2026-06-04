@@ -323,7 +323,7 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 
 ### 자동 검증 결과
 
-- `python3 -m pytest`: 통과, 157개 테스트
+- `python3 -m pytest`: 통과, 158개 테스트
 - `python3 -m ruff check .`: 통과
 - `python3 -m compileall assistant_bot tests`: 통과
 - `assistant-admin doctor`, `assistant-admin invite`, `assistant-admin stats`, `assistant-admin export`, `assistant-admin search`, `assistant-admin backup`: 실행 확인

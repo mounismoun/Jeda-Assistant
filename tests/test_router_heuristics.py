@@ -58,6 +58,12 @@ def test_heuristic_route_help() -> None:
     assert route.intent == "help"
 
 
+def test_heuristic_route_reminder_capability_question_is_help() -> None:
+    route = heuristic_route("리마인드 기능은 없나?", False)
+
+    assert route.intent == "help"
+
+
 def test_heuristic_route_status() -> None:
     route = heuristic_route("상태 확인해줘", False)
 
