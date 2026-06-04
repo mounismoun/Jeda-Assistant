@@ -1244,3 +1244,16 @@
   - 알림 발송 루프가 설정값이 커도 최대 15초 간격으로 대기 알림을 확인하도록 변경해 예약 시각보다 늦게 도착하는 폭을 줄였다.
   - 기본 `TASK_REMINDER_INTERVAL_MINUTES` 값을 60분에서 1분으로 낮추고 문서와 `.env.example`을 갱신했다.
   - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - AI 최종 응답 구성 계층 추가
+
+- 작업 이름: 하드코딩 응답 노출 축소
+- 진행상황: 완료
+- 진행내용:
+  - `ResponseComposer`를 추가해 각 에이전트가 만든 실행 결과를 사용자에게 보내기 전 OpenAI 모델이 자연스러운 대화체 한국어로 다시 작성하도록 했다.
+  - Discord 봇 메시지 처리 경로와 로컬 `assistant-admin ask` 경로가 모두 최종 응답 구성 계층을 지나도록 연결했다.
+  - 응답 구성 프롬프트에는 실행 결과에 없는 사실을 만들지 말고 ID, 날짜, 시간, 숫자, 파일명, 안전 확인 문구의 의미를 보존하도록 명시했다.
+  - 모델 호출이 실패하면 기존 실행 결과를 그대로 반환하도록 fallback을 두어 기능 실행 결과가 유실되지 않게 했다.
+  - 앞으로 에이전트 내부 하드코딩 문구는 상태 변경 결과와 안전상 필요한 최소 안내로 제한하고, 사용자-facing 표현은 AI 응답 구성 계층에서 다듬는 원칙을 `plan.md`에 기록했다.
+  - `ResponseComposer` 정상/실패 fallback 테스트를 추가했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.

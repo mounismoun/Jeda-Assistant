@@ -131,6 +131,7 @@ PDF는 텍스트 추출만 지원한다. 스캔 이미지 OCR은 v1 범위에서
 - destructive 작업은 tool calling으로 바로 실행하지 않고 기존 확인 절차와 권한 제한을 유지한다.
 - 각 에이전트 설계 문서에는 사용 가능한 tool 목록, read-only/mutation 구분, tool 호출 실패 시 fallback 정책을 함께 기록한다.
 - tool calling은 에이전트 카탈로그 기반 라우팅 및 모듈화 계획과 연결하며, `agent_catalog.json`과 `AgentDefinition`에 사용 가능한 tool 목록을 포함한다.
+- 사용자에게 보이는 최종 답변은 가능한 한 AI 응답 구성 계층이 작성하고, 에이전트 내부의 하드코딩 문구는 상태 변경 결과와 안전상 필요한 최소 안내로 제한한다.
 
 현재 1차 적용 상태는 다음과 같다.
 

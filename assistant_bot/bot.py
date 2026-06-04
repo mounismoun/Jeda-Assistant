@@ -23,6 +23,7 @@ from assistant_bot.database import AppDatabase
 from assistant_bot.file_extractor import extract_attachment_text, is_supported_attachment
 from assistant_bot.models import ConversationScope
 from assistant_bot.openai_service import OpenAIService
+from assistant_bot.response_composer import ResponseComposer
 from assistant_bot.stores import (
     AgentLogStore,
     ConversationStore,
@@ -50,6 +51,7 @@ class AssistantBot(discord.Client):
         self.config = config
         self.database = AppDatabase(config.database_path)
         self.openai = OpenAIService(config)
+        self.response_composer = ResponseComposer(config=config, openai=self.openai)
         self.logs = AgentLogStore(self.database.connection)
         self.conversations = ConversationStore(self.database.connection)
         self.pending_attachments = PendingAttachmentStore(self.database.connection)
@@ -208,15 +210,26 @@ class AssistantBot(discord.Client):
         clean_text = strip_bot_mentions(message.content, self.user.id)
         author_name = message.author.display_name
         attachments = list(message.attachments)
+        conversation_context = format_conversation_context(
+            self.conversations.recent_messages(scope.conversation_id, limit=16)
+        )
 
         async with message.channel.typing():
             try:
-                answer = await self.handle_message(
+                raw_answer = await self.handle_message(
                     message=message,
                     text=clean_text,
                     attachments=attachments,
                     scope=scope,
                     author_name=author_name,
+                    conversation_context=conversation_context,
+                )
+                answer = await self.response_composer.compose(
+                    user_text=clean_text,
+                    raw_response=raw_answer,
+                    scope=scope,
+                    location_label=describe_message_location(message),
+                    conversation_context=conversation_context,
                 )
             except Exception:
                 logger.exception("메시지 처리 중 오류")
@@ -275,6 +288,7 @@ class AssistantBot(discord.Client):
         attachments: list[discord.Attachment],
         scope: ConversationScope,
         author_name: str,
+        conversation_context: str,
     ) -> str:
         supported_attachments = [
             attachment for attachment in attachments if is_supported_attachment(attachment.filename)
@@ -287,9 +301,7 @@ class AssistantBot(discord.Client):
             text=text,
             has_attachments=bool(supported_attachments),
             scope=scope,
-            conversation_context=format_conversation_context(
-                self.conversations.recent_messages(scope.conversation_id, limit=16)
-            ),
+            conversation_context=conversation_context,
         )
 
         if route.intent == "remember":

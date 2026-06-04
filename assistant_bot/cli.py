@@ -36,6 +36,7 @@ from assistant_bot.database import AppDatabase
 from assistant_bot.file_extractor import extract_local_file_text
 from assistant_bot.models import ConversationScope, RoutingResult
 from assistant_bot.openai_service import OpenAIService
+from assistant_bot.response_composer import ResponseComposer
 from assistant_bot.stores import (
     AgentLogStore,
     ConversationStore,
@@ -2357,6 +2358,9 @@ async def run_local_text_interaction(
         user_id=user_id,
         guild_id=guild_id,
     )
+    conversation_context = format_conversation_context(
+        conversations.recent_messages(scope.conversation_id, limit=16)
+    )
 
     answer = handle_local_pending_memory_deletion(
         text=text,
@@ -2371,9 +2375,7 @@ async def run_local_text_interaction(
             text=text,
             has_attachments=False,
             scope=scope,
-            conversation_context=format_conversation_context(
-                conversations.recent_messages(scope.conversation_id, limit=16)
-            ),
+            conversation_context=conversation_context,
         )
         if route.intent == "delete_memory":
             if asks_to_delete_all_memories(text):
@@ -2405,6 +2407,14 @@ async def run_local_text_interaction(
                     location_label=local_location_label(guild_id),
                 ),
             )
+
+    answer = await ResponseComposer(config=config, openai=openai).compose(
+        user_text=text,
+        raw_response=answer,
+        scope=scope,
+        location_label=local_location_label(guild_id),
+        conversation_context=conversation_context,
+    )
 
     conversations.add_message(
         conversation_id=scope.conversation_id,
