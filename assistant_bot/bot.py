@@ -78,6 +78,7 @@ class AssistantBot(discord.Client):
             openai=self.openai,
             conversations=self.conversations,
             memories=self.memories,
+            tasks=self.tasks,
             logs=self.logs,
         )
         self.agent_registry = build_agent_registry(

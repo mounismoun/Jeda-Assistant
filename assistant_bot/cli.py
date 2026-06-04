@@ -2328,6 +2328,7 @@ async def run_local_text_interaction(
         openai=openai,
         conversations=conversations,
         memories=memories,
+        tasks=tasks,
         logs=logs,
     )
     agent_registry = build_agent_registry(

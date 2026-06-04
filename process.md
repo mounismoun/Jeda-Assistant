@@ -1129,3 +1129,16 @@
   - `tests/test_agent_registry.py`를 추가해 카탈로그 로딩, prompt block 생성, fallback dispatch, handler 누락 검증을 테스트했다.
   - `README.md`, `plan.md`, `agent_modularization_plan.md`를 JSON 카탈로그 기반 구조와 현재 검증 결과에 맞춰 갱신했다.
   - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - Tool Calling 1차 적용
+
+- 작업 이름: Conversation Agent read-only tool calling 도입
+- 진행상황: 완료
+- 진행내용:
+  - `assistant_bot/tool_calling.py`에 `ToolSpec`을 추가해 function tool schema와 handler를 한 객체로 묶도록 했다.
+  - `OpenAIService.tool_response`를 추가해 Responses API function_call, tool 실행, function_call_output 재전송, 최종 응답 생성을 처리하도록 했다.
+  - `assistant_bot/agent_toolkits.py`를 추가해 `ConversationAgent`가 사용할 read-only 기억/할 일 조회 도구를 구성하도록 했다.
+  - `ConversationAgent`가 일반 대화에서 선제 embedding 검색을 하지 않고, 모델이 필요할 때 read-only tool을 호출하도록 변경했다.
+  - `agent_catalog.json`과 `AgentDefinition`에 tool 이름 목록을 추가해 새 에이전트 설계 시 tool allowlist를 함께 관리할 수 있도록 했다.
+  - `tests/test_openai_service.py`, `tests/test_agent_toolkits.py`, `tests/test_agent_registry.py`에 tool calling 실행 루프, read-only tool 실행, 카탈로그 tool 메타데이터 테스트를 추가했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.

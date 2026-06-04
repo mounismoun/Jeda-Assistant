@@ -37,6 +37,7 @@ def test_registry_prompt_block_uses_catalog_examples() -> None:
     assert "- manage_task: Task Agent" in prompt_block
     assert "30분 뒤 물 마시라고 알려줘" in prompt_block
     assert "삭제한 기억 목록 보여줘" in prompt_block
+    assert "사용 가능 도구: search_memories" in prompt_block
 
 
 @pytest.mark.anyio
@@ -55,6 +56,7 @@ async def test_registry_dispatch_falls_back_to_chat() -> None:
             purpose="일반 대화",
             description="일반 대화를 처리한다.",
             examples=("안녕",),
+            tool_names=(),
             handler=lambda context: f"chat:{context.text}",
         )
     )

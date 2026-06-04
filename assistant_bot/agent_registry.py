@@ -32,6 +32,7 @@ class AgentDefinition:
     purpose: str
     description: str
     examples: tuple[str, ...]
+    tool_names: tuple[str, ...]
     handler: AgentHandler
 
 
@@ -62,6 +63,8 @@ class AgentRegistry:
                     f"  예시: {examples}",
                 ]
             )
+            if definition.tool_names:
+                lines.append(f"  사용 가능 도구: {', '.join(definition.tool_names)}")
         return "\n".join(lines)
 
     async def dispatch(self, intent: str, context: AgentContext) -> str:
@@ -93,12 +96,15 @@ def build_agent_definition(entry: dict[str, Any], handlers: dict[str, AgentHandl
 
     intent = entry["intent"]
     examples = entry["examples"]
+    tool_names = entry.get("tools", [])
     if not isinstance(intent, str) or not intent:
         raise ValueError("에이전트 intent는 비어 있지 않은 문자열이어야 합니다.")
     if intent not in handlers:
         raise ValueError(f"에이전트 intent에 연결된 handler가 없습니다: {intent}")
     if not isinstance(examples, list) or not all(isinstance(example, str) for example in examples):
         raise ValueError(f"{intent} 에이전트 examples는 문자열 배열이어야 합니다.")
+    if not isinstance(tool_names, list) or not all(isinstance(tool_name, str) for tool_name in tool_names):
+        raise ValueError(f"{intent} 에이전트 tools는 문자열 배열이어야 합니다.")
 
     return AgentDefinition(
         intent=intent,
@@ -106,6 +112,7 @@ def build_agent_definition(entry: dict[str, Any], handlers: dict[str, AgentHandl
         purpose=str(entry["purpose"]),
         description=str(entry["description"]),
         examples=tuple(examples),
+        tool_names=tuple(tool_names),
         handler=handlers[intent],
     )
 

@@ -2,7 +2,9 @@
 
 ## 목적
 
-현재 봇은 OpenAI Responses API로 텍스트 응답과 라우팅 JSON을 생성하지만, function/tool calling은 사용하지 않는다. 실제 기억 검색, 할 일 추가, 할 일 완료, 삭제 같은 작업은 Python 코드가 직접 분기해 실행한다.
+현재 봇은 OpenAI Responses API로 텍스트 응답과 라우팅 JSON을 생성한다. 1차 적용으로 `ConversationAgent`는 read-only function/tool calling을 사용해, 일반 대화 중 필요한 경우에만 기억/문서/할 일 조회 도구를 호출한다.
+
+기억 저장, 할 일 추가, 할 일 완료, 삭제 같은 명확한 mutation 작업은 여전히 Python 코드가 직접 분기해 실행한다.
 
 이 계획의 목적은 모든 기능을 무리하게 tool calling으로 바꾸는 것이 아니라, **tool calling을 사용하는 편이 실제로 효율이 좋은 영역**을 선별해 도입하는 것이다.
 
@@ -41,19 +43,19 @@ tool calling을 쓰지 않는 편이 좋은 경우도 명확히 구분한다.
 
 ### 1차 도입 대상
 
-1차 도입은 `MemoryAgent`, `TaskAgent`, `ConversationAgent` 중심으로 제한한다.
+1차 도입은 `ConversationAgent`의 read-only 조회 도구부터 적용한다. `MemoryAgent`, `TaskAgent`는 다음 단계 후보로 둔다.
 
 ### Conversation Agent
 
 일반 대화 중 저장된 기억, 문서, 할 일을 섞어 답해야 할 때 read-only tool을 제공한다.
 
-후보 tool:
+적용 tool:
 
-- `search_memory(query, limit)`
-- `get_memory_detail(memory_id)`
-- `get_document_detail(document_id)`
-- `list_tasks(status, due_filter, limit)`
+- `search_memories(query, limit)`
+- `list_recent_memories(limit)`
 - `search_tasks(query, limit)`
+- `list_tasks(status, limit)`
+- `list_due_tasks(due_before, limit)`
 
 예시 사용자 요청:
 
@@ -103,9 +105,9 @@ tool calling을 쓰지 않는 편이 좋은 경우도 명확히 구분한다.
 - remote MCP
 - 런타임 동적 플러그인 시스템
 
-## OpenAIService 확장 계획
+## OpenAIService 확장 상태
 
-`OpenAIService`에 tool calling 전용 메서드를 추가한다.
+`OpenAIService`에 tool calling 전용 메서드를 추가했다.
 
 예상 인터페이스:
 
@@ -116,8 +118,7 @@ async def tool_response(
     model: str,
     instructions: str,
     input_text: str,
-    tools: list[dict[str, object]],
-    executor: ToolExecutor,
+    tools: list[ToolSpec],
     tool_choice: str | dict[str, object] = "auto",
     parallel_tool_calls: bool = False,
     max_tool_rounds: int = 3,
@@ -195,7 +196,7 @@ Discord/CLI로 응답
 
 ### OpenAIService 테스트
 
-- 단일 function call을 실행하고 최종 답변을 반환한다.
+- 단일 function call을 실행하고 최종 답변을 반환한다. 완료
 - 여러 function call을 순차 처리한다.
 - 알 수 없는 tool name은 실행하지 않는다.
 - 잘못된 JSON arguments를 안전하게 처리한다.
@@ -211,7 +212,7 @@ Discord/CLI로 응답
 
 ### 기능 테스트
 
-- 복합 질문에서 memory/task read-only tool 결과를 종합해 답한다.
+- 복합 질문에서 memory/task read-only tool 결과를 종합해 답한다. 1차 구조 적용
 - 단순 `오늘 할 일 뭐야?`는 기존 deterministic 경로로 처리된다.
 - 단순 `30분 뒤 물 마시라고 알려줘`는 기존 task parser 경로로 처리된다.
 - parser가 실패한 애매한 task 요청만 tool calling fallback을 사용한다.
@@ -228,7 +229,7 @@ python3 -m compileall assistant_bot tests
 
 ## 에이전트 모듈화 계획과의 관계
 
-이 계획은 `agent_modularization_plan.md`와 별개의 작업으로 진행 가능하다. 다만 장기적으로는 두 계획을 합쳐 다음 구조로 발전시키는 것이 좋다.
+이 계획은 `agent_modularization_plan.md`와 연결된다. 에이전트 카탈로그에는 라우팅 설명뿐 아니라 사용 가능한 tool 이름도 함께 등록한다.
 
 ```python
 AgentDefinition(
@@ -238,18 +239,18 @@ AgentDefinition(
     description="할 일 추가, 조회, 완료, 미루기, 삭제를 처리한다.",
     examples=(...),
     handler=task_agent.handle,
-    tools=(task_read_tools, task_mutation_tools),
+    tool_names=("list_tasks", "search_tasks"),
 )
 ```
 
-즉, 에이전트 카탈로그에 라우팅 설명뿐 아니라 사용 가능한 tool 목록도 함께 등록한다.
+실제 `ToolSpec`과 handler는 Python 코드에서 구성한다. JSON 카탈로그는 라우터와 운영자가 참조할 수 있는 tool allowlist 메타데이터를 제공한다.
 
 ## 적용 순서
 
 1. `plan.md`에 앞으로 모든 신규 에이전트는 tool calling 적용 여부를 개발 단계에서 검토한다는 원칙을 기록한다.
-2. `OpenAIService.tool_response`와 tool executor 구조를 구현한다.
-3. read-only memory/task tool schema와 executor를 만든다.
-4. `ConversationAgent`의 복합 질문에 read-only tool calling을 먼저 적용한다.
+2. `OpenAIService.tool_response`와 tool executor 구조를 구현한다. 완료
+3. read-only memory/task tool schema와 executor를 만든다. 완료
+4. `ConversationAgent`의 복합 질문에 read-only tool calling을 먼저 적용한다. 완료
 5. `MemoryAgent.recall`에 선택적 read-only tool calling을 적용한다.
 6. `TaskAgent`에는 parser 실패 fallback부터 제한적으로 적용한다.
 7. mutation tool은 충분한 테스트 후 task intent 안에서만 허용한다.

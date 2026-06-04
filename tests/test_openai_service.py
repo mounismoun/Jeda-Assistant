@@ -4,6 +4,7 @@ import pytest
 
 from assistant_bot.config import Config
 from assistant_bot.openai_service import OpenAIService
+from assistant_bot.tool_calling import ToolSpec
 
 
 @pytest.fixture
@@ -55,6 +56,52 @@ async def test_text_response_raises_after_retry_budget() -> None:
     assert fake_client.responses.calls == 2
 
 
+@pytest.mark.anyio
+async def test_tool_response_runs_function_call_and_returns_final_text() -> None:
+    service = OpenAIService(make_config())
+    fake_client = FakeOpenAIClient(
+        responses=[
+            FakeToolResponse(
+                output=[
+                    FakeFunctionCall(
+                        name="lookup_note",
+                        arguments='{"query":"운동"}',
+                        call_id="call-1",
+                    )
+                ],
+                output_text="",
+            ),
+            FakeToolResponse(output=[], output_text="운동 메모를 찾았어요."),
+        ]
+    )
+    service.client = fake_client  # type: ignore[assignment]
+    tool = ToolSpec(
+        name="lookup_note",
+        description="메모를 찾는다.",
+        parameters={
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+        handler=lambda arguments: {"query": arguments["query"], "result": "저녁 운동"},
+    )
+
+    answer = await service.tool_response(
+        model="gpt-test",
+        instructions="테스트",
+        input_text="운동 기억 찾아줘",
+        tools=[tool],
+    )
+
+    assert answer == "운동 메모를 찾았어요."
+    assert fake_client.responses.calls == 2
+    second_input = fake_client.responses.requests[1]["input"]
+    assert second_input[-1]["type"] == "function_call_output"
+    assert second_input[-1]["call_id"] == "call-1"
+    assert "저녁 운동" in second_input[-1]["output"]
+
+
 def make_config(openai_max_retries: int = 2) -> Config:
     return Config(
         discord_token="discord",
@@ -81,25 +128,52 @@ def make_config(openai_max_retries: int = 2) -> Config:
 
 
 class FakeOpenAIClient:
-    def __init__(self, *, text_failures: int = 0, embedding_failures: int = 0) -> None:
-        self.responses = FakeResponses(text_failures)
+    def __init__(
+        self,
+        *,
+        text_failures: int = 0,
+        embedding_failures: int = 0,
+        responses: list[object] | None = None,
+    ) -> None:
+        self.responses = FakeResponses(text_failures, responses=responses)
         self.embeddings = FakeEmbeddings(embedding_failures)
 
 
 class FakeResponses:
-    def __init__(self, failures: int) -> None:
+    def __init__(self, failures: int, *, responses: list[object] | None = None) -> None:
         self.failures = failures
+        self.responses = responses or []
+        self.requests: list[dict] = []
         self.calls = 0
 
     async def create(self, **kwargs):
         self.calls += 1
+        self.requests.append(kwargs)
         if self.calls <= self.failures:
             raise RuntimeError("text failure")
+        if self.responses:
+            return self.responses.pop(0)
         return FakeTextResponse()
 
 
 class FakeTextResponse:
     output_text = "OK"
+    output = []
+
+
+class FakeToolResponse:
+    def __init__(self, *, output: list[object], output_text: str) -> None:
+        self.output = output
+        self.output_text = output_text
+
+
+class FakeFunctionCall:
+    type = "function_call"
+
+    def __init__(self, *, name: str, arguments: str, call_id: str) -> None:
+        self.name = name
+        self.arguments = arguments
+        self.call_id = call_id
 
 
 class FakeEmbeddings:

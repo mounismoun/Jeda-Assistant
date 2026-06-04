@@ -85,6 +85,7 @@ class AgentDefinition:
     purpose: str
     description: str
     examples: tuple[str, ...]
+    tool_names: tuple[str, ...]
     handler: Callable[..., Awaitable[str] | str]
 ```
 
@@ -95,9 +96,10 @@ class AgentDefinition:
 - `purpose`: 한 줄 목적
 - `description`: 라우터가 참고할 상세 설명
 - `examples`: 해당 에이전트로 보내야 하는 대표 사용자 발화
+- `tool_names`: 해당 에이전트가 사용할 수 있는 tool 이름 목록
 - `handler`: 실제 실행 함수
 
-`intent`, `name`, `purpose`, `description`, `examples`는 `agent_catalog.json`에서 읽고, `handler`는 Python registry factory에서 연결한다.
+`intent`, `name`, `purpose`, `description`, `examples`, `tools`는 `agent_catalog.json`에서 읽고, `handler`는 Python registry factory에서 연결한다.
 
 ### 3. 에이전트 레지스트리 추가
 
