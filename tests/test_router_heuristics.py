@@ -28,6 +28,7 @@ from assistant_bot.agents import (
     asks_to_show_task_detail,
     asks_to_snooze_latest_reminded_task,
     asks_to_update_latest_memory,
+    extract_append_update_text,
     extract_due_date,
     extract_memory_search_query,
     extract_recall_ids,
@@ -43,10 +44,16 @@ from assistant_bot.agents import (
     extract_update_ids,
     extract_update_query,
     extract_update_text,
+    extract_urls,
     has_substantive_memory_text,
     heuristic_route,
+    is_append_memory_update,
     is_reminder_request,
     is_task_request,
+    is_url_only_message,
+    is_web_search_request,
+    parse_routing_result,
+    score_web_search_need,
 )
 
 
@@ -109,6 +116,107 @@ def test_heuristic_route_manage_reminder() -> None:
     route = heuristic_route("30분 뒤 물 마시라고 알려줘", False)
 
     assert route.intent == "manage_reminder"
+
+
+def test_heuristic_route_weather_requests() -> None:
+    for query in [
+        "서울 내일 날씨 알려줘",
+        "오늘 우산 필요해?",
+        "부산 특보 있어?",
+        "서울 미세먼지 어때?",
+        "오늘 기준 서울 날씨 검색해줘",
+    ]:
+        assert heuristic_route(query, False).intent == "weather"
+
+
+def test_heuristic_route_web_search_requests() -> None:
+    web_queries = [
+        "네이버에서 최신 AI 뉴스 찾아줘",
+        "웹에서 이 라이브러리 최신 버전 확인해줘",
+        "오늘 기준 환율 알려줘",
+        "요즘 Next.js 동향 검색해줘",
+        "공식 문서 찾아서 설치 방법 알려줘",
+        "현재 비트코인 가격 찾아줘",
+        "최근 OpenAI API 변경사항 검색해줘",
+    ]
+
+    for query in web_queries:
+        route = heuristic_route(query, False)
+        assert route.intent == "web_search"
+        assert route.search_need_score >= 70
+        assert route.search_decision == "required"
+        assert is_web_search_request(query)
+
+
+def test_heuristic_route_direct_url_requests() -> None:
+    assert extract_urls("읽어줘 https://example.com/a, 그리고 https://example.com/b") == [
+        "https://example.com/a",
+        "https://example.com/b",
+    ]
+    assert is_url_only_message("https://example.com/a")
+    assert heuristic_route("https://example.com/a", False).intent == "web_url"
+    assert heuristic_route("이 링크 요약해줘 https://example.com/a", False).intent == "web_url"
+
+
+def test_parse_routing_result_keeps_web_url_even_with_high_search_score() -> None:
+    route = parse_routing_result(
+        """
+        {
+          "intent":"web_url",
+          "confidence":0.9,
+          "reason":"URL 포함",
+          "search_need_score":85,
+          "search_decision":"required",
+          "search_reason":"외부 URL"
+        }
+        """
+    )
+
+    assert route.intent == "web_url"
+
+
+def test_heuristic_route_scores_external_reference_calculation_as_web_search() -> None:
+    query = "메이플스토리 확률공개표 참고해서 200제 스타포스 12성에서 22성 기댓값 메소 알려줘"
+
+    route = heuristic_route(query, False)
+    need = score_web_search_need(query)
+
+    assert route.intent == "web_search"
+    assert route.search_decision == "required"
+    assert route.search_need_score >= 70
+    assert need.decision == "required"
+    assert "외부 기준" in need.reason or "공개" in need.reason
+
+
+def test_heuristic_route_asks_before_uncertain_web_search() -> None:
+    route = heuristic_route("요즘 Next.js 써도 괜찮아?", False)
+
+    assert route.intent == "confirm_web_search"
+    assert route.search_decision == "ask_user"
+    assert 45 <= route.search_need_score < 70
+
+
+def test_heuristic_route_web_search_capability_question_is_help() -> None:
+    help_queries = [
+        "웹검색 할 수 있어?",
+        "네이버 검색 기능 있어?",
+        "최신 정보도 찾아줄 수 있어?",
+    ]
+
+    for query in help_queries:
+        assert heuristic_route(query, False).intent == "help"
+
+
+def test_heuristic_route_web_search_does_not_steal_internal_searches() -> None:
+    assert heuristic_route("운동 관련 기억 찾아줘", False).intent == "list_memory"
+    assert heuristic_route("저장한 문서에서 설치 방법 찾아줘", False).intent in {"list_memory", "recall"}
+    assert heuristic_route("전에 저장한 회의록 기준으로 정리해줘", False).intent == "recall"
+    assert heuristic_route("내가 최근에 저장한 메모 보여줘", False).intent == "recall"
+    assert heuristic_route("제안서 할 일 찾아줘", False).intent == "manage_task"
+    assert heuristic_route("오늘 할 일 뭐야?", False).intent == "manage_task"
+    assert heuristic_route("요즘 좀 피곤한데 어떻게 정리하면 좋을까?", False).intent == "chat"
+    assert heuristic_route("최근에 내가 말한 내용 기준으로 생각 정리해줘", False).intent == "chat"
+    assert score_web_search_need("운동 관련 기억 찾아줘").decision == "not_needed"
 
 
 def test_heuristic_route_reminder_lookup() -> None:
@@ -246,6 +354,15 @@ def test_extract_update_latest_memory_request() -> None:
 
     assert asks_to_update_latest_memory(text)
     assert extract_update_text(text) == "나는 저녁 운동을 선호한다"
+
+
+def test_extract_append_update_latest_memory_request() -> None:
+    text = "방금 저장한 메모 뒤에 내일 저녁도 고민해보기 덧붙여줘"
+
+    assert asks_to_update_latest_memory(text)
+    assert is_append_memory_update(text)
+    assert extract_append_update_text(text) == "내일 저녁도 고민해보기"
+    assert heuristic_route(text, False).intent == "update_memory"
 
 
 def test_task_request_helpers() -> None:

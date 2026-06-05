@@ -26,6 +26,7 @@ from assistant_bot.cli import (
     format_user_snapshot,
     format_users,
     generate_cli_briefing,
+    import_kma_locations,
     ingest_local_files,
     initialize_database,
     list_conversations,
@@ -91,14 +92,14 @@ def test_run_doctor_validates_openai_retry_settings() -> None:
         {
             "DISCORD_TOKEN": "token",
             "OPENAI_API_KEY": "key",
-            "OPENAI_TIMEOUT_SECONDS": "0",
+            "OPENAI_TIMEOUT_SECONDS": "-1",
             "OPENAI_MAX_RETRIES": "-1",
             "PENDING_CONFIRMATION_TTL_MINUTES": "0",
         }
     )
 
     assert not result.ok
-    assert "- OPENAI_TIMEOUT_SECONDS: 양의 숫자여야 합니다" in result.lines
+    assert "- OPENAI_TIMEOUT_SECONDS: 0 이상의 숫자여야 합니다" in result.lines
     assert "- OPENAI_MAX_RETRIES: 양의 정수여야 합니다" in result.lines
     assert "- PENDING_CONFIRMATION_TTL_MINUTES: 양의 정수여야 합니다" in result.lines
 
@@ -156,6 +157,29 @@ def test_format_openai_check_results() -> None:
     assert "- 텍스트 응답: 통과" in output
     assert "- Embedding: 실패" in output
     assert "점검 상태: 보완 필요" in output
+
+
+def test_import_kma_locations_converts_official_excel_shape(tmp_path) -> None:
+    from openpyxl import Workbook
+
+    input_path = tmp_path / "nxy.xlsx"
+    output_path = tmp_path / "kma_locations.csv"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["1단계", "2단계", "3단계", "격자 X", "격자 Y"])
+    sheet.append(["서울특별시", "강남구", "역삼동", 61, 126])
+    sheet.append(["부산광역시", "", "", 98, 76])
+    workbook.save(input_path)
+
+    result = import_kma_locations(input_path, output_path)
+
+    assert result.ok
+    assert output_path.exists()
+    content = output_path.read_text(encoding="utf-8")
+    assert "서울특별시 강남구 역삼동" in content
+    assert "역삼동|강남구 역삼동|서울특별시 강남구 역삼동" in content
+    assert "부산광역시" in content
+    assert "11H20201,159" in content
 
 
 def test_manage_tasks_adds_lists_renames_postpones_and_completes(tmp_path) -> None:
@@ -1376,6 +1400,27 @@ def test_cleanup_database_previews_and_deletes_old_operational_rows(tmp_path) ->
         """,
         ("dm:user-1", "dm", "m2", "user-1", None, "[]", old_time),
     )
+    connection.execute(
+        """
+        INSERT INTO web_search_cache (provider, category, normalized_query, result_json, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ("naver", "webkr", "expired", "[]", old_time, old_time),
+    )
+    connection.execute(
+        """
+        INSERT INTO web_search_cache (provider, category, normalized_query, result_json, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ("naver", "webkr", "fresh", "[]", old_time, new_time),
+    )
+    connection.execute(
+        """
+        INSERT INTO web_page_cache (normalized_url, final_url, title, text, success, error, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("https://example.com/old", "https://example.com/old", "old", "old", 1, "", old_time, old_time),
+    )
     connection.commit()
 
     preview = cleanup_database(str(database_path), days=30, target="all", apply=False)
@@ -1386,6 +1431,8 @@ def test_cleanup_database_previews_and_deletes_old_operational_rows(tmp_path) ->
     assert preview["counts"]["conversation_summaries"] == 1
     assert preview["counts"]["agent_logs"] == 1
     assert preview["counts"]["pending_attachment_requests"] == 1
+    assert preview["counts"]["web_search_cache"] == 1
+    assert preview["counts"]["web_page_cache"] == 1
     assert "실제로 삭제하려면" in preview_output
     assert count_table(connection, "conversation_messages") == 2
 
@@ -1396,6 +1443,44 @@ def test_cleanup_database_previews_and_deletes_old_operational_rows(tmp_path) ->
     assert count_table(connection, "conversation_summaries") == 0
     assert count_table(connection, "agent_logs") == 0
     assert count_table(connection, "pending_attachment_requests") == 1
+    assert count_table(connection, "web_search_cache") == 1
+    assert count_table(connection, "web_page_cache") == 0
+
+
+def test_cleanup_database_cache_target_deletes_only_expired_cache(tmp_path) -> None:
+    database_path = tmp_path / "assistant.sqlite"
+    database = AppDatabase(str(database_path))
+    connection = database.connection
+    old_time = "2000-01-01 00:00:00"
+    new_time = "2999-01-01 00:00:00"
+    connection.execute(
+        """
+        INSERT INTO web_search_cache (provider, category, normalized_query, result_json, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ("naver", "webkr", "expired", "[]", old_time, old_time),
+    )
+    connection.execute(
+        """
+        INSERT INTO web_search_cache (provider, category, normalized_query, result_json, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ("naver", "webkr", "fresh", "[]", old_time, new_time),
+    )
+    connection.execute(
+        """
+        INSERT INTO web_page_cache (normalized_url, final_url, title, text, success, error, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("https://example.com/old", "https://example.com/old", "old", "old", 1, "", old_time, old_time),
+    )
+    connection.commit()
+
+    result = cleanup_database(str(database_path), days=30, target="cache", apply=True)
+
+    assert result["counts"] == {"web_search_cache": 1, "web_page_cache": 1}
+    assert count_table(connection, "web_search_cache") == 1
+    assert count_table(connection, "web_page_cache") == 0
 
 
 def test_cleanup_database_deletes_old_soft_deleted_items(tmp_path) -> None:

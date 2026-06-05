@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+from contextlib import suppress
 from types import SimpleNamespace
 
 import discord
@@ -15,12 +17,14 @@ from assistant_bot.agents import (
     RouterAgent,
     TaskAgent,
     UtilityAgent,
+    WeatherAgent,
+    WebSearchAgent,
     asks_to_delete_all_memories,
     extract_delete_ids,
-    format_conversation_context,
     format_task_priority,
 )
 from assistant_bot.config import Config
+from assistant_bot.context_builder import build_execution_context, build_router_context
 from assistant_bot.database import AppDatabase
 from assistant_bot.file_extractor import extract_attachment_text, is_supported_attachment, is_vision_attachment
 from assistant_bot.models import ConversationScope
@@ -28,6 +32,7 @@ from assistant_bot.openai_service import OpenAIService
 from assistant_bot.operation_result import AgentOutput, OperationResult
 from assistant_bot.persona import ASSISTANT_PERSONA
 from assistant_bot.response_composer import ResponseComposer
+from assistant_bot.search_provider import NaverSearchProvider
 from assistant_bot.stores import (
     AgentLogStore,
     ConversationStore,
@@ -35,15 +40,21 @@ from assistant_bot.stores import (
     PendingAttachmentStore,
     PendingMemoryCaptureStore,
     PendingMemoryDeletionStore,
+    PendingWebSearchConfirmationStore,
     ReminderStore,
     TaskStore,
     VisionOcrUsageStore,
+    WeatherCacheStore,
+    WeatherLocationStore,
+    WebCacheStore,
 )
 from assistant_bot.text_utils import split_discord_message, strip_bot_mentions
 from assistant_bot.time_utils import humanize_datetime_text, now_in_timezone, today_string
+from assistant_bot.weather_provider import KmaWeatherProvider, WeatherLocationResolver
+from assistant_bot.web_page_reader import WebPageReader
 
 logger = logging.getLogger(__name__)
-BOT_STATUS_MESSAGE = "멘션하여 슬립지피티를 호출해보세요."
+BOT_STATUS_MESSAGE = "멘션하거나 DM으로 사용해보세요."
 
 
 class AssistantBot(discord.Client):
@@ -64,6 +75,11 @@ class AssistantBot(discord.Client):
         self.pending_attachments = PendingAttachmentStore(self.database.connection)
         self.pending_memory_captures = PendingMemoryCaptureStore(self.database.connection)
         self.pending_memory_deletions = PendingMemoryDeletionStore(self.database.connection)
+        self.pending_web_search_confirmations = PendingWebSearchConfirmationStore(self.database.connection)
+        self.web_cache = WebCacheStore(self.database.connection)
+        self.web_cache.cleanup_expired()
+        self.weather_cache = WeatherCacheStore(self.database.connection)
+        self.weather_locations = WeatherLocationStore(self.database.connection)
         self.vision_ocr_usage = VisionOcrUsageStore(self.database.connection)
         self.tasks = TaskStore(self.database.connection)
         self.reminders = ReminderStore(self.database.connection)
@@ -108,6 +124,40 @@ class AssistantBot(discord.Client):
             usage=self.vision_ocr_usage,
             logs=self.logs,
         )
+        self.web_search_provider = NaverSearchProvider(
+            client_id=config.naver_search_client_id,
+            client_secret=config.naver_search_client_secret,
+            timeout_seconds=config.web_search_timeout_seconds,
+        )
+        self.web_page_reader = WebPageReader(
+            timeout_seconds=config.web_page_timeout_seconds,
+            max_bytes=config.web_page_max_bytes,
+            max_chars=config.web_page_max_chars,
+        )
+        self.web_search_agent = WebSearchAgent(
+            config=config,
+            openai=self.openai,
+            provider=self.web_search_provider,
+            page_reader=self.web_page_reader,
+            cache=self.web_cache,
+            logs=self.logs,
+        )
+        self.kma_weather_provider = KmaWeatherProvider(
+            auth_key=config.kma_api_auth_key,
+            timeout_seconds=config.kma_api_timeout_seconds,
+            cache=self.weather_cache,
+            cache_ttl_minutes=config.kma_api_cache_ttl_minutes,
+            timezone=config.timezone,
+        )
+        self.weather_agent = WeatherAgent(
+            config=config,
+            openai=self.openai,
+            provider=self.kma_weather_provider,
+            locations=WeatherLocationResolver(resource_path=config.kma_location_resource_path),
+            location_store=self.weather_locations,
+            logs=self.logs,
+            web_search_agent=self.web_search_agent,
+        )
         self.agent_registry = build_agent_registry(
             memory_agent=self.memory_agent,
             utility_agent=self.utility_agent,
@@ -115,9 +165,12 @@ class AssistantBot(discord.Client):
             reminder_agent=self.reminder_agent,
             conversation_agent=self.conversation_agent,
             document_analysis_agent=self.document_analysis_agent,
+            weather_agent=self.weather_agent,
+            web_search_agent=self.web_search_agent,
             pending_attachments=self.pending_attachments,
             pending_memory_captures=self.pending_memory_captures,
             pending_memory_deletions=self.pending_memory_deletions,
+            pending_web_search_confirmations=self.pending_web_search_confirmations,
             pending_confirmation_ttl_minutes=self.config.pending_confirmation_ttl_minutes,
         )
         self.router = RouterAgent(
@@ -229,12 +282,29 @@ class AssistantBot(discord.Client):
         clean_text = strip_bot_mentions(message.content, self.user.id)
         author_name = message.author.display_name
         attachments = list(message.attachments)
-        conversation_context = format_conversation_context(
-            self.conversations.recent_messages(scope.conversation_id, limit=16)
+        conversation_context = build_router_context(
+            config=self.config,
+            conversations=self.conversations,
+            scope=scope,
+        )
+        response_execution_context = build_execution_context(
+            config=self.config,
+            conversations=self.conversations,
+            scope=scope,
+            user_text=clean_text,
         )
 
-        async with message.channel.typing():
-            try:
+        raw_answer: AgentOutput = OperationResult(
+            agent="bot",
+            intent="error",
+            status="failed",
+            summary="메시지 처리 중 오류",
+            fallback_text="처리 중 문제가 생겼어요. 로그를 확인한 뒤 다시 시도해 주세요.",
+        )
+        progress_stop = asyncio.Event()
+        progress_task = asyncio.create_task(self.send_processing_updates(message, progress_stop))
+        try:
+            async with message.channel.typing():
                 raw_answer = await self.handle_message(
                     message=message,
                     text=clean_text,
@@ -249,10 +319,16 @@ class AssistantBot(discord.Client):
                     scope=scope,
                     location_label=describe_message_location(message),
                     conversation_context=conversation_context,
+                    execution_context=response_execution_context,
                 )
-            except Exception:
-                logger.exception("메시지 처리 중 오류")
-                answer = "처리 중 문제가 생겼어요. 로그를 확인한 뒤 다시 시도해 주세요."
+        except Exception:
+            logger.exception("메시지 처리 중 오류")
+            answer = str(raw_answer)
+        finally:
+            progress_stop.set()
+            progress_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await progress_task
 
         self.conversations.add_message(
             conversation_id=scope.conversation_id,
@@ -276,6 +352,29 @@ class AssistantBot(discord.Client):
                 view=confirmation_view if first_part else None,
             )
             first_part = False
+        await self.maybe_compress_context(scope)
+
+    async def send_processing_updates(self, message: discord.Message, stop_event: asyncio.Event) -> None:
+        count = 0
+        progress_message: discord.Message | None = None
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=15)
+                if progress_message is not None:
+                    with suppress(discord.Forbidden, discord.HTTPException):
+                        await progress_message.edit(content="답변 준비가 끝났습니다.")
+                return
+            except TimeoutError:
+                count += 1
+            try:
+                content = processing_status_message(count)
+                if progress_message is None:
+                    progress_message = await message.reply(content, mention_author=False)
+                else:
+                    await progress_message.edit(content=content)
+            except (discord.Forbidden, discord.HTTPException):
+                logger.warning("처리 진행 메시지 전송에 실패했습니다.", exc_info=True)
+                return
 
     def confirmation_view_for(
         self,
@@ -453,11 +552,18 @@ class AssistantBot(discord.Client):
 
         if any(is_vision_attachment(attachment.filename) for attachment in effective_attachments):
             self.pending_attachments.resolve(pending.id)
+            execution_context = build_execution_context(
+                config=self.config,
+                conversations=self.conversations,
+                scope=scope,
+                user_text="이 첨부 이미지를 분석하고 기억해줘",
+            )
             return await self.document_analysis_agent.analyze(
                 text="이 첨부 이미지를 분석하고 기억해줘",
                 scope=scope,
                 message_id=str(original_message.id),
                 attachments=effective_attachments,
+                execution_context=execution_context,
             )
 
         proxy_message = SimpleNamespace(id=original_message.id, channel=channel)
@@ -551,12 +657,37 @@ class AssistantBot(discord.Client):
         if pending_capture_response is not None:
             return pending_capture_response
 
+        pending_search_response = await self.handle_pending_web_search_confirmation(
+            text=text,
+            scope=scope,
+            author_name=author_name,
+            conversation_context=conversation_context,
+        )
+        if pending_search_response is not None:
+            return pending_search_response
+
         route = await self.router.route(
             text=text,
             has_attachments=bool(supported_attachments),
             scope=scope,
             conversation_context=conversation_context,
         )
+        execution_context = build_execution_context(
+            config=self.config,
+            conversations=self.conversations,
+            scope=scope,
+            user_text=text,
+            route=route,
+        )
+
+        if route.intent == "confirm_web_search":
+            return self.request_web_search_confirmation(
+                message_id=str(message.id),
+                scope=scope,
+                text=text,
+                score=route.search_need_score,
+                reason=route.search_reason or route.reason,
+            )
 
         if route.intent == "analyze_document":
             return await self.document_analysis_agent.analyze(
@@ -564,6 +695,7 @@ class AssistantBot(discord.Client):
                 scope=scope,
                 message_id=str(message.id),
                 attachments=supported_attachments,
+                execution_context=execution_context,
             )
 
         if supported_attachments and text.strip() and route.intent != "unsupported":
@@ -578,6 +710,7 @@ class AssistantBot(discord.Client):
                     scope=scope,
                     message_id=str(message.id),
                     attachments=supported_attachments,
+                    execution_context=execution_context,
                 )
             save_result = await self.handle_remember(
                 message=message,
@@ -609,6 +742,21 @@ class AssistantBot(discord.Client):
 
         if route.intent == "delete_memory":
             if asks_to_delete_all_memories(text):
+                if asks_to_delete_document_scope(text):
+                    document_ids = [
+                        item.id
+                        for item in self.memories.recent_items(
+                            scope=scope,
+                            kind="document",
+                            limit=max(1, self.memories.stats(scope=scope)["documents"]),
+                        )
+                    ]
+                    return self.request_target_memory_deletion_confirmation(
+                        message_id=str(message.id),
+                        scope=scope,
+                        memory_ids=[],
+                        document_ids=document_ids,
+                    )
                 return self.request_memory_deletion_confirmation(
                     message_id=str(message.id),
                     scope=scope,
@@ -632,6 +780,7 @@ class AssistantBot(discord.Client):
                     author_name=author_name,
                     location_label=describe_message_location(message),
                     has_attachments=bool(supported_attachments),
+                    execution=execution_context,
                 ),
             )
 
@@ -661,7 +810,9 @@ class AssistantBot(discord.Client):
             filenames = ", ".join(attachment.filename for attachment in attachments)
             fallback = (
                 f"`{filenames}` 첨부는 아직 읽을 수 없어요. "
-                "현재는 `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv`, 이미지 파일을 분석할 수 있습니다."
+                "현재는 `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv`, `.pptx`, `.hwpx`, "
+                "JSON/HTML/TSV/ODT/ODS, 이미지 파일을 분석할 수 있습니다. "
+                "`.hwp`, `.ppt`, `.xls`, `.doc` 같은 구형/전용 포맷은 PDF, DOCX, PPTX, HWPX 등으로 변환해 주세요."
             )
             return OperationResult(
                 agent="bot",
@@ -677,10 +828,26 @@ class AssistantBot(discord.Client):
                         ".docx",
                         ".xlsx",
                         ".csv",
+                        ".pptx",
+                        ".hwpx",
+                        ".json",
+                        ".jsonl",
+                        ".yaml",
+                        ".yml",
+                        ".xml",
+                        ".html",
+                        ".htm",
+                        ".tsv",
+                        ".odt",
+                        ".ods",
                         ".png",
                         ".jpg",
                         ".jpeg",
                         ".webp",
+                        ".bmp",
+                        ".gif",
+                        ".tiff",
+                        ".tif",
                     ],
                 },
                 preserve_values=tuple(attachment.filename for attachment in attachments),
@@ -696,8 +863,18 @@ class AssistantBot(discord.Client):
                 author_name=author_name,
                 location_label=describe_message_location(message),
                 has_attachments=bool(supported_attachments),
+                execution=execution_context,
             ),
         )
+
+    async def maybe_compress_context(self, scope: ConversationScope) -> None:
+        recent_chars = self.conversations.char_count_since_latest_summary(scope.conversation_id)
+        if recent_chars < self.config.context_compression_chars:
+            return
+        try:
+            await self.conversation_agent.compress_context(scope.conversation_id)
+        except Exception:
+            logger.exception("대화 컨텍스트 압축 중 오류")
 
     def handle_pending_memory_deletion_confirmation(
         self, *, text: str, scope: ConversationScope
@@ -730,6 +907,18 @@ class AssistantBot(discord.Client):
                 status="success",
                 summary="전체 기억 삭제 취소",
                 fallback_text="전체 기억 삭제를 취소했어요.",
+            )
+        if is_deletion_confirmation_scope_change(text):
+            self.pending_memory_deletions.resolve(pending.id)
+            return OperationResult(
+                agent="memory",
+                intent="delete_memory",
+                status="success",
+                summary="삭제 확인 조건 변경으로 기존 대기 취소",
+                fallback_text=(
+                    "기존 삭제 확인 대기는 취소했어요. "
+                    "삭제 범위를 바꾸려면 `문서만 전부 삭제해줘`처럼 새로 요청해 주세요."
+                ),
             )
         if pending.mode == "targets":
             if not is_positive_confirmation(text):
@@ -878,6 +1067,102 @@ class AssistantBot(discord.Client):
             facts={"memory_id": memory_id, "text": text},
             preserve_values=(str(memory_id),),
             fallback_text=f"메모해뒀어요. 저장 ID는 `{memory_id}`입니다.",
+        )
+
+    async def handle_pending_web_search_confirmation(
+        self,
+        *,
+        text: str,
+        scope: ConversationScope,
+        author_name: str,
+        conversation_context: str,
+    ) -> OperationResult | None:
+        pending = self.pending_web_search_confirmations.latest(
+            scope=scope,
+            ttl_minutes=self.config.pending_confirmation_ttl_minutes,
+        )
+        if pending is None:
+            return None
+        if is_negative_confirmation(text):
+            self.pending_web_search_confirmations.resolve(pending.id)
+            execution_context = build_execution_context(
+                config=self.config,
+                conversations=self.conversations,
+                scope=scope,
+                user_text=pending.query_text,
+            )
+            answer = await self.conversation_agent.chat(
+                text=pending.query_text,
+                scope=scope,
+                author_name=author_name,
+                location_label="검색 거부 후 일반 답변",
+                execution_context=execution_context,
+            )
+            return OperationResult(
+                agent="router",
+                intent="confirm_web_search",
+                status="success",
+                summary="웹검색 거부 후 일반 답변",
+                facts={"query_text": pending.query_text},
+                fallback_text=str(answer),
+            )
+        if not is_positive_confirmation(text):
+            return None
+        self.pending_web_search_confirmations.resolve(pending.id)
+        self.logs.add(
+            conversation_id=scope.conversation_id,
+            agent="router",
+            intent="web_search",
+            difficulty="medium",
+            model=self.config.router_model,
+            reason=f"웹검색 확인 승인: score={pending.search_need_score}; {pending.search_reason}",
+        )
+        execution_context = build_execution_context(
+            config=self.config,
+            conversations=self.conversations,
+            scope=scope,
+            user_text=pending.query_text,
+        )
+        return await self.web_search_agent.search(
+            text=pending.query_text,
+            scope=scope,
+            execution_context=execution_context,
+        )
+
+    def request_web_search_confirmation(
+        self,
+        *,
+        message_id: str,
+        scope: ConversationScope,
+        text: str,
+        score: int,
+        reason: str,
+    ) -> OperationResult:
+        self.pending_web_search_confirmations.add(
+            scope=scope,
+            message_id=message_id,
+            query_text=text,
+            search_need_score=score,
+            search_reason=reason,
+        )
+        fallback = (
+            "정확히 답하려면 최신 정보나 외부 자료 확인이 필요해 보입니다. "
+            "웹검색해볼까요? 진행하려면 `응, 검색해줘`, 원하지 않으면 `아니`라고 답해 주세요."
+        )
+        return OperationResult(
+            agent="router",
+            intent="confirm_web_search",
+            status="confirm_required",
+            summary="웹검색 진행 여부 확인",
+            facts={
+                "query_text": text,
+                "search_need_score": score,
+                "search_reason": reason,
+                "ttl_minutes": self.config.pending_confirmation_ttl_minutes,
+            },
+            next_actions=("웹검색 진행 여부를 사용자에게 확인한다",),
+            preserve_values=(text, str(score), reason),
+            fallback_text=fallback,
         )
 
     def request_memory_deletion_confirmation(self, *, message_id: str, scope: ConversationScope) -> OperationResult:
@@ -1305,6 +1590,25 @@ def extract_saved_document_ids(result: OperationResult) -> list[int]:
     return list(dict.fromkeys(ids))
 
 
+def processing_status_message(count: int) -> str:
+    messages = [
+        "답변을 준비하고 있어요. 정확히 확인하는 중입니다.",
+        "아직 처리 중입니다. 필요한 자료를 더 확인하고 있어요.",
+        "조금 더 걸리고 있습니다. 답변 품질을 위해 계속 검토 중입니다.",
+        "계속 작업 중입니다. 검색 결과와 근거를 정리하고 있어요.",
+        "아직 끝나지 않았습니다. 완료되는 대로 바로 답변드릴게요.",
+    ]
+    if count <= 0:
+        return messages[0]
+    if count <= len(messages):
+        return messages[count - 1]
+    elapsed_seconds = count * 15
+    minutes = elapsed_seconds // 60
+    seconds = elapsed_seconds % 60
+    elapsed = f"{minutes}분 {seconds}초" if seconds else f"{minutes}분"
+    return f"계속 처리 중입니다. 경과 시간은 약 {elapsed}이고, 완료되면 바로 답변드릴게요."
+
+
 def is_positive_confirmation(text: str) -> bool:
     normalized = text.strip().lower()
     return any(
@@ -1329,11 +1633,31 @@ def is_memory_deletion_confirmation(text: str) -> bool:
     normalized = text.strip().lower()
     if not is_positive_confirmation(normalized):
         return False
+    if is_deletion_confirmation_scope_change(normalized):
+        return False
 
     delete_markers = ["삭제", "지워", "delete", "remove"]
     scope_markers = ["전부", "전체", "모두", "all", "everything"]
     return any(marker in normalized for marker in delete_markers) and any(
         marker in normalized for marker in scope_markers
+    )
+
+
+def is_deletion_confirmation_scope_change(text: str) -> bool:
+    normalized = re.sub(r"\s+", "", text.casefold())
+    change_markers = ["제외", "빼고", "말고", "만", "except", "exclude", "only"]
+    scoped_targets = ["파일", "문서", "메모", "file", "document", "memo"]
+    return any(marker in normalized for marker in change_markers) or any(
+        marker in normalized for marker in scoped_targets
+    )
+
+
+def asks_to_delete_document_scope(text: str) -> bool:
+    normalized = re.sub(r"\s+", "", text.casefold())
+    document_markers = ["파일", "문서", "첨부", "pdf", "document", "documents", "file", "files"]
+    memory_markers = ["메모", "텍스트기억", "memo", "memos", "textmemory"]
+    return any(marker in normalized for marker in document_markers) and not any(
+        marker in normalized for marker in memory_markers
     )
 
 

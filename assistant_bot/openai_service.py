@@ -6,7 +6,7 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
 
 from assistant_bot.config import Config
 from assistant_bot.tool_calling import ToolSpec
@@ -19,7 +19,7 @@ class OpenAIService:
         self.config = config
         self.client = AsyncOpenAI(
             api_key=config.openai_api_key,
-            timeout=config.openai_timeout_seconds,
+            timeout=None,
             max_retries=0,
         )
 
@@ -31,13 +31,15 @@ class OpenAIService:
         input_text: str,
         temperature: float = 0.2,
     ) -> str:
+        payload = {
+            "model": model,
+            "instructions": instructions,
+            "input": input_text,
+            "temperature": temperature,
+        }
+        payload = normalize_response_payload(payload)
         response = await self._with_retries(
-            lambda: self.client.responses.create(
-                model=model,
-                instructions=instructions,
-                input=input_text,
-                temperature=temperature,
-            )
+            lambda: self._create_response_with_temperature_fallback(payload)
         )
 
         output_text = getattr(response, "output_text", None)
@@ -65,13 +67,15 @@ class OpenAIService:
                     "detail": detail,
                 }
             )
+        payload = {
+            "model": model,
+            "instructions": instructions,
+            "input": [{"role": "user", "content": content}],
+            "temperature": temperature,
+        }
+        payload = normalize_response_payload(payload)
         response = await self._with_retries(
-            lambda: self.client.responses.create(
-                model=model,
-                instructions=instructions,
-                input=[{"role": "user", "content": content}],
-                temperature=temperature,
-            )
+            lambda: self._create_response_with_temperature_fallback(payload)
         )
         output_text = getattr(response, "output_text", None)
         if isinstance(output_text, str) and output_text.strip():
@@ -101,16 +105,18 @@ class OpenAIService:
         tool_by_name = {tool.name: tool for tool in tools}
         input_items: list[Any] = [{"role": "user", "content": input_text}]
         for _ in range(max(1, max_tool_rounds)):
+            payload = {
+                "model": model,
+                "instructions": instructions,
+                "input": input_items,
+                "tools": [tool.schema() for tool in tools],
+                "tool_choice": tool_choice,
+                "parallel_tool_calls": parallel_tool_calls,
+                "temperature": temperature,
+            }
+            payload = normalize_response_payload(payload)
             response = await self._with_retries(
-                lambda: self.client.responses.create(
-                    model=model,
-                    instructions=instructions,
-                    input=input_items,
-                    tools=[tool.schema() for tool in tools],
-                    tool_choice=tool_choice,
-                    parallel_tool_calls=parallel_tool_calls,
-                    temperature=temperature,
-                )
+                lambda payload=payload: self._create_response_with_temperature_fallback(payload)
             )
 
             output_items = list(getattr(response, "output", []) or [])
@@ -203,11 +209,35 @@ class OpenAIService:
             raise last_error
         raise RuntimeError("OpenAI 호출이 실행되지 않았습니다.")
 
+    async def _create_response_with_temperature_fallback(self, payload: dict[str, Any]) -> Any:
+        try:
+            return await self.client.responses.create(**payload)
+        except BadRequestError as error:
+            if not _is_unsupported_temperature_error(error) or "temperature" not in payload:
+                raise
+            retry_payload = dict(payload)
+            retry_payload.pop("temperature", None)
+            return await self.client.responses.create(**retry_payload)
+
 
 def _response_item_value(item: Any, field: str) -> Any:
     if isinstance(item, dict):
         return item.get(field)
     return getattr(item, field, None)
+
+
+def _is_unsupported_temperature_error(error: BadRequestError) -> bool:
+    message = str(error).lower()
+    return "unsupported parameter" in message and "temperature" in message
+
+
+def normalize_response_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    model = str(payload.get("model", "")).lower()
+    if model.startswith("gpt-5"):
+        normalized = dict(payload)
+        normalized.pop("temperature", None)
+        return normalized
+    return payload
 
 
 def _image_mime_type(filename: str) -> str:

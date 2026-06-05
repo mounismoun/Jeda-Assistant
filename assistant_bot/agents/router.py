@@ -43,12 +43,25 @@ class RouterAgent:
 현재 코드로 제공되지 않는 기능을 실제 실행하라는 요청은 unsupported로 분류한다.
 OpenAI 모델이 일반적으로 할 수 있어 보이는 일이라도 아래 "현재 코드로 제공되는 기능"에 없으면
 가능한 것처럼 분류하지 않는다.
+검색 필요도를 0~100점으로 평가한다.
+70점 이상이면 web_search, 45~69점이면 confirm_web_search, 44점 이하면 검색 없이 적절한 intent로 분류한다.
+명시적 웹검색, 최신/현재 정보, 공식 문서/공개표/출처/외부 기준표가 필요한 계산은 검색 점수를 높게 준다.
+저장된 기억, 저장 문서, 할 일 검색은 웹검색 점수를 낮게 준다.
+사용자 메시지에 웹 URL이 있으면 검색하지 말고 web_url로 분류한다. URL만 보낸 경우도 web_url이다.
 
 {capability_prompt_block()}
 
 {self.routing_prompt_block}
 
-JSON만 반환한다. 형식: {{"intent":"chat","confidence":0.0,"reason":"짧은 이유"}}
+JSON만 반환한다. 형식:
+{{
+  "intent":"chat",
+  "confidence":0.0,
+  "reason":"짧은 이유",
+  "search_need_score":0,
+  "search_decision":"not_needed",
+  "search_reason":"검색 필요 판단 이유"
+}}
 """
         try:
             output = await self.openai.text_response(

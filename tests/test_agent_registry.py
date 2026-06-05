@@ -24,6 +24,10 @@ def test_agent_catalog_contains_router_metadata() -> None:
     assert "current_time" in intents
     assert "manage_task" in intents
     assert "manage_reminder" in intents
+    assert "web_search" in intents
+    assert "web_url" in intents
+    assert "confirm_web_search" in intents
+    assert "weather" in intents
     assert "unsupported" in intents
     assert all(entry["examples"] for entry in catalog)
 
@@ -39,9 +43,16 @@ def test_registry_prompt_block_uses_catalog_examples() -> None:
 
     assert "- manage_task: Task Agent" in prompt_block
     assert "- manage_reminder: Reminder Agent" in prompt_block
+    assert "- web_search: Web Search Agent" in prompt_block
+    assert "- web_url: Web URL Agent" in prompt_block
+    assert "- confirm_web_search: Router Agent" in prompt_block
+    assert "- weather: Weather Agent" in prompt_block
     assert "- current_time: Utility Agent" in prompt_block
     assert "지금 몇시야?" in prompt_block
     assert "30분 뒤 물 마시라고 알려줘" in prompt_block
+    assert "네이버에서 최신 AI 뉴스 찾아줘" in prompt_block
+    assert "https://example.com/article" in prompt_block
+    assert "서울 내일 날씨 알려줘" in prompt_block
     assert "삭제한 기억 목록 보여줘" in prompt_block
     assert "사용 가능 도구: search_memories" in prompt_block
 

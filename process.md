@@ -1097,6 +1097,20 @@
   - `README.md`와 `plan.md`에 리마인더는 생성 위치와 관계없이 DM으로 발송된다는 정책을 반영했다.
   - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
 
+## 2026-06-05 - Naver 웹검색 에이전트 1차 구현
+
+- 작업 이름: `web_search` intent와 Naver Search API 기반 WebSearchAgent 추가
+- 진행상황: 완료
+- 진행내용:
+  - `web_search` intent를 추가하고 Router Agent 휴리스틱에 명시적 웹검색 요청과 최신/현재 외부 정보 요청을 감지하도록 했다.
+  - `웹검색 할 수 있어?` 같은 기능 문의는 `help`로 보내고, 저장 기억/문서/할 일 검색은 내부 intent로 유지하도록 라우팅 테스트를 고정했다.
+  - Naver Search API provider를 추가해 `webkr`, `news`, `blog`, `shop` 결과를 공통 `SearchResult`로 정규화하도록 했다.
+  - WebSearchAgent를 추가해 검색 category를 고르고, 검색 결과 snippet을 LLM으로 요약해 출처 URL을 포함해 답하도록 했다.
+  - `agent_catalog.json`, `capabilities.py`, `README.md`, `plan.md`, `.env.example`에 Naver 웹검색 지원과 환경변수 예시를 반영했다.
+  - 대상 테스트와 라우팅 미리보기로 `web_search`, 내부 기억 검색, 기능 문의 분리가 동작하는지 확인했다.
+  - `assistant-admin doctor`에서 Naver 웹검색 환경변수 기본값 상태와 전체 설정 점검이 통과하는지 확인했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
 ## 2026-06-05 - 에이전트 모듈화 계획 문서화
 
 - 작업 이름: 에이전트 카탈로그 기반 라우팅 및 모듈화 계획 정리
@@ -1454,3 +1468,169 @@
   - 사용자가 `텍스트만 요약해줘`라고 요청하면 혼합 PDF 이미지 선별과 분석을 모두 생략하도록 했다.
   - 혼합 PDF에서 비전 선별이 실행되면 PDF 원본 파일 크기 기준으로 비전 OCR 사용량을 1회만 기록하도록 했다.
   - 텍스트만 PDF, 장식 이미지 PDF, 중요 차트 PDF, 텍스트만 요청, 용량 초과 케이스 테스트를 추가했다.
+
+## 2026-06-05 - 안정 포맷 파일 확장자 확대
+
+- 작업 이름: 로컬 텍스트 추출 지원 확장자 추가
+- 진행상황: 완료
+- 진행내용:
+  - 일반 텍스트 `.log`, `.text`, `.rst`, `.ini`, `.conf`, `.cfg`와 구조화 텍스트 `.json`, `.jsonl`, `.yaml`, `.yml`, `.xml`, `.html`, `.htm`, `.tsv`를 지원 목록에 추가했다.
+  - 구조화 문서 `.pptx`, `.hwpx`와 오픈 문서 `.odt`, `.ods`를 로컬 ZIP/XML 기반 텍스트 추출 대상으로 추가했다.
+  - `.pptx`는 슬라이드 텍스트와 speaker notes XML을 함께 추출하고, `.hwpx`는 내부 XML 본문과 표 셀 텍스트를 줄 단위로 정리하도록 했다.
+  - `.hwp`, `.ppt`, `.xls`, `.doc`, `.pages`, `.key`, `.numbers`는 구형/전용 포맷으로 직접 지원하지 않고 변환 안내 대상으로 유지했다.
+  - 새 지원 확장자와 제외 확장자 판별, JSON/JSONL/YAML/XML/HTML/TSV/PPTX/HWPX/ODT/ODS 추출 테스트를 추가했다.
+
+## 2026-06-05 - 파일 관련 기억 삭제 범위 보정
+
+- 작업 이름: 문서 삭제 요청과 전체 기억 삭제 확인 분리
+- 진행상황: 완료
+- 진행내용:
+  - `파일 관련 기억 전부 삭제해` 요청이 텍스트 메모까지 포함한 전체 기억 삭제 확인으로 이어질 수 있는 문제를 확인했다.
+  - 삭제 요청에 파일/문서 범위가 명시되고 메모 범위가 명시되지 않은 경우, 전체 기억 삭제가 아니라 문서 ID 전체에 대한 지정 삭제 확인을 만들도록 변경했다.
+  - 전체 삭제 확인 대기 중 사용자가 `메모 한개 제외하고 모두 삭제해`, `파일만 전부 삭제해`처럼 조건을 바꾸면 기존 삭제 대기를 취소하고 새 요청을 요구하도록 했다.
+  - 파일 관련 삭제는 문서만 대상으로 잡히고, 조건 변경 확인 문장은 삭제를 실행하지 않는 회귀 테스트를 추가했다.
+  - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests`, `git diff --check` 검증을 통과했다.
+
+## 2026-06-05 - 웹검색 본문 확인과 검색 필요도 점수화
+
+- 작업 이름: Naver 웹검색 결과 선별 본문 확인 및 라우터 검색 필요도 점수화
+- 진행상황: 완료
+- 진행내용:
+  - Naver Search API 요청 결과 수 기본값을 10개로 변경했다.
+  - Router Agent에 검색 필요도 점수와 `required`, `ask_user`, `not_needed` 결정을 추가했다.
+  - 검색 필요도 70점 이상은 `web_search`, 45~69점은 `confirm_web_search`, 44점 이하는 일반 intent로 분기하도록 했다.
+  - `메이플스토리 확률공개표 참고해서 ... 기댓값 메소`처럼 외부 기준표가 필요한 계산 요청을 확실한 검색 요청으로 분류하도록 했다.
+  - 검색 필요성이 애매하면 사용자에게 검색해볼지 묻고, 승인 시 원래 질문으로 웹검색을 실행하는 pending store를 추가했다.
+  - WebSearchAgent가 검색 결과 중 LLM 판단으로 최대 5개 링크의 공개 HTML 본문을 확인하도록 했다.
+  - 일반 HTML과 Naver 블로그 모바일 URL 보정 기반 본문 추출 도구를 추가했다.
+  - WebSearchAgent가 사용자 문장을 그대로 검색하지 않고 LLM이 검색 계획을 만들어 최대 4개 query로 나눠 검색하도록 변경했다.
+  - 계산형 질문은 기준표, 비용, 확률, 규칙처럼 답변에 필요한 정보를 나눠 검색하도록 테스트를 추가했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests`, `assistant-admin doctor` 검증을 통과했다.
+
+## 2026-06-05 - OpenAI temperature 미지원 모델 오류 보정
+
+- 작업 이름: temperature 미지원 모델 fallback 및 메시지 예외 처리 안정화
+- 진행상황: 완료
+- 진행내용:
+  - OpenAI Responses API 호출에서 모델이 `temperature` 파라미터를 지원하지 않아 400 오류가 발생하는 문제를 확인했다.
+  - `OpenAIService`가 `temperature` 미지원 오류를 감지하면 같은 요청을 `temperature` 없이 한 번 재시도하도록 변경했다.
+  - `gpt-5` 계열 모델에는 처음부터 `temperature`를 보내지 않도록 해 fallback 전 400 로그가 반복되지 않게 했다.
+  - Discord `on_message` 예외 처리 중 `raw_answer`가 할당되지 않아 `UnboundLocalError`가 추가로 발생하던 문제를 보정했다.
+  - 웹검색 최종 요약 모델 호출이 시간 초과되면 검색 결과와 본문 확인 자료를 버리지 않고 fallback 답변을 반환하도록 했다.
+  - temperature fallback과 `gpt-5` 계열 temperature 생략 회귀 테스트를 추가했다.
+  - `python3 -m pytest`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - 장시간 답변 처리 진행 메시지 추가
+
+- 작업 이름: OpenAI timeout 비활성화 및 15초 주기 진행 안내
+- 진행상황: 완료
+- 진행내용:
+  - 정확한 답변을 위해 OpenAI SDK timeout을 비활성화하고 API가 실제 실패하지 않는 한 끝까지 기다리도록 변경했다.
+  - Discord 메시지 처리 시간이 길어지면 진행 중 메시지를 한 번 보내고, 이후 15초마다 같은 메시지를 수정하도록 했다.
+  - 진행 메시지는 횟수에 따라 다른 문구를 사용하고, 5회 이후에는 대략적인 경과 시간을 포함한다.
+  - `OPENAI_TIMEOUT_SECONDS=0`을 timeout 비활성화 의미로 문서화하고 doctor 검증에서 0을 허용하도록 변경했다.
+  - 진행 메시지 문구와 OpenAI timeout 비활성화 회귀 테스트를 추가했다.
+
+## 2026-06-05 - 웹검색 캐시 도입
+
+- 작업 이름: 웹검색 결과 및 페이지 본문 캐시 구현
+- 진행상황: 완료
+- 진행내용:
+  - Naver Search API 결과와 선별 링크 본문을 SQLite에 저장하는 `web_search_cache`, `web_page_cache` 테이블을 추가했다.
+  - 캐시 hit/miss는 저장소가 정규화 검색어, 정규화 URL, TTL, 파싱 성공 여부로 판단하도록 구현했다.
+  - WebSearchAgent가 요청 문구를 기준으로 `allow_cache`, `prefer_fresh`, `bypass_cache` 정책을 정하도록 했다.
+  - 일반 요청은 TTL 내 캐시를 먼저 사용하고, 최신성 높은 요청은 새 조회를 우선하며 실패 시 유효 캐시로 fallback하도록 했다.
+  - 사용자가 새로 검색 또는 캐시 없이 검색을 명시하면 캐시 조회를 건너뛰고 새 결과로 캐시를 갱신하도록 했다.
+  - 기본 TTL은 검색 결과 30분, 페이지 본문 360분으로 설정했다.
+  - 봇 시작 시 만료 캐시를 자동 정리하고, `assistant-admin cleanup --target cache --force`로 만료 캐시를 정리할 수 있게 했다.
+  - 서버 재시작 후에도 캐시가 유지되는지, 만료 캐시가 삭제되는지, WebSearchAgent가 캐시 hit/fallback을 사용하는지 테스트를 추가했다.
+
+## 2026-06-05 - URL 직접 활용 기능 추가
+
+- 작업 이름: 사용자 URL 본문 직접 확인 및 관련 검색 결합
+- 진행상황: 완료
+- 진행내용:
+  - 라우터에 `web_url` intent를 추가해 URL 포함 메시지를 Naver 검색이 아니라 URL 직접 읽기 경로로 분류하도록 했다.
+  - URL만 보낸 경우 본문을 짧게 요약하고 추가 요청사항이 있는지 묻도록 했다.
+  - URL과 함께 요약, 분석, 질문 답변 요청이 있으면 URL 본문만 근거로 응답하도록 했다.
+  - URL과 함께 관련 내용 검색을 명시한 경우 URL 본문을 먼저 읽고 Naver Search API 검색 결과와 선별 본문을 함께 활용하도록 했다.
+  - URL 직접 읽기에도 페이지 본문 캐시를 적용해 같은 URL 반복 요청에서 TTL 내 재fetch를 피하도록 했다.
+  - URL 감지, URL-only 판별, 라우팅, 직접 URL 요약, 캐시 hit, URL+관련 검색 결합 테스트를 추가했다.
+
+## 2026-06-05 - 웹페이지 본문 읽기 지연 방지
+
+- 작업 이름: 웹검색 선별 링크 본문 읽기 outer timeout 적용
+- 진행상황: 완료
+- 진행내용:
+  - `urllib` 내부 timeout만으로는 DNS, TLS, 리다이렉트, 서버 응답 지연 상황에서 메시지 처리 전체가 오래 대기할 수 있는 문제를 확인했다.
+  - WebSearchAgent의 페이지 본문 읽기에 `asyncio.wait_for` 기반 outer timeout을 추가했다.
+  - 페이지 읽기가 `WEB_PAGE_TIMEOUT_SECONDS`를 넘기면 실패한 `PageContent`로 전환하고 다음 처리 단계로 진행하도록 했다.
+  - 여러 선별 링크를 순차로 읽지 않고 병렬로 읽도록 바꿔, 최대 지연 시간이 `페이지 수 x timeout`으로 늘어나지 않게 했다.
+  - 느린 URL reader가 전체 응답을 붙잡지 않고 실패 처리되는 회귀 테스트를 추가했다.
+
+## 2026-06-05 - 공통 실행 컨텍스트 전달 구조 구현
+
+- 작업 이름: 압축 요약과 focused context 기반 에이전트 컨텍스트 전달
+- 진행상황: 완료
+- 진행내용:
+  - `ExecutionContext`를 추가해 압축 요약, 최근 대화, focused context, 라우터 판단 이유와 검색 필요도 정보를 묶도록 했다.
+  - `ROUTER_CONTEXT_MESSAGES`, `AGENT_CONTEXT_MESSAGES`, `FOCUSED_CONTEXT_MAX_CHARS`, `RESPONSE_CONTEXT_MAX_CHARS` 설정을 추가했다.
+  - Discord 봇과 로컬 CLI에서 메시지 처리 시작 시 라우터용 컨텍스트와 실행용 컨텍스트를 생성하도록 했다.
+  - `AgentContext`에 실행 컨텍스트를 추가하고 registry dispatch를 통해 주요 에이전트에 전달하도록 했다.
+  - ConversationAgent는 압축 요약과 최근 대화가 포함된 실행 컨텍스트를 사용할 수 있게 했다.
+  - WebSearchAgent는 focused context와 라우터 판단 정보를 검색 계획 생성에 사용해 후속 질문의 생략된 대상을 복원하도록 했다.
+  - MemoryAgent recall은 focused context를 함께 받아 저장 기억/문서 조회 질문의 후속 맥락을 활용할 수 있게 했다.
+  - 컨텍스트 builder, 후속 질문 검색어 보강, 응답 composer 맥락 제한 테스트를 추가했다.
+
+## 2026-06-05 - 컨텍스트 전달 및 압축 요약 보강
+
+- 작업 이름: 문서 분석 컨텍스트 전달 및 전체 에이전트 응답 후 압축 갱신
+- 진행상황: 완료
+- 진행내용:
+  - DocumentAnalysisAgent가 `ExecutionContext`를 받아 직전 대화 기준, 비교 대상, 분석 관점을 문서 분석 답변 프롬프트에 포함하도록 했다.
+  - 혼합 PDF 시각 페이지 선별 프롬프트에도 관련 대화 맥락을 포함하도록 했다.
+  - Discord 봇은 에이전트 종류와 관계없이 사용자/비서 메시지를 저장한 뒤 압축 요약 필요 여부를 확인하도록 했다.
+  - 로컬 CLI 대화 경로도 같은 압축 요약 정책을 사용하도록 했다.
+  - 압축 기준은 전체 최근 대화 문자 수가 아니라 마지막 요약 이후 새로 쌓인 대화 문자 수로 변경해 반복 요약 비용을 줄였다.
+  - 새 요약을 만들 때 기존 요약과 최근 대화를 함께 입력해 오래된 핵심 맥락이 새 요약에서 누락되지 않도록 했다.
+  - 문서 분석 프롬프트 컨텍스트 포함과 마지막 요약 이후 문자 수 계산 테스트를 추가했다.
+
+## 2026-06-05 - 사용자 기준 다른 위치 맥락 전달 보강
+
+- 작업 이름: DM/채널/스레드 이동 시 같은 사용자 최근 맥락 포함
+- 진행상황: 완료
+- 진행내용:
+  - `ExecutionContext`에 같은 사용자의 다른 대화 위치 최근 맥락 필드를 추가했다.
+  - 라우터, 전문 에이전트, 응답 작성자가 현재 대화 맥락과 별도로 다른 위치 맥락을 참고할 수 있도록 했다.
+  - `USER_CONTEXT_CONVERSATIONS`, `USER_CONTEXT_MAX_CHARS` 설정을 추가해 포함할 다른 위치 수와 총 길이를 제한했다.
+  - 다른 위치 맥락은 현재 대화 위치를 제외하고, 같은 `user_id`의 DM/채널/스레드 최근 요약 또는 최근 메시지 미리보기만 포함한다.
+  - 같은 사용자 다른 위치 맥락 포함, 현재 위치 제외, 다른 사용자 제외 테스트를 추가했다.
+
+## 2026-06-05 - 최근 메모 수정 맥락 개선
+
+- 작업 이름: 방금 저장한 메모 덧붙임 및 예시 기반 수정 처리
+- 진행상황: 완료
+- 진행내용:
+  - `방금 저장한 메모 뒤에 ... 덧붙여줘`, `메모 12에 ... 추가해줘` 같은 표현을 메모 수정 의도로 라우팅하도록 했다.
+  - 메모 수정 파서에 append 전용 추출을 추가해 기존 메모 본문 뒤에 새 내용을 이어 붙일 수 있게 했다.
+  - `그거`, `아까`, `그 메모` 같은 최근 대상 표현도 최근 메모 수정 대상으로 인식하도록 보강했다.
+  - `네가 예를 들어준 내용 그대로 수정해줘`처럼 직전 봇 답변의 예시를 참조하는 표현은 최근 assistant 메시지의 백틱 예시에서 수정 본문을 추출하도록 했다.
+  - 관련 휴리스틱 테스트와 메모 저장소 업데이트 테스트를 추가했다.
+
+## 2026-06-05 - 기상청 예특보 Weather Agent 도입
+
+- 작업 이름: 날씨 예보/특보 조회 및 미세먼지 웹검색 보조
+- 진행상황: 진행 중
+- 진행내용:
+  - `weather` intent와 Weather Agent를 추가해 날씨, 예보, 비, 눈, 우산, 기온, 특보, 미세먼지 요청을 라우팅하도록 했다.
+  - 기상청 API허브 `getVilageFcst`, `getWthrSituation`, `getLandFcst` 호출용 KMA provider를 추가했다.
+  - 사용자별 최근 날씨 지역 저장소와 KMA API 응답 캐시 테이블을 추가했다.
+  - 지역명이 없는 후속 날씨 질문은 같은 사용자 기준 최근 날씨 지역을 재사용하도록 했다.
+  - 미세먼지/대기질 요청은 Weather Agent에서 기존 Web Search Agent를 보조 도구로 호출하도록 했다.
+  - 기본 지역 CSV와 확장 가능한 `KMA_LOCATION_RESOURCE_PATH` 설정을 추가했다.
+  - `assistant-admin import-kma-locations` 명령을 추가해 기상청 동네예보 좌표 엑셀(`nxy.xlsx`)을 Weather Agent 지역 CSV로 변환할 수 있게 했다.
+  - 공식 좌표 엑셀 변환 시 읍면동 alias를 생성하고, 기본 시드와 일치하는 주요 지역은 특보 코드를 보존하도록 했다.
+  - 날씨 요청은 최신 정보/검색 표현이 섞여도 웹검색보다 Weather Agent로 우선 라우팅하도록 조정했다.
+  - 특보 코드가 없는 확장 지역은 특보를 “없음”으로 단정하지 않고 단기예보만 확인했다고 안내하도록 했다.
+  - API 키 누락, 지역 누락, API 실패에 대한 안전한 실패 응답을 추가했다.
+  - Weather Agent 단위 테스트와 라우팅/카탈로그 테스트를 추가했다.

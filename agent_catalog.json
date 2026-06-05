@@ -86,6 +86,35 @@
     "examples": ["이 문서 요약해봐", "이 이미지 내용 읽어줘", "첨부한 파일들 비교해줘", "오늘 남은 OCR 분석 용량 알려줘"]
   },
   {
+    "intent": "weather",
+    "name": "Weather Agent",
+    "purpose": "기상청 예특보 API와 웹검색 보조 도구로 날씨 정보를 답한다.",
+    "description": "사용자가 날씨, 비, 눈, 우산, 기온, 예보, 기상특보를 궁금해하면 기상청 API허브 예특보 API를 조회한다. 지역이 없으면 사용자 기준 최근 날씨 지역을 사용한다. 미세먼지나 대기질처럼 기상청 예특보 범위가 아닌 정보는 가능한 경우 웹검색으로 보조 조회한다.",
+    "examples": ["서울 내일 날씨 알려줘", "오늘 우산 필요해?", "부산 특보 있어?", "미세먼지도 같이 봐줘"],
+    "tools": ["kma_forecast", "kma_weather_alerts", "web_search"]
+  },
+  {
+    "intent": "web_search",
+    "name": "Web Search Agent",
+    "purpose": "Naver Search API로 최신 정보와 명시적 웹검색 요청을 처리한다.",
+    "description": "사용자가 웹, 네이버, 인터넷 검색을 명시하거나 최신/현재/오늘 기준 외부 정보가 필요한 질문을 하면 LLM이 검색 계획을 만들고, query별 검색 결과 10개를 받은 뒤 필요한 링크 최대 5개 본문을 확인해 출처와 함께 답한다.",
+    "examples": ["네이버에서 최신 AI 뉴스 찾아줘", "웹에서 이 라이브러리 최신 버전 확인해줘", "오늘 기준 환율 알려줘", "공식 문서 찾아서 설치 방법 알려줘", "메이플스토리 확률공개표 참고해서 스타포스 기댓값 알려줘"]
+  },
+  {
+    "intent": "web_url",
+    "name": "Web URL Agent",
+    "purpose": "사용자가 보낸 URL을 검색 없이 직접 읽고 요청에 맞게 활용한다.",
+    "description": "메시지에 포함된 공개 웹 URL 본문을 직접 확인해 요약, 분석, 질문 답변을 처리한다. URL만 보낸 경우에는 짧게 요약하고 추가 요청이 있는지 묻는다. 동일 URL은 페이지 캐시를 사용해 반복 fetch를 줄인다.",
+    "examples": ["https://example.com/article", "이 링크 요약해줘 https://example.com/article", "https://example.com/docs 보고 설치 방법 알려줘"]
+  },
+  {
+    "intent": "confirm_web_search",
+    "name": "Router Agent",
+    "purpose": "검색 필요성이 애매한 질문에서 웹검색 진행 여부를 확인한다.",
+    "description": "검색 필요도 점수가 중간 구간이면 바로 검색하지 않고 사용자에게 검색해볼지 먼저 묻는다.",
+    "examples": ["요즘 Next.js 써도 괜찮아?", "이 라이브러리 아직 많이 써?"]
+  },
+  {
     "intent": "reset_context",
     "name": "Utility Agent",
     "purpose": "현재 대화 컨텍스트를 초기화한다.",

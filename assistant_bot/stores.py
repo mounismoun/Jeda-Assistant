@@ -13,11 +13,14 @@ from assistant_bot.models import (
     PendingAttachmentRequest,
     PendingMemoryCapture,
     PendingMemoryDeletion,
+    PendingWebSearchConfirmation,
     ReminderItem,
     TaskItem,
 )
 from assistant_bot.openai_service import OpenAIService
+from assistant_bot.search_provider import SearchResult
 from assistant_bot.text_utils import chunk_text, cosine_similarity
+from assistant_bot.web_page_reader import PageContent, normalize_naver_blog_url
 
 TASK_COLUMNS = """
 id, user_id, guild_id, conversation_id, channel_id, title, status, priority,
@@ -126,6 +129,32 @@ class ConversationStore:
 
     def recent_char_count(self, conversation_id: str, limit: int = 80) -> int:
         return sum(len(row["content"]) for row in self.recent_messages(conversation_id, limit))
+
+    def char_count_since_latest_summary(self, conversation_id: str, limit: int = 80) -> int:
+        summary = self.connection.execute(
+            """
+            SELECT created_at
+            FROM conversation_summaries
+            WHERE conversation_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (conversation_id,),
+        ).fetchone()
+        if summary is None:
+            return self.recent_char_count(conversation_id, limit)
+        rows = self.connection.execute(
+            """
+            SELECT content
+            FROM conversation_messages
+            WHERE conversation_id = ?
+              AND created_at > ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (conversation_id, summary["created_at"], limit),
+        ).fetchall()
+        return sum(len(row["content"]) for row in rows)
 
     def clear_conversation(self, conversation_id: str) -> dict[str, int]:
         message_cursor = self.connection.execute(
@@ -572,6 +601,124 @@ class PendingMemoryCaptureStore:
         return int(cursor.rowcount)
 
 
+class PendingWebSearchConfirmationStore:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.connection = connection
+
+    def add(
+        self,
+        *,
+        scope: ConversationScope,
+        message_id: str,
+        query_text: str,
+        search_need_score: int,
+        search_reason: str,
+    ) -> int:
+        self.resolve_open(scope=scope)
+        cursor = self.connection.execute(
+            """
+            INSERT INTO pending_web_search_confirmations (
+              conversation_id, channel_id, message_id, user_id, guild_id,
+              query_text, search_need_score, search_reason
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                scope.conversation_id,
+                scope.channel_id,
+                message_id,
+                scope.user_id,
+                scope.guild_id,
+                query_text,
+                search_need_score,
+                search_reason,
+            ),
+        )
+        self.connection.commit()
+        return int(cursor.lastrowid)
+
+    def latest(
+        self,
+        *,
+        scope: ConversationScope,
+        ttl_minutes: int | None = None,
+    ) -> PendingWebSearchConfirmation | None:
+        if ttl_minutes is not None:
+            self.resolve_expired(scope=scope, ttl_minutes=ttl_minutes)
+        row = self.connection.execute(
+            """
+            SELECT
+              id, conversation_id, channel_id, message_id, user_id, guild_id,
+              query_text, search_need_score, search_reason, created_at
+            FROM pending_web_search_confirmations
+            WHERE resolved_at IS NULL
+              AND conversation_id = ?
+              AND user_id = ?
+              AND (guild_id IS NULL OR guild_id = ?)
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (scope.conversation_id, scope.user_id, scope.guild_id),
+        ).fetchone()
+        if not row:
+            return None
+        return PendingWebSearchConfirmation(
+            id=int(row["id"]),
+            conversation_id=str(row["conversation_id"]),
+            channel_id=str(row["channel_id"]),
+            message_id=str(row["message_id"]),
+            user_id=str(row["user_id"]),
+            guild_id=str(row["guild_id"]) if row["guild_id"] else None,
+            query_text=str(row["query_text"]),
+            search_need_score=int(row["search_need_score"]),
+            search_reason=str(row["search_reason"]),
+            created_at=str(row["created_at"]),
+        )
+
+    def resolve(self, request_id: int) -> None:
+        self.connection.execute(
+            """
+            UPDATE pending_web_search_confirmations
+            SET resolved_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (request_id,),
+        )
+        self.connection.commit()
+
+    def resolve_open(self, *, scope: ConversationScope) -> int:
+        cursor = self.connection.execute(
+            """
+            UPDATE pending_web_search_confirmations
+            SET resolved_at = CURRENT_TIMESTAMP
+            WHERE resolved_at IS NULL
+              AND conversation_id = ?
+              AND user_id = ?
+              AND (guild_id IS NULL OR guild_id = ?)
+            """,
+            (scope.conversation_id, scope.user_id, scope.guild_id),
+        )
+        self.connection.commit()
+        return int(cursor.rowcount)
+
+    def resolve_expired(self, *, scope: ConversationScope, ttl_minutes: int) -> int:
+        cutoff = datetime.now(UTC) - timedelta(minutes=ttl_minutes)
+        cutoff_text = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+        cursor = self.connection.execute(
+            """
+            UPDATE pending_web_search_confirmations
+            SET resolved_at = CURRENT_TIMESTAMP
+            WHERE resolved_at IS NULL
+              AND conversation_id = ?
+              AND user_id = ?
+              AND (guild_id IS NULL OR guild_id = ?)
+              AND created_at < ?
+            """,
+            (scope.conversation_id, scope.user_id, scope.guild_id, cutoff_text),
+        )
+        self.connection.commit()
+        return int(cursor.rowcount)
+
 class VisionOcrUsageStore:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
@@ -615,6 +762,246 @@ class VisionOcrUsageStore:
             VALUES (?, ?, ?, ?)
             """,
             (user_id, usage_date, bytes_used, source_message_id),
+        )
+        self.connection.commit()
+
+
+class WebCacheStore:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.connection = connection
+
+    def get_search_results(
+        self,
+        *,
+        provider: str,
+        category: str,
+        query: str,
+        enabled: bool,
+    ) -> tuple[str, list[SearchResult]]:
+        if not enabled:
+            return "disabled", []
+        normalized_query = normalize_cache_key(query)
+        row = self.connection.execute(
+            """
+            SELECT result_json, expires_at
+            FROM web_search_cache
+            WHERE provider = ? AND category = ? AND normalized_query = ?
+            """,
+            (provider, category, normalized_query),
+        ).fetchone()
+        if row is None:
+            return "not_found", []
+        if str(row["expires_at"]) <= current_timestamp():
+            return "expired", []
+        try:
+            payload = json.loads(str(row["result_json"]))
+            return "hit", [search_result_from_cache_item(item) for item in payload]
+        except Exception:
+            return "corrupt", []
+
+    def save_search_results(
+        self,
+        *,
+        provider: str,
+        category: str,
+        query: str,
+        results: list[SearchResult],
+        ttl_minutes: int,
+    ) -> None:
+        normalized_query = normalize_cache_key(query)
+        now = current_timestamp()
+        expires_at = timestamp_after_minutes(ttl_minutes)
+        payload = json.dumps([search_result_to_cache_item(result) for result in results], ensure_ascii=False)
+        self.connection.execute(
+            """
+            INSERT INTO web_search_cache (
+              provider, category, normalized_query, result_json, created_at, expires_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(provider, category, normalized_query)
+            DO UPDATE SET
+              result_json = excluded.result_json,
+              created_at = excluded.created_at,
+              expires_at = excluded.expires_at
+            """,
+            (provider, category, normalized_query, payload, now, expires_at),
+        )
+        self.connection.commit()
+
+    def get_page(
+        self,
+        *,
+        url: str,
+        enabled: bool,
+    ) -> tuple[str, PageContent | None]:
+        if not enabled:
+            return "disabled", None
+        normalized_url = normalize_url_cache_key(url)
+        row = self.connection.execute(
+            """
+            SELECT normalized_url, final_url, title, text, success, error, expires_at
+            FROM web_page_cache
+            WHERE normalized_url = ?
+            """,
+            (normalized_url,),
+        ).fetchone()
+        if row is None:
+            return "not_found", None
+        if str(row["expires_at"]) <= current_timestamp():
+            return "expired", None
+        try:
+            return (
+                "hit",
+                PageContent(
+                    url=normalized_url,
+                    final_url=str(row["final_url"]),
+                    title=str(row["title"]),
+                    text=str(row["text"]),
+                    success=bool(int(row["success"])),
+                    error=str(row["error"]),
+                ),
+            )
+        except Exception:
+            return "corrupt", None
+
+    def save_page(self, *, url: str, page: PageContent, ttl_minutes: int) -> None:
+        normalized_url = normalize_url_cache_key(url)
+        now = current_timestamp()
+        expires_at = timestamp_after_minutes(ttl_minutes)
+        self.connection.execute(
+            """
+            INSERT INTO web_page_cache (
+              normalized_url, final_url, title, text, success, error, created_at, expires_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(normalized_url)
+            DO UPDATE SET
+              final_url = excluded.final_url,
+              title = excluded.title,
+              text = excluded.text,
+              success = excluded.success,
+              error = excluded.error,
+              created_at = excluded.created_at,
+              expires_at = excluded.expires_at
+            """,
+            (
+                normalized_url,
+                page.final_url,
+                page.title,
+                page.text,
+                int(page.success),
+                page.error,
+                now,
+                expires_at,
+            ),
+        )
+        self.connection.commit()
+
+    def cleanup_expired(self) -> dict[str, int]:
+        now = current_timestamp()
+        counts: dict[str, int] = {}
+        for table in ("web_search_cache", "web_page_cache"):
+            cursor = self.connection.execute(f"DELETE FROM {table} WHERE expires_at <= ?", (now,))
+            counts[table] = int(cursor.rowcount)
+        self.connection.commit()
+        return counts
+
+
+class WeatherLocationStore:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.connection = connection
+
+    def get_latest(self, *, user_id: str) -> dict[str, object] | None:
+        row = self.connection.execute(
+            """
+            SELECT user_id, location_name, nx, ny, land_reg_id, weather_stn_id, updated_at
+            FROM user_weather_locations
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "user_id": str(row["user_id"]),
+            "location_name": str(row["location_name"]),
+            "nx": int(row["nx"]),
+            "ny": int(row["ny"]),
+            "land_reg_id": str(row["land_reg_id"]) if row["land_reg_id"] else None,
+            "weather_stn_id": str(row["weather_stn_id"]) if row["weather_stn_id"] else None,
+            "updated_at": str(row["updated_at"]),
+        }
+
+    def save_latest(
+        self,
+        *,
+        user_id: str,
+        location_name: str,
+        nx: int,
+        ny: int,
+        land_reg_id: str | None,
+        weather_stn_id: str | None,
+    ) -> None:
+        now = current_timestamp()
+        self.connection.execute(
+            """
+            INSERT INTO user_weather_locations (
+              user_id, location_name, nx, ny, land_reg_id, weather_stn_id, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id)
+            DO UPDATE SET
+              location_name = excluded.location_name,
+              nx = excluded.nx,
+              ny = excluded.ny,
+              land_reg_id = excluded.land_reg_id,
+              weather_stn_id = excluded.weather_stn_id,
+              updated_at = excluded.updated_at
+            """,
+            (user_id, location_name, nx, ny, land_reg_id, weather_stn_id, now),
+        )
+        self.connection.commit()
+
+
+class WeatherCacheStore:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.connection = connection
+
+    def get(self, *, provider: str, cache_key: str, enabled: bool = True) -> tuple[str, dict[str, object] | None]:
+        if not enabled:
+            return "disabled", None
+        row = self.connection.execute(
+            """
+            SELECT response_json, expires_at
+            FROM weather_api_cache
+            WHERE provider = ? AND cache_key = ?
+            """,
+            (provider, normalize_cache_key(cache_key)),
+        ).fetchone()
+        if row is None:
+            return "not_found", None
+        if str(row["expires_at"]) <= current_timestamp():
+            return "expired", None
+        try:
+            payload = json.loads(str(row["response_json"]))
+        except Exception:
+            return "corrupt", None
+        return ("hit", payload) if isinstance(payload, dict) else ("corrupt", None)
+
+    def save(self, *, provider: str, cache_key: str, response: dict[str, object], ttl_minutes: int) -> None:
+        now = current_timestamp()
+        expires_at = timestamp_after_minutes(ttl_minutes)
+        self.connection.execute(
+            """
+            INSERT INTO weather_api_cache (provider, cache_key, response_json, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(cache_key)
+            DO UPDATE SET
+              response_json = excluded.response_json,
+              created_at = excluded.created_at,
+              expires_at = excluded.expires_at
+            """,
+            (provider, normalize_cache_key(cache_key), json.dumps(response, ensure_ascii=False), now, expires_at),
         )
         self.connection.commit()
 
@@ -1939,3 +2326,43 @@ def normalize_document_text(text: str) -> str:
 def document_content_hash(text: str) -> str:
     normalized = normalize_document_text(text)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def normalize_cache_key(value: str) -> str:
+    return " ".join(value.casefold().split())
+
+
+def normalize_url_cache_key(url: str) -> str:
+    from urllib.parse import urlsplit, urlunsplit
+
+    parsed = urlsplit(normalize_naver_blog_url(url.strip()))
+    scheme = parsed.scheme.lower() or "https"
+    netloc = parsed.netloc.lower()
+    path = parsed.path.rstrip("/") or "/"
+    return urlunsplit((scheme, netloc, path, parsed.query, ""))
+
+
+def timestamp_after_minutes(minutes: int) -> str:
+    return (datetime.now(UTC) + timedelta(minutes=max(1, minutes))).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def search_result_to_cache_item(result: SearchResult) -> dict[str, str | None]:
+    return {
+        "title": result.title,
+        "url": result.url,
+        "snippet": result.snippet,
+        "category": result.category,
+        "source": result.source,
+        "published_at": result.published_at,
+    }
+
+
+def search_result_from_cache_item(item: dict[str, object]) -> SearchResult:
+    return SearchResult(
+        title=str(item.get("title", "")),
+        url=str(item.get("url", "")),
+        snippet=str(item.get("snippet", "")),
+        category=str(item.get("category", "webkr")),
+        source=str(item.get("source", "naver")),
+        published_at=str(item["published_at"]) if item.get("published_at") else None,
+    )

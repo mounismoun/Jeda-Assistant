@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from assistant_bot.config import Config
-from assistant_bot.models import ConversationScope
+from assistant_bot.models import ConversationScope, ExecutionContext
 from assistant_bot.operation_result import OperationResult
 from assistant_bot.stores import AgentLogStore, ConversationStore, TaskStore
 from assistant_bot.time_utils import humanize_datetime_text
@@ -60,7 +60,14 @@ class TaskAgent:
         self.conversations = conversations
         self.logs = logs
 
-    def handle(self, *, text: str, scope: ConversationScope, message_id: str | None = None) -> OperationResult | str:
+    def handle(
+        self,
+        *,
+        text: str,
+        scope: ConversationScope,
+        message_id: str | None = None,
+        execution_context: ExecutionContext | None = None,
+    ) -> OperationResult | str:
         self.logs.add(
             conversation_id=scope.conversation_id,
             agent="task",

@@ -118,6 +118,20 @@ class AppDatabase:
               resolved_at TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS pending_web_search_confirmations (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              conversation_id TEXT NOT NULL,
+              channel_id TEXT NOT NULL,
+              message_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              guild_id TEXT,
+              query_text TEXT NOT NULL,
+              search_need_score INTEGER NOT NULL,
+              search_reason TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              resolved_at TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS tasks (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               user_id TEXT NOT NULL,
@@ -156,6 +170,55 @@ class AppDatabase:
               source_message_id TEXT,
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS user_weather_locations (
+              user_id TEXT PRIMARY KEY,
+              location_name TEXT NOT NULL,
+              nx INTEGER NOT NULL,
+              ny INTEGER NOT NULL,
+              land_reg_id TEXT,
+              weather_stn_id TEXT,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS weather_api_cache (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              provider TEXT NOT NULL,
+              cache_key TEXT NOT NULL UNIQUE,
+              response_json TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              expires_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS web_search_cache (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              provider TEXT NOT NULL,
+              category TEXT NOT NULL,
+              normalized_query TEXT NOT NULL,
+              result_json TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              expires_at TEXT NOT NULL,
+              UNIQUE(provider, category, normalized_query)
+            );
+
+            CREATE TABLE IF NOT EXISTS web_page_cache (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              normalized_url TEXT NOT NULL UNIQUE,
+              final_url TEXT NOT NULL,
+              title TEXT NOT NULL,
+              text TEXT NOT NULL,
+              success INTEGER NOT NULL,
+              error TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              expires_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_web_search_cache_expires_at
+              ON web_search_cache(expires_at);
+            CREATE INDEX IF NOT EXISTS idx_web_page_cache_expires_at
+              ON web_page_cache(expires_at);
+            CREATE INDEX IF NOT EXISTS idx_weather_api_cache_expires_at
+              ON weather_api_cache(expires_at);
             """
         )
         self.add_column_if_missing("documents", "content_hash", "TEXT")

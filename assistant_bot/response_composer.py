@@ -4,7 +4,7 @@ import hashlib
 import logging
 
 from assistant_bot.config import Config
-from assistant_bot.models import ConversationScope
+from assistant_bot.models import ConversationScope, ExecutionContext
 from assistant_bot.openai_service import OpenAIService
 from assistant_bot.operation_result import AgentOutput, OperationResult
 from assistant_bot.persona import ASSISTANT_KOREAN_NAME, ASSISTANT_NAME, ASSISTANT_PERSONA
@@ -26,16 +26,22 @@ class ResponseComposer:
         scope: ConversationScope,
         location_label: str,
         conversation_context: str | None = None,
+        execution_context: ExecutionContext | None = None,
     ) -> str:
         operation_result = _coerce_operation_result(raw_response)
         fallback_text = str(operation_result)
         if not fallback_text.strip():
             return fallback_text
+        response_context = (
+            execution_context.for_response(max_chars=self.config.response_context_max_chars)
+            if execution_context is not None
+            else (conversation_context or "")
+        )
         recent_assistant_lines = _recent_assistant_lines(conversation_context or "")
         style_seed = _style_seed(
             user_text=user_text,
             raw_response=operation_result.to_prompt_text(),
-            conversation_context=conversation_context or "",
+            conversation_context=response_context,
         )
         try:
             answer = await self.openai.text_response(
@@ -68,7 +74,7 @@ class ResponseComposer:
                     f"비서 이름: {ASSISTANT_NAME} (한국어 표기: {ASSISTANT_KOREAN_NAME})\n"
                     f"대화 위치: {location_label}\n"
                     f"대화 ID: {scope.conversation_id}\n\n"
-                    f"최근 대화:\n{conversation_context or '(없음)'}\n\n"
+                    f"관련 최근 맥락:\n{response_context or '(없음)'}\n\n"
                     f"최근 봇 답변 중 반복을 피해야 할 표현:\n{recent_assistant_lines or '(없음)'}\n\n"
                     f"표현 변주 힌트: {style_seed}\n\n"
                     f"사용자 메시지:\n{user_text}\n\n"

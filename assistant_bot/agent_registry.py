@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from assistant_bot.capabilities import unsupported_message
-from assistant_bot.models import ConversationScope
+from assistant_bot.models import ConversationScope, ExecutionContext
 from assistant_bot.operation_result import AgentOutput, OperationResult
 
 DEFAULT_AGENT_CATALOG_PATH = Path("agent_catalog.json")
@@ -22,6 +22,7 @@ class AgentContext:
     author_name: str
     location_label: str
     has_attachments: bool = False
+    execution: ExecutionContext = field(default_factory=ExecutionContext)
 
 
 AgentHandler = Callable[[AgentContext], Awaitable[AgentOutput] | AgentOutput]
@@ -140,9 +141,12 @@ def build_agent_registry(
     reminder_agent,
     conversation_agent,
     document_analysis_agent,
+    weather_agent,
+    web_search_agent,
     pending_attachments,
     pending_memory_captures,
     pending_memory_deletions,
+    pending_web_search_confirmations=None,
     pending_confirmation_ttl_minutes: int,
     catalog_path: str | Path = DEFAULT_AGENT_CATALOG_PATH,
 ) -> AgentRegistry:
@@ -156,16 +160,28 @@ def build_agent_registry(
         )
 
     async def recall(context: AgentContext) -> str:
-        return await memory_agent.recall(text=context.text, scope=context.scope)
+        return await memory_agent.recall(
+            text=context.text,
+            scope=context.scope,
+            execution_context=context.execution,
+        )
 
     async def list_memory(context: AgentContext) -> str:
         return await memory_agent.list_memories(text=context.text, scope=context.scope)
 
     async def update_memory(context: AgentContext) -> str:
-        return await memory_agent.update(text=context.text, scope=context.scope)
+        return await memory_agent.update(
+            text=context.text,
+            scope=context.scope,
+            execution_context=context.execution,
+        )
 
     async def delete_memory(context: AgentContext) -> str:
-        return await memory_agent.delete(text=context.text, scope=context.scope)
+        return await memory_agent.delete(
+            text=context.text,
+            scope=context.scope,
+            execution_context=context.execution,
+        )
 
     def restore_memory(context: AgentContext) -> str:
         return memory_agent.restore(text=context.text, scope=context.scope)
@@ -183,6 +199,17 @@ def build_agent_registry(
             + pending_memory_captures.unresolved_count(
                 scope=context.scope,
                 ttl_minutes=pending_confirmation_ttl_minutes,
+            )
+            + (
+                int(
+                    pending_web_search_confirmations.latest(
+                        scope=context.scope,
+                        ttl_minutes=pending_confirmation_ttl_minutes,
+                    )
+                    is not None
+                )
+                if pending_web_search_confirmations is not None
+                else 0
             ),
             pending_deletion_count=pending_memory_deletions.unresolved_count(
                 scope=context.scope,
@@ -201,10 +228,20 @@ def build_agent_registry(
         return utility_agent.reset_context(scope=context.scope, conversations=conversation_agent.conversations)
 
     def manage_task(context: AgentContext) -> str:
-        return task_agent.handle(text=context.text, scope=context.scope, message_id=context.message_id)
+        return task_agent.handle(
+            text=context.text,
+            scope=context.scope,
+            message_id=context.message_id,
+            execution_context=context.execution,
+        )
 
     def manage_reminder(context: AgentContext) -> str:
-        return reminder_agent.handle(text=context.text, scope=context.scope, message_id=context.message_id)
+        return reminder_agent.handle(
+            text=context.text,
+            scope=context.scope,
+            message_id=context.message_id,
+            execution_context=context.execution,
+        )
 
     async def chat(context: AgentContext) -> str:
         return await conversation_agent.chat(
@@ -212,6 +249,7 @@ def build_agent_registry(
             scope=context.scope,
             author_name=context.author_name,
             location_label=context.location_label,
+            execution_context=context.execution,
         )
 
     async def analyze_document(context: AgentContext) -> str:
@@ -220,9 +258,54 @@ def build_agent_registry(
             scope=context.scope,
             message_id=context.message_id or "unknown",
             attachments=[],
+            execution_context=context.execution,
+        )
+
+    async def web_search(context: AgentContext) -> str:
+        return await web_search_agent.search(
+            text=context.text,
+            scope=context.scope,
+            execution_context=context.execution,
+        )
+
+    async def weather(context: AgentContext) -> str:
+        return await weather_agent.handle(
+            text=context.text,
+            scope=context.scope,
+            execution_context=context.execution,
+        )
+
+    async def web_url(context: AgentContext) -> str:
+        return await web_search_agent.read_urls(
+            text=context.text,
+            scope=context.scope,
+            execution_context=context.execution,
+        )
+
+    def confirm_web_search(_: AgentContext) -> str:
+        return OperationResult(
+            agent="registry",
+            intent="confirm_web_search",
+            status="confirm_required",
+            summary="웹검색 확인 필요",
+            fallback_text="정확히 답하려면 웹검색이 필요해 보입니다. 검색해볼까요?",
         )
 
     def cancel_pending(context: AgentContext) -> str:
+        if pending_web_search_confirmations is not None:
+            pending_search = pending_web_search_confirmations.latest(
+                scope=context.scope,
+                ttl_minutes=pending_confirmation_ttl_minutes,
+            )
+            if pending_search is not None:
+                pending_web_search_confirmations.resolve(pending_search.id)
+                return OperationResult(
+                    agent="registry",
+                    intent="cancel_pending",
+                    status="success",
+                    summary="웹검색 확인 대기 작업 취소",
+                    fallback_text="웹검색 요청을 취소했어요.",
+                )
         pending_deletion = pending_memory_deletions.resolve_latest(
             scope=context.scope,
             ttl_minutes=pending_confirmation_ttl_minutes,
@@ -276,6 +359,7 @@ def build_agent_registry(
     handlers: dict[str, AgentHandler] = {
         "cancel_pending": cancel_pending,
         "chat": chat,
+        "confirm_web_search": confirm_web_search,
         "current_time": current_time,
         "daily_briefing": daily_briefing,
         "analyze_document": analyze_document,
@@ -291,6 +375,9 @@ def build_agent_registry(
         "status": status,
         "unsupported": unsupported,
         "update_memory": update_memory,
+        "weather": weather,
+        "web_search": web_search,
+        "web_url": web_url,
     }
 
     for entry in load_agent_catalog(catalog_path):

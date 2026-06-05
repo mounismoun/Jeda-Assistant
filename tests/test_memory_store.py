@@ -9,6 +9,7 @@ from assistant_bot.config import Config
 from assistant_bot.database import AppDatabase
 from assistant_bot.models import ConversationScope
 from assistant_bot.operation_result import OperationResult
+from assistant_bot.search_provider import SearchResult
 from assistant_bot.stores import (
     AgentLogStore,
     ConversationStore,
@@ -16,11 +17,14 @@ from assistant_bot.stores import (
     PendingAttachmentStore,
     PendingMemoryCaptureStore,
     PendingMemoryDeletionStore,
+    PendingWebSearchConfirmationStore,
     ReminderStore,
     TaskStore,
+    WebCacheStore,
     document_content_hash,
 )
 from assistant_bot.time_utils import now_in_timezone
+from assistant_bot.web_page_reader import PageContent
 
 
 class FakeOpenAI:
@@ -49,6 +53,16 @@ class FakeMemoryClassifierOpenAI(FakeOpenAI):
     async def text_response(self, **kwargs) -> str:
         self.text_requests.append(kwargs)
         return self.output
+
+
+class FakeConversationSummaryOpenAI(FakeOpenAI):
+    def __init__(self) -> None:
+        super().__init__()
+        self.text_requests: list[dict[str, object]] = []
+
+    async def text_response(self, **kwargs) -> str:
+        self.text_requests.append(kwargs)
+        return "갱신된 요약"
 
 
 @pytest.fixture
@@ -1625,6 +1639,39 @@ async def test_conversation_agent_includes_current_time_context() -> None:
 
 
 @pytest.mark.anyio
+async def test_conversation_agent_compress_context_preserves_previous_summary() -> None:
+    database = AppDatabase(":memory:")
+    openai = FakeConversationSummaryOpenAI()
+    memories = MemoryStore(database.connection, openai)  # type: ignore[arg-type]
+    conversations = ConversationStore(database.connection)
+    tasks = TaskStore(database.connection)
+    agent = ConversationAgent(
+        config=make_test_config(),
+        openai=openai,  # type: ignore[arg-type]
+        conversations=conversations,
+        memories=memories,
+        tasks=tasks,
+        logs=AgentLogStore(database.connection),
+    )
+    conversation_id = "dm:user-1"
+    conversations.add_summary(conversation_id, "사용자는 대통령 임기 질문을 이어가고 있다.")
+    conversations.add_message(
+        conversation_id=conversation_id,
+        role="user",
+        user_id="user-1",
+        content="임기가 언제까지지?",
+    )
+
+    await agent.compress_context(conversation_id)
+
+    assert openai.text_requests
+    input_text = str(openai.text_requests[0]["input_text"])
+    assert "기존 요약:" in input_text
+    assert "대통령 임기 질문" in input_text
+    assert "최근 대화:" in input_text
+
+
+@pytest.mark.anyio
 async def test_memory_agent_recalls_latest_saved_document() -> None:
     database = AppDatabase(":memory:")
     store = MemoryStore(database.connection, FakeOpenAI())  # type: ignore[arg-type]
@@ -1683,6 +1730,80 @@ async def test_memory_agent_updates_latest_saved_memory() -> None:
     assert first_detail.text == "먼저 저장한 메모"
     assert second_detail is not None
     assert second_detail.text == "나는 저녁 운동을 선호한다"
+
+
+@pytest.mark.anyio
+async def test_memory_agent_appends_to_latest_saved_memory() -> None:
+    database = AppDatabase(":memory:")
+    store = MemoryStore(database.connection, FakeOpenAI())  # type: ignore[arg-type]
+    agent = MemoryAgent(
+        config=make_test_config(),
+        openai=FakeOpenAI(),  # type: ignore[arg-type]
+        memories=store,
+        logs=AgentLogStore(database.connection),
+    )
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+    memory_id = await store.save_text_memory(
+        scope=scope,
+        text="오늘 저녁 뭐먹을지 고민해보기",
+        source_message_id="m1",
+    )
+
+    response = await agent.update(
+        text="방금 저장한 메모 뒤에 내일 저녁도 고민해보기 덧붙여줘",
+        scope=scope,
+    )
+
+    detail = store.get_memory_detail(scope=scope, memory_id=memory_id)
+    assert f"메모 `{memory_id}`" in response
+    assert detail is not None
+    assert detail.text == "오늘 저녁 뭐먹을지 고민해보기 내일 저녁도 고민해보기"
+
+
+@pytest.mark.anyio
+async def test_memory_agent_updates_from_recent_assistant_example() -> None:
+    database = AppDatabase(":memory:")
+    store = MemoryStore(database.connection, FakeOpenAI())  # type: ignore[arg-type]
+    conversations = ConversationStore(database.connection)
+    agent = MemoryAgent(
+        config=make_test_config(),
+        openai=FakeOpenAI(),  # type: ignore[arg-type]
+        memories=store,
+        logs=AgentLogStore(database.connection),
+        conversations=conversations,
+    )
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+    memory_id = await store.save_text_memory(
+        scope=scope,
+        text="오늘 저녁 뭐먹을지 고민해보기",
+        source_message_id="m1",
+    )
+    conversations.add_message(
+        conversation_id=scope.conversation_id,
+        role="assistant",
+        user_id="bot",
+        content=(
+            "예를 들면 `메모 12를 오늘 저녁 뭐먹을지 고민해보기, "
+            "내일 저녁도 고민해보기로 수정해줘`처럼 말해주세요."
+        ),
+    )
+
+    response = await agent.update(text="네가 예를 들어준 내용 그대로 수정해줘", scope=scope)
+
+    detail = store.get_memory_detail(scope=scope, memory_id=memory_id)
+    assert f"메모 `{memory_id}`" in response
+    assert detail is not None
+    assert detail.text == "오늘 저녁 뭐먹을지 고민해보기, 내일 저녁도 고민해보기"
 
 
 @pytest.mark.anyio
@@ -1997,6 +2118,160 @@ def test_pending_memory_capture_store_expires_old_requests() -> None:
 
     assert store.latest(scope=scope, ttl_minutes=10) is None
     assert store.unresolved_count(scope=scope, ttl_minutes=10) == 0
+
+
+def test_pending_web_search_confirmation_store_tracks_latest_request() -> None:
+    database = AppDatabase(":memory:")
+    store = PendingWebSearchConfirmationStore(database.connection)
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+
+    first_id = store.add(
+        scope=scope,
+        message_id="100",
+        query_text="요즘 Next.js 써도 괜찮아?",
+        search_need_score=55,
+        search_reason="현 시점 평가 가능성",
+    )
+    second_id = store.add(
+        scope=scope,
+        message_id="101",
+        query_text="이 라이브러리 아직 많이 써?",
+        search_need_score=60,
+        search_reason="기술 동향 확인 필요",
+    )
+
+    latest = store.latest(scope=scope)
+
+    assert latest is not None
+    assert latest.id == second_id
+    assert latest.query_text == "이 라이브러리 아직 많이 써?"
+    assert latest.search_need_score == 60
+    assert first_id != second_id
+
+    store.resolve(latest.id)
+
+    assert store.latest(scope=scope) is None
+
+
+def test_web_cache_store_persists_search_results_and_pages(tmp_path) -> None:
+    database_path = tmp_path / "assistant.sqlite"
+    database = AppDatabase(str(database_path))
+    store = WebCacheStore(database.connection)
+    result = SearchResult(
+        title="테스트 결과",
+        url="https://example.com/post",
+        snippet="요약",
+        category="webkr",
+        published_at="2026-06-05",
+    )
+    page = PageContent(
+        url="https://blog.naver.com/example/223000000000",
+        final_url="https://m.blog.naver.com/example/223000000000",
+        title="본문",
+        text="본문 내용",
+        success=True,
+    )
+
+    store.save_search_results(
+        provider="naver",
+        category="webkr",
+        query="  테스트   검색 ",
+        results=[result],
+        ttl_minutes=30,
+    )
+    store.save_page(url=page.url, page=page, ttl_minutes=360)
+    database.connection.close()
+
+    reopened = AppDatabase(str(database_path))
+    reopened_store = WebCacheStore(reopened.connection)
+    search_reason, cached_results = reopened_store.get_search_results(
+        provider="naver",
+        category="webkr",
+        query="테스트 검색",
+        enabled=True,
+    )
+    page_reason, cached_page = reopened_store.get_page(
+        url="https://m.blog.naver.com/example/223000000000",
+        enabled=True,
+    )
+
+    assert search_reason == "hit"
+    assert cached_results == [result]
+    assert page_reason == "hit"
+    assert cached_page is not None
+    assert cached_page.text == "본문 내용"
+
+
+def test_web_cache_store_marks_expired_rows_and_cleans_them() -> None:
+    database = AppDatabase(":memory:")
+    store = WebCacheStore(database.connection)
+    store.save_search_results(
+        provider="naver",
+        category="webkr",
+        query="오래된 검색",
+        results=[SearchResult(title="old", url="https://example.com/old", snippet="old", category="webkr")],
+        ttl_minutes=30,
+    )
+    store.save_page(
+        url="https://example.com/old",
+        page=PageContent(
+            url="https://example.com/old",
+            final_url="https://example.com/old",
+            title="old",
+            text="old",
+            success=True,
+        ),
+        ttl_minutes=360,
+    )
+    database.connection.execute("UPDATE web_search_cache SET expires_at = '2000-01-01 00:00:00'")
+    database.connection.execute("UPDATE web_page_cache SET expires_at = '2000-01-01 00:00:00'")
+    database.connection.commit()
+
+    search_status, _ = store.get_search_results(
+        provider="naver",
+        category="webkr",
+        query="오래된 검색",
+        enabled=True,
+    )
+    assert search_status == "expired"
+    assert store.get_page(url="https://example.com/old", enabled=True)[0] == "expired"
+    assert store.cleanup_expired() == {"web_search_cache": 1, "web_page_cache": 1}
+
+
+def test_conversation_store_counts_chars_since_latest_summary() -> None:
+    database = AppDatabase(":memory:")
+    store = ConversationStore(database.connection)
+    conversation_id = "dm:user-1"
+    store.add_message(
+        conversation_id=conversation_id,
+        role="user",
+        user_id="user-1",
+        content="이전 대화" * 20,
+    )
+    store.add_summary(conversation_id, "이전 대화를 요약했다.")
+    store.add_message(
+        conversation_id=conversation_id,
+        role="assistant",
+        user_id="bot",
+        content="새 대화",
+    )
+    database.connection.execute(
+        "UPDATE conversation_messages SET created_at = '2026-06-04 00:00:00' WHERE content LIKE '이전 대화%'"
+    )
+    database.connection.execute(
+        "UPDATE conversation_summaries SET created_at = '2026-06-05 00:00:00'"
+    )
+    database.connection.execute(
+        "UPDATE conversation_messages SET created_at = '2026-06-05 00:00:01' WHERE content = '새 대화'"
+    )
+    database.connection.commit()
+
+    assert store.char_count_since_latest_summary(conversation_id) == len("새 대화")
 
 
 def make_test_config() -> Config:

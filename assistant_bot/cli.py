@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import json
 import os
 import sqlite3
@@ -24,9 +25,10 @@ from assistant_bot.agents import (
     RouterAgent,
     TaskAgent,
     UtilityAgent,
+    WeatherAgent,
+    WebSearchAgent,
     asks_to_delete_all_memories,
     compact_preview,
-    format_conversation_context,
     format_conversation_location,
     format_task_detail,
     format_task_priority,
@@ -38,11 +40,13 @@ from assistant_bot.bot import (
     is_positive_confirmation,
 )
 from assistant_bot.config import Config
+from assistant_bot.context_builder import build_execution_context, build_router_context
 from assistant_bot.database import AppDatabase
 from assistant_bot.file_extractor import extract_local_file_text
 from assistant_bot.models import ConversationScope, RoutingResult
 from assistant_bot.openai_service import OpenAIService
 from assistant_bot.response_composer import ResponseComposer
+from assistant_bot.search_provider import NaverSearchProvider
 from assistant_bot.stores import (
     AgentLogStore,
     ConversationStore,
@@ -50,11 +54,22 @@ from assistant_bot.stores import (
     PendingAttachmentStore,
     PendingMemoryCaptureStore,
     PendingMemoryDeletionStore,
+    PendingWebSearchConfirmationStore,
     ReminderStore,
     TaskStore,
     VisionOcrUsageStore,
+    WeatherCacheStore,
+    WeatherLocationStore,
+    WebCacheStore,
 )
 from assistant_bot.time_utils import now_in_timezone, today_string
+from assistant_bot.weather_provider import (
+    DEFAULT_LOCATION_ROWS,
+    KmaWeatherProvider,
+    WeatherLocationResolver,
+    normalize_location_text,
+)
+from assistant_bot.web_page_reader import WebPageReader
 
 DEFAULT_DATABASE_PATH = "./data/assistant.sqlite"
 REQUIRED_ENV_NAMES = ["DISCORD_TOKEN", "OPENAI_API_KEY"]
@@ -72,9 +87,35 @@ OPTIONAL_ENV_NAMES = [
     "MAX_ATTACHMENT_BYTES",
     "CONTEXT_COMPRESSION_CHARS",
     "RETRIEVAL_LIMIT",
+    "ROUTER_CONTEXT_MESSAGES",
+    "AGENT_CONTEXT_MESSAGES",
+    "FOCUSED_CONTEXT_MAX_CHARS",
+    "RESPONSE_CONTEXT_MAX_CHARS",
+    "USER_CONTEXT_CONVERSATIONS",
+    "USER_CONTEXT_MAX_CHARS",
+    "KMA_API_AUTH_KEY",
+    "KMA_API_TIMEOUT_SECONDS",
+    "KMA_API_CACHE_TTL_MINUTES",
+    "KMA_LOCATION_RESOURCE_PATH",
     "PENDING_CONFIRMATION_TTL_MINUTES",
     "TASK_REMINDER_INTERVAL_MINUTES",
     "TASK_REMINDER_BATCH_SIZE",
+    "WEB_SEARCH_PROVIDER",
+    "NAVER_SEARCH_CLIENT_ID",
+    "NAVER_SEARCH_CLIENT_SECRET",
+    "WEB_SEARCH_MAX_RESULTS",
+    "WEB_SEARCH_TIMEOUT_SECONDS",
+    "WEB_SEARCH_DAILY_LIMIT_PER_USER",
+    "WEB_SEARCH_REQUIRED_THRESHOLD",
+    "WEB_SEARCH_CONFIRM_THRESHOLD",
+    "WEB_SEARCH_READ_TOP_N",
+    "WEB_CACHE_ENABLED",
+    "WEB_SEARCH_CACHE_TTL_MINUTES",
+    "WEB_PAGE_CACHE_TTL_MINUTES",
+    "WEB_CACHE_FALLBACK_ON_ERROR",
+    "WEB_PAGE_TIMEOUT_SECONDS",
+    "WEB_PAGE_MAX_CHARS",
+    "WEB_PAGE_MAX_BYTES",
     "LOG_LEVEL",
     "LOG_FILE",
 ]
@@ -137,7 +178,7 @@ def main() -> None:
     ingest_parser.add_argument(
         "paths",
         nargs="+",
-        help="저장할 로컬 파일 경로. .txt, .md, .pdf, .docx, .xlsx, .csv 지원",
+        help="저장할 로컬 파일 경로. .txt, .md, .pdf, .docx, .xlsx, .csv, .pptx, .hwpx 등 지원",
     )
     ingest_parser.add_argument("--user-id", default="local-user", help="기억을 저장할 사용자 ID")
     ingest_parser.add_argument("--guild-id", help="서버 위치로 저장할 때 사용할 guild ID")
@@ -209,7 +250,7 @@ def main() -> None:
     cleanup_parser.add_argument("--days", type=int, default=30, help="보존할 최근 일수")
     cleanup_parser.add_argument(
         "--target",
-        choices=["all", "conversations", "logs", "pending", "deleted"],
+        choices=["all", "conversations", "logs", "pending", "deleted", "cache"],
         default="all",
         help="정리 대상",
     )
@@ -220,6 +261,20 @@ def main() -> None:
     restore_parser = subparsers.add_parser("restore", help="SQLite 백업 파일로 저장소를 복구한다")
     restore_parser.add_argument("--input", "-i", required=True, help="복구에 사용할 SQLite 백업 파일 경로")
     restore_parser.add_argument("--force", action="store_true", help="확인 없이 현재 저장소를 백업 파일로 교체한다")
+    import_kma_parser = subparsers.add_parser(
+        "import-kma-locations",
+        help="기상청 동네예보 좌표 엑셀을 Weather Agent 지역 CSV로 변환한다",
+    )
+    import_kma_parser.add_argument(
+        "--input",
+        default="resources/nxy.xlsx",
+        help="기상청 동네예보 좌표 엑셀 경로. 기본값: resources/nxy.xlsx",
+    )
+    import_kma_parser.add_argument(
+        "--output",
+        default="resources/kma_locations.csv",
+        help="생성할 지역 CSV 경로. 기본값: resources/kma_locations.csv",
+    )
 
     args = parser.parse_args()
     load_dotenv()
@@ -472,6 +527,181 @@ def main() -> None:
         print(f"복구 전 안전 백업: {safety_backup}")
         raise SystemExit(0)
 
+    if args.command == "import-kma-locations":
+        result = import_kma_locations(Path(args.input), Path(args.output))
+        print("\n".join(result.lines))
+        raise SystemExit(0 if result.ok else 1)
+
+
+def import_kma_locations(input_path: Path, output_path: Path) -> DoctorResult:
+    if not input_path.exists():
+        return DoctorResult(
+            ok=False,
+            lines=[f"기상청 동네예보 좌표 엑셀을 찾을 수 없습니다: {input_path}"],
+        )
+
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return DoctorResult(
+            ok=False,
+            lines=[
+                "openpyxl이 설치되어 있지 않아 엑셀을 읽을 수 없습니다. "
+                "`pip install openpyxl` 후 다시 실행해 주세요."
+            ],
+        )
+
+    try:
+        workbook = load_workbook(input_path, read_only=True, data_only=True)
+    except Exception as error:
+        return DoctorResult(ok=False, lines=[f"기상청 좌표 엑셀을 열 수 없습니다: {error}"])
+
+    try:
+        sheet = workbook.active
+        rows_iter = sheet.iter_rows(values_only=True)
+        header_values = next(rows_iter, None)
+        if header_values is None:
+            return DoctorResult(ok=False, lines=["기상청 좌표 엑셀에 헤더 행이 없습니다."])
+
+        headers = [_cell_text(value) for value in header_values]
+        required_headers = ["1단계", "2단계", "3단계", "격자 X", "격자 Y"]
+        missing_headers = [header for header in required_headers if header not in headers]
+        if missing_headers:
+            return DoctorResult(
+                ok=False,
+                lines=[
+                    "기상청 좌표 엑셀 헤더가 예상 형식과 다릅니다.",
+                    f"- 누락 헤더: {', '.join(missing_headers)}",
+                    "- 필요한 헤더: 1단계, 2단계, 3단계, 격자 X, 격자 Y",
+                ],
+            )
+
+        column = {header: headers.index(header) for header in required_headers}
+        metadata_index = _default_weather_metadata_index()
+        csv_rows: list[dict[str, str]] = []
+        seen: set[tuple[str, str, str]] = set()
+        skipped = 0
+
+        for values in rows_iter:
+            level1 = _cell_text(_row_value(values, column["1단계"]))
+            level2 = _cell_text(_row_value(values, column["2단계"]))
+            level3 = _cell_text(_row_value(values, column["3단계"]))
+            nx = _cell_int_text(_row_value(values, column["격자 X"]))
+            ny = _cell_int_text(_row_value(values, column["격자 Y"]))
+            name_parts = [part for part in (level1, level2, level3) if part]
+            if not name_parts or not nx or not ny:
+                skipped += 1
+                continue
+
+            name = " ".join(name_parts)
+            aliases = _kma_location_aliases(level1, level2, level3)
+            metadata = _match_default_weather_metadata(aliases, metadata_index)
+            key = (normalize_location_text(name), nx, ny)
+            if key in seen:
+                continue
+            seen.add(key)
+            csv_rows.append(
+                {
+                    "name": name,
+                    "alias": "|".join(aliases),
+                    "nx": nx,
+                    "ny": ny,
+                    "land_reg_id": metadata.get("land_reg_id", ""),
+                    "weather_stn_id": metadata.get("weather_stn_id", ""),
+                }
+            )
+    finally:
+        workbook.close()
+
+    if not csv_rows:
+        return DoctorResult(ok=False, lines=["변환 가능한 기상청 좌표 행을 찾지 못했습니다."])
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(
+            file,
+            fieldnames=["name", "alias", "nx", "ny", "land_reg_id", "weather_stn_id"],
+        )
+        writer.writeheader()
+        writer.writerows(sorted(csv_rows, key=lambda row: normalize_location_text(row["name"])))
+
+    lines = [
+        "기상청 동네예보 좌표 CSV 변환 완료",
+        f"- 입력: {input_path}",
+        f"- 출력: {output_path}",
+        f"- 저장 행: {len(csv_rows)}개",
+    ]
+    if skipped:
+        lines.append(f"- 건너뛴 행: {skipped}개")
+    lines.append("- 참고: 특보 구역 코드가 없는 지역은 단기예보만 조회합니다.")
+    return DoctorResult(ok=True, lines=lines)
+
+
+def _row_value(values: tuple[object, ...], index: int) -> object:
+    return values[index] if index < len(values) else None
+
+
+def _cell_text(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _cell_int_text(value: object) -> str:
+    text = _cell_text(value)
+    if not text:
+        return ""
+    try:
+        return str(int(float(text)))
+    except ValueError:
+        return ""
+
+
+def _kma_location_aliases(level1: str, level2: str, level3: str) -> list[str]:
+    aliases: list[str] = []
+    for alias in (
+        level3,
+        " ".join(part for part in (level2, level3) if part),
+        " ".join(part for part in (level1, level2, level3) if part),
+        level2 if not level3 else "",
+        level1 if not level2 and not level3 else "",
+    ):
+        cleaned = alias.strip()
+        if cleaned and cleaned not in aliases:
+            aliases.append(cleaned)
+    return aliases
+
+
+def _default_weather_metadata_index() -> dict[str, dict[str, str]]:
+    index: dict[str, dict[str, str]] = {}
+    for row in DEFAULT_LOCATION_ROWS:
+        metadata = {
+            "land_reg_id": row.get("land_reg_id", ""),
+            "weather_stn_id": row.get("weather_stn_id", ""),
+        }
+        names = [row["name"], *row.get("alias", "").split("|")]
+        for name in names:
+            normalized = normalize_location_text(name)
+            if normalized:
+                index[normalized] = metadata
+    return index
+
+
+def _match_default_weather_metadata(
+    aliases: list[str],
+    metadata_index: Mapping[str, dict[str, str]],
+) -> dict[str, str]:
+    for alias in aliases:
+        normalized = normalize_location_text(alias)
+        if normalized in metadata_index:
+            return metadata_index[normalized]
+    for alias in aliases:
+        normalized = normalize_location_text(alias)
+        for known, metadata in metadata_index.items():
+            if known and known in normalized:
+                return metadata
+    return {}
+
 
 def run_doctor(env: Mapping[str, str]) -> DoctorResult:
     lines = ["환경 설정 점검 결과:"]
@@ -496,24 +726,60 @@ def run_doctor(env: Mapping[str, str]) -> DoctorResult:
         "MAX_ATTACHMENT_BYTES": 10 * 1024 * 1024,
         "CONTEXT_COMPRESSION_CHARS": 20_000,
         "RETRIEVAL_LIMIT": 8,
+        "ROUTER_CONTEXT_MESSAGES": 16,
+        "AGENT_CONTEXT_MESSAGES": 12,
+        "FOCUSED_CONTEXT_MAX_CHARS": 2000,
+        "RESPONSE_CONTEXT_MAX_CHARS": 1200,
+        "USER_CONTEXT_CONVERSATIONS": 3,
+        "USER_CONTEXT_MAX_CHARS": 1000,
         "OPENAI_MAX_RETRIES": 2,
         "PENDING_CONFIRMATION_TTL_MINUTES": 10,
         "TASK_REMINDER_INTERVAL_MINUTES": 1,
         "TASK_REMINDER_BATCH_SIZE": 20,
+        "WEB_SEARCH_MAX_RESULTS": 10,
+        "WEB_SEARCH_DAILY_LIMIT_PER_USER": 50,
+        "WEB_SEARCH_REQUIRED_THRESHOLD": 70,
+        "WEB_SEARCH_CONFIRM_THRESHOLD": 45,
+        "WEB_SEARCH_READ_TOP_N": 5,
+        "WEB_SEARCH_CACHE_TTL_MINUTES": 30,
+        "WEB_PAGE_CACHE_TTL_MINUTES": 360,
+        "WEB_PAGE_MAX_CHARS": 6000,
+        "WEB_PAGE_MAX_BYTES": 1024 * 1024,
     }
     for name, default in numeric_checks.items():
         raw_value = env.get(name, str(default))
         if not raw_value.isdigit() or int(raw_value) <= 0:
             lines.append(f"- {name}: 양의 정수여야 합니다")
             ok = False
+    confirm_raw = env.get("WEB_SEARCH_CONFIRM_THRESHOLD", "45")
+    required_raw = env.get("WEB_SEARCH_REQUIRED_THRESHOLD", "70")
+    if confirm_raw.isdigit() and required_raw.isdigit() and int(confirm_raw) >= int(required_raw):
+        lines.append("- WEB_SEARCH_CONFIRM_THRESHOLD: WEB_SEARCH_REQUIRED_THRESHOLD보다 작아야 합니다")
+        ok = False
 
-    timeout_value = env.get("OPENAI_TIMEOUT_SECONDS", "30")
+    timeout_value = env.get("OPENAI_TIMEOUT_SECONDS", "0")
     try:
-        if float(timeout_value) <= 0:
+        if float(timeout_value) < 0:
             raise ValueError
     except ValueError:
-        lines.append("- OPENAI_TIMEOUT_SECONDS: 양의 숫자여야 합니다")
+        lines.append("- OPENAI_TIMEOUT_SECONDS: 0 이상의 숫자여야 합니다")
         ok = False
+
+    for name in ("WEB_SEARCH_TIMEOUT_SECONDS", "WEB_PAGE_TIMEOUT_SECONDS"):
+        timeout_value = env.get(name, "10")
+        try:
+            if float(timeout_value) <= 0:
+                raise ValueError
+        except ValueError:
+            lines.append(f"- {name}: 양의 숫자여야 합니다")
+            ok = False
+
+    for name in ("WEB_CACHE_ENABLED", "WEB_CACHE_FALLBACK_ON_ERROR"):
+        raw_value = env.get(name)
+        bool_values = {"1", "true", "yes", "y", "on", "0", "false", "no", "n", "off"}
+        if raw_value is not None and raw_value.strip().lower() not in bool_values:
+            lines.append(f"- {name}: true 또는 false 계열 값이어야 합니다")
+            ok = False
 
     log_level = env.get("LOG_LEVEL", "INFO").strip().upper()
     valid_log_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
@@ -2119,19 +2385,22 @@ def cleanup_database(
     connection = database.connection
     cutoff = datetime.now(UTC) - timedelta(days=days)
     cutoff_text = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+    now_text = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
     tables = cleanup_tables_for(target)
     counts: dict[str, int] = {}
     for table_key, where in tables.items():
         table = cleanup_actual_table_name(table_key)
+        cutoff_param = now_text if table_key in web_cache_cleanup_tables() else cutoff_text
         row = connection.execute(
             f"SELECT COUNT(*) AS count FROM {table} WHERE {where}",
-            (cutoff_text,),
+            (cutoff_param,),
         ).fetchone()
         counts[table_key] = int(row["count"])
     if apply:
         for table_key, where in tables.items():
             table = cleanup_actual_table_name(table_key)
-            connection.execute(f"DELETE FROM {table} WHERE {where}", (cutoff_text,))
+            cutoff_param = now_text if table_key in web_cache_cleanup_tables() else cutoff_text
+            connection.execute(f"DELETE FROM {table} WHERE {where}", (cutoff_param,))
         connection.commit()
     return {
         "database_path": database_path,
@@ -2155,6 +2424,8 @@ def cleanup_tables_for(target: str) -> dict[str, str]:
         "deleted_user_memories": "deleted_at IS NOT NULL AND deleted_at < ?",
         "deleted_documents": "deleted_at IS NOT NULL AND deleted_at < ?",
         "deleted_tasks": "deleted_at IS NOT NULL AND deleted_at < ?",
+        "web_search_cache": "expires_at <= ?",
+        "web_page_cache": "expires_at <= ?",
     }
     if target == "all":
         return table_map
@@ -2174,7 +2445,16 @@ def cleanup_tables_for(target: str) -> dict[str, str]:
             "deleted_documents": table_map["deleted_documents"],
             "deleted_tasks": table_map["deleted_tasks"],
         }
+    if target == "cache":
+        return {
+            "web_search_cache": table_map["web_search_cache"],
+            "web_page_cache": table_map["web_page_cache"],
+        }
     raise ValueError(f"알 수 없는 정리 대상입니다: {target}")
+
+
+def web_cache_cleanup_tables() -> set[str]:
+    return {"web_search_cache", "web_page_cache"}
 
 
 def cleanup_actual_table_name(table_key: str) -> str:
@@ -2207,6 +2487,8 @@ def format_cleanup_result(result: dict[str, object]) -> str:
         "deleted_user_memories": "삭제된 메모",
         "deleted_documents": "삭제된 문서",
         "deleted_tasks": "삭제된 할 일",
+        "web_search_cache": "만료된 웹검색 결과 캐시",
+        "web_page_cache": "만료된 웹페이지 본문 캐시",
     }
     for table, count in counts.items():
         lines.append(f"- {labels.get(str(table), str(table))}: {count}개")
@@ -2227,6 +2509,10 @@ def make_preview(text: str, keyword: str, radius: int = 48) -> str:
     prefix = "..." if start > 0 else ""
     suffix = "..." if end < len(compact) else ""
     return f"{prefix}{compact[start:end].strip()}{suffix}"
+
+
+def parse_cli_bool(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def backup_database(database_path: str, output_path: str, *, overwrite: bool = False) -> None:
@@ -2293,7 +2579,7 @@ def load_cli_config(env: Mapping[str, str]) -> Config:
         max_attachment_bytes=int(env.get("MAX_ATTACHMENT_BYTES", str(10 * 1024 * 1024))),
         context_compression_chars=int(env.get("CONTEXT_COMPRESSION_CHARS", "20000")),
         retrieval_limit=int(env.get("RETRIEVAL_LIMIT", "8")),
-        openai_timeout_seconds=float(env.get("OPENAI_TIMEOUT_SECONDS", "30")),
+        openai_timeout_seconds=float(env.get("OPENAI_TIMEOUT_SECONDS", "0")),
         openai_max_retries=int(env.get("OPENAI_MAX_RETRIES", "2")),
         pending_confirmation_ttl_minutes=int(env.get("PENDING_CONFIRMATION_TTL_MINUTES", "10")),
         task_reminder_interval_minutes=int(env.get("TASK_REMINDER_INTERVAL_MINUTES", "1")),
@@ -2301,9 +2587,35 @@ def load_cli_config(env: Mapping[str, str]) -> Config:
         timezone=env.get("ASSISTANT_TIMEZONE", "Asia/Seoul"),
         log_level=env.get("LOG_LEVEL", "INFO"),
         log_file=env.get("LOG_FILE"),
+        router_context_messages=int(env.get("ROUTER_CONTEXT_MESSAGES", "16")),
+        agent_context_messages=int(env.get("AGENT_CONTEXT_MESSAGES", "12")),
+        focused_context_max_chars=int(env.get("FOCUSED_CONTEXT_MAX_CHARS", "2000")),
+        response_context_max_chars=int(env.get("RESPONSE_CONTEXT_MAX_CHARS", "1200")),
+        user_context_conversations=int(env.get("USER_CONTEXT_CONVERSATIONS", "3")),
+        user_context_max_chars=int(env.get("USER_CONTEXT_MAX_CHARS", "1000")),
         vision_ocr_model="gpt-5.4-mini",
         vision_ocr_per_message_bytes=int(env.get("VISION_OCR_PER_MESSAGE_BYTES", str(10 * 1024 * 1024))),
         vision_ocr_daily_bytes=int(env.get("VISION_OCR_DAILY_BYTES", str(50 * 1024 * 1024))),
+        kma_api_auth_key=env.get("KMA_API_AUTH_KEY"),
+        kma_api_timeout_seconds=float(env.get("KMA_API_TIMEOUT_SECONDS", "8")),
+        kma_api_cache_ttl_minutes=int(env.get("KMA_API_CACHE_TTL_MINUTES", "20")),
+        kma_location_resource_path=env.get("KMA_LOCATION_RESOURCE_PATH", "resources/kma_locations.csv"),
+        web_search_provider=env.get("WEB_SEARCH_PROVIDER", "naver"),
+        naver_search_client_id=env.get("NAVER_SEARCH_CLIENT_ID"),
+        naver_search_client_secret=env.get("NAVER_SEARCH_CLIENT_SECRET"),
+        web_search_max_results=int(env.get("WEB_SEARCH_MAX_RESULTS", "10")),
+        web_search_timeout_seconds=float(env.get("WEB_SEARCH_TIMEOUT_SECONDS", "10")),
+        web_search_daily_limit_per_user=int(env.get("WEB_SEARCH_DAILY_LIMIT_PER_USER", "50")),
+        web_search_required_threshold=int(env.get("WEB_SEARCH_REQUIRED_THRESHOLD", "70")),
+        web_search_confirm_threshold=int(env.get("WEB_SEARCH_CONFIRM_THRESHOLD", "45")),
+        web_search_read_top_n=int(env.get("WEB_SEARCH_READ_TOP_N", "5")),
+        web_page_timeout_seconds=float(env.get("WEB_PAGE_TIMEOUT_SECONDS", "8")),
+        web_page_max_chars=int(env.get("WEB_PAGE_MAX_CHARS", "6000")),
+        web_page_max_bytes=int(env.get("WEB_PAGE_MAX_BYTES", str(1024 * 1024))),
+        web_cache_enabled=parse_cli_bool(env.get("WEB_CACHE_ENABLED", "true")),
+        web_search_cache_ttl_minutes=int(env.get("WEB_SEARCH_CACHE_TTL_MINUTES", "30")),
+        web_page_cache_ttl_minutes=int(env.get("WEB_PAGE_CACHE_TTL_MINUTES", "360")),
+        web_cache_fallback_on_error=parse_cli_bool(env.get("WEB_CACHE_FALLBACK_ON_ERROR", "true")),
     )
 
 
@@ -2324,6 +2636,10 @@ async def run_local_text_interaction(
     pending_attachments = PendingAttachmentStore(database.connection)
     pending_memory_captures = PendingMemoryCaptureStore(database.connection)
     pending_memory_deletions = PendingMemoryDeletionStore(database.connection)
+    pending_web_search_confirmations = PendingWebSearchConfirmationStore(database.connection)
+    web_cache = WebCacheStore(database.connection)
+    weather_cache = WeatherCacheStore(database.connection)
+    weather_locations = WeatherLocationStore(database.connection)
     vision_ocr_usage = VisionOcrUsageStore(database.connection)
     tasks = TaskStore(database.connection)
     reminders = ReminderStore(database.connection)
@@ -2359,6 +2675,40 @@ async def run_local_text_interaction(
         usage=vision_ocr_usage,
         logs=logs,
     )
+    web_search_provider = NaverSearchProvider(
+        client_id=config.naver_search_client_id,
+        client_secret=config.naver_search_client_secret,
+        timeout_seconds=config.web_search_timeout_seconds,
+    )
+    web_page_reader = WebPageReader(
+        timeout_seconds=config.web_page_timeout_seconds,
+        max_bytes=config.web_page_max_bytes,
+        max_chars=config.web_page_max_chars,
+    )
+    web_search_agent = WebSearchAgent(
+        config=config,
+        openai=openai,
+        provider=web_search_provider,
+        page_reader=web_page_reader,
+        cache=web_cache,
+        logs=logs,
+    )
+    kma_weather_provider = KmaWeatherProvider(
+        auth_key=config.kma_api_auth_key,
+        timeout_seconds=config.kma_api_timeout_seconds,
+        cache=weather_cache,
+        cache_ttl_minutes=config.kma_api_cache_ttl_minutes,
+        timezone=config.timezone,
+    )
+    weather_agent = WeatherAgent(
+        config=config,
+        openai=openai,
+        provider=kma_weather_provider,
+        locations=WeatherLocationResolver(resource_path=config.kma_location_resource_path),
+        location_store=weather_locations,
+        logs=logs,
+        web_search_agent=web_search_agent,
+    )
     agent_registry = build_agent_registry(
         memory_agent=memory_agent,
         utility_agent=utility_agent,
@@ -2366,9 +2716,12 @@ async def run_local_text_interaction(
         reminder_agent=reminder_agent,
         conversation_agent=conversation_agent,
         document_analysis_agent=document_analysis_agent,
+        weather_agent=weather_agent,
+        web_search_agent=web_search_agent,
         pending_attachments=pending_attachments,
         pending_memory_captures=pending_memory_captures,
         pending_memory_deletions=pending_memory_deletions,
+        pending_web_search_confirmations=pending_web_search_confirmations,
         pending_confirmation_ttl_minutes=config.pending_confirmation_ttl_minutes,
     )
     router = RouterAgent(
@@ -2384,8 +2737,16 @@ async def run_local_text_interaction(
         user_id=user_id,
         guild_id=guild_id,
     )
-    conversation_context = format_conversation_context(
-        conversations.recent_messages(scope.conversation_id, limit=16)
+    conversation_context = build_router_context(
+        config=config,
+        conversations=conversations,
+        scope=scope,
+    )
+    response_execution_context = build_execution_context(
+        config=config,
+        conversations=conversations,
+        scope=scope,
+        user_text=text,
     )
 
     answer = handle_local_pending_memory_deletion(
@@ -2412,6 +2773,13 @@ async def run_local_text_interaction(
             scope=scope,
             conversation_context=conversation_context,
         )
+        execution_context = build_execution_context(
+            config=config,
+            conversations=conversations,
+            scope=scope,
+            user_text=text,
+            route=route,
+        )
         if route.intent == "delete_memory":
             if asks_to_delete_all_memories(text):
                 answer = request_local_memory_deletion_confirmation(
@@ -2429,6 +2797,7 @@ async def run_local_text_interaction(
                         message_id=make_local_message_id(),
                         author_name=author_name,
                         location_label=local_location_label(guild_id),
+                        execution=execution_context,
                     ),
                 )
         else:
@@ -2440,6 +2809,7 @@ async def run_local_text_interaction(
                     message_id=make_local_message_id(),
                     author_name=author_name,
                     location_label=local_location_label(guild_id),
+                    execution=execution_context,
                 ),
             )
             if route.intent == "remember" and answer_result.facts.get("capture_mode") == "next_message":
@@ -2456,6 +2826,7 @@ async def run_local_text_interaction(
         scope=scope,
         location_label=local_location_label(guild_id),
         conversation_context=conversation_context,
+        execution_context=response_execution_context,
     )
 
     conversations.add_message(
@@ -2470,6 +2841,8 @@ async def run_local_text_interaction(
         user_id="assistant-cli",
         content=answer,
     )
+    if conversations.char_count_since_latest_summary(scope.conversation_id) >= config.context_compression_chars:
+        await conversation_agent.compress_context(scope.conversation_id)
     return answer
 
 
@@ -2713,7 +3086,7 @@ def make_cli_utility_config(database_path: str) -> Config:
         max_attachment_bytes=int(os.getenv("MAX_ATTACHMENT_BYTES", str(10 * 1024 * 1024))),
         context_compression_chars=int(os.getenv("CONTEXT_COMPRESSION_CHARS", "20000")),
         retrieval_limit=int(os.getenv("RETRIEVAL_LIMIT", "8")),
-        openai_timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "30")),
+        openai_timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "0")),
         openai_max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "2")),
         pending_confirmation_ttl_minutes=int(os.getenv("PENDING_CONFIRMATION_TTL_MINUTES", "10")),
         task_reminder_interval_minutes=int(os.getenv("TASK_REMINDER_INTERVAL_MINUTES", "1")),
@@ -2721,9 +3094,35 @@ def make_cli_utility_config(database_path: str) -> Config:
         timezone=os.getenv("ASSISTANT_TIMEZONE", "Asia/Seoul"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         log_file=os.getenv("LOG_FILE"),
+        router_context_messages=int(os.getenv("ROUTER_CONTEXT_MESSAGES", "16")),
+        agent_context_messages=int(os.getenv("AGENT_CONTEXT_MESSAGES", "12")),
+        focused_context_max_chars=int(os.getenv("FOCUSED_CONTEXT_MAX_CHARS", "2000")),
+        response_context_max_chars=int(os.getenv("RESPONSE_CONTEXT_MAX_CHARS", "1200")),
+        user_context_conversations=int(os.getenv("USER_CONTEXT_CONVERSATIONS", "3")),
+        user_context_max_chars=int(os.getenv("USER_CONTEXT_MAX_CHARS", "1000")),
         vision_ocr_model="gpt-5.4-mini",
         vision_ocr_per_message_bytes=int(os.getenv("VISION_OCR_PER_MESSAGE_BYTES", str(10 * 1024 * 1024))),
         vision_ocr_daily_bytes=int(os.getenv("VISION_OCR_DAILY_BYTES", str(50 * 1024 * 1024))),
+        kma_api_auth_key=os.getenv("KMA_API_AUTH_KEY"),
+        kma_api_timeout_seconds=float(os.getenv("KMA_API_TIMEOUT_SECONDS", "8")),
+        kma_api_cache_ttl_minutes=int(os.getenv("KMA_API_CACHE_TTL_MINUTES", "20")),
+        kma_location_resource_path=os.getenv("KMA_LOCATION_RESOURCE_PATH", "resources/kma_locations.csv"),
+        web_search_provider=os.getenv("WEB_SEARCH_PROVIDER", "naver"),
+        naver_search_client_id=os.getenv("NAVER_SEARCH_CLIENT_ID"),
+        naver_search_client_secret=os.getenv("NAVER_SEARCH_CLIENT_SECRET"),
+        web_search_max_results=int(os.getenv("WEB_SEARCH_MAX_RESULTS", "10")),
+        web_search_timeout_seconds=float(os.getenv("WEB_SEARCH_TIMEOUT_SECONDS", "10")),
+        web_search_daily_limit_per_user=int(os.getenv("WEB_SEARCH_DAILY_LIMIT_PER_USER", "50")),
+        web_search_required_threshold=int(os.getenv("WEB_SEARCH_REQUIRED_THRESHOLD", "70")),
+        web_search_confirm_threshold=int(os.getenv("WEB_SEARCH_CONFIRM_THRESHOLD", "45")),
+        web_search_read_top_n=int(os.getenv("WEB_SEARCH_READ_TOP_N", "5")),
+        web_page_timeout_seconds=float(os.getenv("WEB_PAGE_TIMEOUT_SECONDS", "8")),
+        web_page_max_chars=int(os.getenv("WEB_PAGE_MAX_CHARS", "6000")),
+        web_page_max_bytes=int(os.getenv("WEB_PAGE_MAX_BYTES", str(1024 * 1024))),
+        web_cache_enabled=parse_cli_bool(os.getenv("WEB_CACHE_ENABLED", "true")),
+        web_search_cache_ttl_minutes=int(os.getenv("WEB_SEARCH_CACHE_TTL_MINUTES", "30")),
+        web_page_cache_ttl_minutes=int(os.getenv("WEB_PAGE_CACHE_TTL_MINUTES", "360")),
+        web_cache_fallback_on_error=parse_cli_bool(os.getenv("WEB_CACHE_FALLBACK_ON_ERROR", "true")),
     )
 
 
@@ -2734,6 +3133,9 @@ def format_route_result(route: RoutingResult) -> str:
             f"- intent: `{route.intent}`",
             f"- confidence: {route.confidence:.2f}",
             f"- reason: {route.reason}",
+            f"- search_need_score: {route.search_need_score}",
+            f"- search_decision: {route.search_decision}",
+            f"- search_reason: {route.search_reason or '-'}",
         ]
     )
 

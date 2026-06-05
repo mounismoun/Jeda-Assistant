@@ -55,6 +55,30 @@ async def test_router_agent_accepts_unsupported_for_unavailable_actions() -> Non
 
 
 @pytest.mark.anyio
+async def test_router_agent_maps_uncertain_search_score_to_confirmation_intent() -> None:
+    openai = FakeRouterOpenAI(
+        '{"intent":"chat","confidence":0.74,"reason":"현 시점 평가",'
+        '"search_need_score":55,"search_decision":"ask_user","search_reason":"기술 선택은 최신 동향 확인이 유용"}'
+    )
+    router = RouterAgent(
+        config=make_config(),
+        openai=openai,  # type: ignore[arg-type]
+        logs=FakeLogs(),  # type: ignore[arg-type]
+        allowed_intents={"chat", "web_search", "confirm_web_search"},
+    )
+
+    route = await router.route(
+        text="요즘 Next.js 써도 괜찮아?",
+        has_attachments=False,
+        scope=make_scope(),
+    )
+
+    assert route.intent == "confirm_web_search"
+    assert route.search_need_score == 55
+    assert route.search_decision == "ask_user"
+
+
+@pytest.mark.anyio
 async def test_router_agent_falls_back_to_heuristic_when_model_fails() -> None:
     router = RouterAgent(
         config=make_config(),

@@ -14,7 +14,7 @@ from assistant_bot.file_extractor import (
     render_pdf_pages_to_png,
     validate_extracted_text,
 )
-from assistant_bot.models import ConversationScope, MemoryDetail, PreparedAttachment
+from assistant_bot.models import ConversationScope, ExecutionContext, MemoryDetail, PreparedAttachment
 from assistant_bot.openai_service import OpenAIService
 from assistant_bot.operation_result import OperationResult
 from assistant_bot.persona import ASSISTANT_PERSONA
@@ -90,6 +90,7 @@ class DocumentAnalysisAgent:
         scope: ConversationScope,
         message_id: str,
         attachments: list[discord.Attachment],
+        execution_context: ExecutionContext | None = None,
     ) -> OperationResult:
         if not attachments:
             return self.quota_status(scope=scope)
@@ -176,7 +177,11 @@ class DocumentAnalysisAgent:
         charged_vision_bytes = 0
         for candidate in pdf_visual_candidates:
             try:
-                selected_images = await self._select_pdf_visual_pages(candidate, user_text=text)
+                selected_images = await self._select_pdf_visual_pages(
+                    candidate,
+                    user_text=text,
+                    execution_context=execution_context,
+                )
                 charged_vision_bytes += candidate.source_size
             except Exception as error:
                 errors.append(f"`{candidate.filename}` 이미지 선별 실패: {error}")
@@ -267,7 +272,7 @@ class DocumentAnalysisAgent:
                 fallback_text="분석할 수 있는 텍스트를 찾지 못했어요.",
             )
 
-        answer = await self._answer(text=text, documents=saved_documents)
+        answer = await self._answer(text=text, documents=saved_documents, execution_context=execution_context)
         self.logs.add(
             conversation_id=scope.conversation_id,
             agent="document_analysis",
@@ -379,8 +384,10 @@ class DocumentAnalysisAgent:
         candidate: PdfVisualCandidate,
         *,
         user_text: str,
+        execution_context: ExecutionContext | None = None,
     ) -> list[tuple[str, bytes]]:
         mode = "broad" if wants_visual_analysis(user_text) else "normal"
+        context = execution_context.for_agent() if execution_context is not None else ""
         response = await self.openai.vision_text_response(
             model=self.config.vision_ocr_model,
             instructions=(
@@ -393,6 +400,7 @@ class DocumentAnalysisAgent:
             prompt=(
                 f"파일명: {candidate.filename}\n"
                 f"선별 모드: {mode}\n"
+                f"관련 대화 맥락:\n{context or '(없음)'}\n\n"
                 f"사용자 요청: {user_text}\n\n"
                 "응답 형식:\n"
                 '{"pages":[{"filename":"페이지 파일명","analyze":true,"reason":"짧은 이유"}]}'
@@ -429,10 +437,17 @@ class DocumentAnalysisAgent:
                 saved.append(detail)
         return saved
 
-    async def _answer(self, *, text: str, documents: list[MemoryDetail]) -> str:
+    async def _answer(
+        self,
+        *,
+        text: str,
+        documents: list[MemoryDetail],
+        execution_context: ExecutionContext | None = None,
+    ) -> str:
         file_summaries = []
         for document in documents:
             file_summaries.append(await self._summarize_document(text=text, document=document))
+        context = execution_context.for_agent() if execution_context is not None else ""
         answer = await self.openai.text_response(
             model=self.config.medium_model,
             instructions=f"""
@@ -444,6 +459,7 @@ class DocumentAnalysisAgent:
 답변 끝에 참고한 문서 ID와 파일명을 짧게 적는다.
 """,
             input_text=(
+                f"관련 대화 맥락:\n{context or '(없음)'}\n\n"
                 f"사용자 요청:\n{text}\n\n"
                 "파일별 분석 재료:\n" + "\n\n".join(file_summaries)
             ),

@@ -1,12 +1,16 @@
+import asyncio
+
 import pytest
 
 from assistant_bot.agents import DocumentAnalysisAgent
 from assistant_bot.bot import (
     AssistantBot,
+    asks_to_delete_document_scope,
     is_memory_capture_cancel,
     is_memory_deletion_confirmation,
     is_negative_confirmation,
     is_positive_confirmation,
+    processing_status_message,
 )
 from assistant_bot.config import Config
 from assistant_bot.models import ConversationScope, RoutingResult
@@ -50,6 +54,41 @@ class FakeDeleteRouter:
         return RoutingResult("delete_memory", 0.99, "ID 기반 기억 삭제 요청")
 
 
+def test_processing_status_message_varies_by_count() -> None:
+    first = processing_status_message(1)
+    second = processing_status_message(2)
+    long_running = processing_status_message(8)
+
+    assert first != second
+    assert "정확히 확인" in first
+    assert "필요한 자료" in second
+    assert "약 2분" in long_running
+
+
+@pytest.mark.anyio
+async def test_processing_updates_edit_existing_message(monkeypatch) -> None:
+    source_message = FakeProgressSourceMessage()
+    stop_event = asyncio.Event()
+    calls = 0
+
+    async def fake_wait_for(awaitable, timeout):
+        nonlocal calls
+        awaitable.close()
+        calls += 1
+        if calls <= 2:
+            raise TimeoutError
+        stop_event.set()
+        return None
+
+    monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
+
+    await AssistantBot.send_processing_updates(object(), source_message, stop_event)  # type: ignore[arg-type]
+
+    assert source_message.reply_count == 1
+    assert source_message.progress_message.edits[0] != source_message.progress_message.initial_content
+    assert source_message.progress_message.edits[-1] == "답변 준비가 끝났습니다."
+
+
 class FakeAttachment:
     def __init__(
         self,
@@ -69,6 +108,26 @@ class FakeAttachment:
 
 class FakeMessage:
     id = 12345
+
+
+class FakeProgressMessage:
+    def __init__(self, content: str) -> None:
+        self.initial_content = content
+        self.edits: list[str] = []
+
+    async def edit(self, *, content: str) -> None:
+        self.edits.append(content)
+
+
+class FakeProgressSourceMessage:
+    def __init__(self) -> None:
+        self.reply_count = 0
+        self.progress_message = FakeProgressMessage("")
+
+    async def reply(self, content: str, **kwargs: object) -> FakeProgressMessage:
+        self.reply_count += 1
+        self.progress_message = FakeProgressMessage(content)
+        return self.progress_message
 
 
 class FakeOriginalMessage:
@@ -156,11 +215,15 @@ def test_memory_deletion_confirmation_requires_destructive_scope() -> None:
     assert is_memory_deletion_confirmation("응, 전부 삭제해")
     assert is_memory_deletion_confirmation("네, 모두 지워줘")
     assert is_memory_deletion_confirmation("yes delete all")
+    assert asks_to_delete_document_scope("파일 관련 기억 전부 삭제해")
     assert not is_memory_deletion_confirmation("응")
     assert not is_memory_deletion_confirmation("ok")
     assert not is_memory_deletion_confirmation("삭제해")
     assert not is_memory_deletion_confirmation("메모 삭제해")
     assert not is_memory_deletion_confirmation("전부 보여줘")
+    assert not is_memory_deletion_confirmation("메모 한개 제외하고 모두 삭제해")
+    assert not is_memory_deletion_confirmation("파일만 전부 삭제해")
+    assert not asks_to_delete_document_scope("메모 관련 기억 전부 삭제해")
 
 
 def test_memory_capture_cancel_helpers() -> None:
@@ -745,5 +808,154 @@ async def test_assistant_bot_confirms_memory_and_document_id_deletion_before_del
         assert confirmed.facts["deleted_count"] == 2
         assert bot.memories.get_memory_detail(scope=scope, memory_id=memory_id) is None
         assert bot.memories.get_document_detail(scope=scope, document_id=document_id) is None
+    finally:
+        await bot.close()
+
+
+@pytest.mark.anyio
+async def test_assistant_bot_file_related_delete_targets_documents_only(tmp_path) -> None:
+    config = Config(
+        discord_token="discord-token",
+        discord_client_id="client-id",
+        openai_api_key="openai-key",
+        router_model="gpt-5.4-mini",
+        easy_model="gpt-5.4-mini",
+        medium_model="gpt-5.4",
+        hard_model="gpt-5.5",
+        embedding_model="text-embedding-3-small",
+        database_path=str(tmp_path / "assistant.sqlite"),
+        max_attachment_bytes=4096,
+        context_compression_chars=20000,
+        retrieval_limit=8,
+        openai_timeout_seconds=30,
+        openai_max_retries=2,
+        pending_confirmation_ttl_minutes=10,
+        task_reminder_interval_minutes=60,
+        task_reminder_batch_size=20,
+        timezone="Asia/Seoul",
+        log_level="INFO",
+        log_file=None,
+    )
+    bot = AssistantBot(config)
+    bot.memories = MemoryStore(bot.database.connection, FakeOpenAI())  # type: ignore[assignment]
+    bot.router = FakeDeleteRouter()  # type: ignore[assignment]
+    scope = ConversationScope(
+        conversation_id="dm:123",
+        channel_id="dm",
+        user_id="123",
+        guild_id=None,
+    )
+
+    try:
+        memory_id = await bot.memories.save_text_memory(
+            scope=scope,
+            text="삭제되면 안 되는 텍스트 메모",
+            source_message_id="m1",
+        )
+        document_id_1, _ = await bot.memories.save_document(
+            scope=scope,
+            filename="file-a.pdf",
+            content_type="application/pdf",
+            text="삭제할 문서 A",
+            source_message_id="d1",
+        )
+        document_id_2, _ = await bot.memories.save_document(
+            scope=scope,
+            filename="file-b.jpg",
+            content_type="image/jpeg",
+            text="삭제할 문서 B",
+            source_message_id="d2",
+        )
+
+        response = await bot.handle_message(
+            message=FakeMessage(),  # type: ignore[arg-type]
+            text="파일 관련 기억 전부 삭제해",
+            attachments=[],
+            scope=scope,
+            author_name="moun",
+            conversation_context="",
+        )
+
+        assert isinstance(response, OperationResult)
+        assert response.status == "confirm_required"
+        assert response.facts["memory_ids"] == []
+        assert response.facts["document_ids"] == [document_id_2, document_id_1]
+        pending = bot.pending_memory_deletions.latest(scope=scope)
+        assert pending is not None
+        assert pending.mode == "targets"
+        assert pending.memory_ids == []
+        assert pending.document_ids == [document_id_2, document_id_1]
+
+        confirmed = bot.handle_pending_memory_deletion_confirmation(text="응", scope=scope)
+
+        assert confirmed is not None
+        assert confirmed.status == "success"
+        assert bot.memories.get_memory_detail(scope=scope, memory_id=memory_id) is not None
+        assert bot.memories.get_document_detail(scope=scope, document_id=document_id_1) is None
+        assert bot.memories.get_document_detail(scope=scope, document_id=document_id_2) is None
+    finally:
+        await bot.close()
+
+
+@pytest.mark.anyio
+async def test_assistant_bot_cancels_pending_delete_when_confirmation_changes_scope(tmp_path) -> None:
+    config = Config(
+        discord_token="discord-token",
+        discord_client_id="client-id",
+        openai_api_key="openai-key",
+        router_model="gpt-5.4-mini",
+        easy_model="gpt-5.4-mini",
+        medium_model="gpt-5.4",
+        hard_model="gpt-5.5",
+        embedding_model="text-embedding-3-small",
+        database_path=str(tmp_path / "assistant.sqlite"),
+        max_attachment_bytes=4096,
+        context_compression_chars=20000,
+        retrieval_limit=8,
+        openai_timeout_seconds=30,
+        openai_max_retries=2,
+        pending_confirmation_ttl_minutes=10,
+        task_reminder_interval_minutes=60,
+        task_reminder_batch_size=20,
+        timezone="Asia/Seoul",
+        log_level="INFO",
+        log_file=None,
+    )
+    bot = AssistantBot(config)
+    bot.memories = MemoryStore(bot.database.connection, FakeOpenAI())  # type: ignore[assignment]
+    scope = ConversationScope(
+        conversation_id="dm:123",
+        channel_id="dm",
+        user_id="123",
+        guild_id=None,
+    )
+
+    try:
+        memory_id = await bot.memories.save_text_memory(
+            scope=scope,
+            text="삭제되면 안 되는 텍스트 메모",
+            source_message_id="m1",
+        )
+        document_id, _ = await bot.memories.save_document(
+            scope=scope,
+            filename="file-a.pdf",
+            content_type="application/pdf",
+            text="삭제되면 안 되는 문서",
+            source_message_id="d1",
+        )
+        pending_result = bot.request_memory_deletion_confirmation(message_id="100", scope=scope)
+
+        assert pending_result.status == "confirm_required"
+        changed = bot.handle_pending_memory_deletion_confirmation(
+            text="메모 한개 제외하고 모두 삭제해",
+            scope=scope,
+        )
+
+        assert changed is not None
+        assert changed.status == "success"
+        assert "취소" in changed.fallback_text
+        assert bot.pending_memory_deletions.latest(scope=scope) is None
+        assert bot.memories.get_memory_detail(scope=scope, memory_id=memory_id) is not None
+        assert bot.memories.get_document_detail(scope=scope, document_id=document_id) is not None
     finally:
         await bot.close()

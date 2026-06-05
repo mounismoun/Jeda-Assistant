@@ -1,6 +1,6 @@
-from __future__ import annotations
-
+import httpx
 import pytest
+from openai import BadRequestError
 
 from assistant_bot.config import Config
 from assistant_bot.openai_service import OpenAIService
@@ -10,6 +10,12 @@ from assistant_bot.tool_calling import ToolSpec
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+def test_openai_service_disables_sdk_timeout() -> None:
+    service = OpenAIService(make_config())
+
+    assert service.client.timeout is None
 
 
 @pytest.mark.anyio
@@ -26,6 +32,48 @@ async def test_text_response_retries_transient_failure() -> None:
 
     assert output == "OK"
     assert fake_client.responses.calls == 2
+
+
+@pytest.mark.anyio
+async def test_text_response_retries_without_temperature_when_model_rejects_parameter() -> None:
+    service = OpenAIService(make_config())
+    fake_client = FakeOpenAIClient(
+        responses=[
+            make_temperature_bad_request(),
+            FakeTextResponse(),
+        ]
+    )
+    service.client = fake_client  # type: ignore[assignment]
+
+    output = await service.text_response(
+        model="gpt-test",
+        instructions="테스트",
+        input_text="입력",
+        temperature=0.2,
+    )
+
+    assert output == "OK"
+    assert fake_client.responses.calls == 2
+    assert "temperature" in fake_client.responses.requests[0]
+    assert "temperature" not in fake_client.responses.requests[1]
+
+
+@pytest.mark.anyio
+async def test_text_response_omits_temperature_for_gpt5_models() -> None:
+    service = OpenAIService(make_config())
+    fake_client = FakeOpenAIClient()
+    service.client = fake_client  # type: ignore[assignment]
+
+    output = await service.text_response(
+        model="gpt-5.4",
+        instructions="테스트",
+        input_text="입력",
+        temperature=0.2,
+    )
+
+    assert output == "OK"
+    assert fake_client.responses.calls == 1
+    assert "temperature" not in fake_client.responses.requests[0]
 
 
 @pytest.mark.anyio
@@ -152,7 +200,10 @@ class FakeResponses:
         if self.calls <= self.failures:
             raise RuntimeError("text failure")
         if self.responses:
-            return self.responses.pop(0)
+            response = self.responses.pop(0)
+            if isinstance(response, Exception):
+                raise response
+            return response
         return FakeTextResponse()
 
 
@@ -190,3 +241,13 @@ class FakeEmbeddings:
 
 class FakeEmbeddingResponse:
     data = [type("EmbeddingData", (), {"embedding": [0.1, 0.2, 0.3]})()]
+
+
+def make_temperature_bad_request() -> BadRequestError:
+    request = httpx.Request("POST", "https://api.openai.test/responses")
+    response = httpx.Response(400, request=request)
+    return BadRequestError(
+        "Error code: 400 - Unsupported parameter: 'temperature' is not supported with this model.",
+        response=response,
+        body={"error": {"param": "temperature"}},
+    )

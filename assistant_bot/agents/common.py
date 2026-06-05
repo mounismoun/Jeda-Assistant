@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from assistant_bot.models import RoutingResult, TaskItem
 from assistant_bot.stores import normalize_task_priority
 from assistant_bot.time_utils import now_in_timezone, resolve_timezone
+
+
+@dataclass(frozen=True)
+class WebSearchNeed:
+    score: int
+    decision: str
+    reason: str
 
 DEFAULT_ALLOWED_INTENTS = {
     "chat",
@@ -21,6 +29,10 @@ DEFAULT_ALLOWED_INTENTS = {
     "delete_memory",
     "restore_memory",
     "analyze_document",
+    "weather",
+    "web_search",
+    "web_url",
+    "confirm_web_search",
     "reset_context",
     "manage_task",
     "manage_reminder",
@@ -42,6 +54,10 @@ DEFAULT_ROUTING_PROMPT_BLOCK = "\n".join(
         "- delete_memory: 저장된 기억이나 문서를 삭제/잊으라고 요청",
         "- restore_memory: 삭제한 기억이나 문서를 복구하거나, 삭제한 기억 목록을 보려는 요청",
         "- analyze_document: 첨부 파일 분석, 요약, OCR, 이미지 내용 읽기, 문서 비교, 비전 OCR 잔여 용량 조회",
+        "- weather: 사용자가 날씨, 예보, 비, 눈, 우산, 기온, 기상특보, 미세먼지/대기질을 묻는 요청",
+        "- web_search: 사용자가 웹/네이버/인터넷 검색을 명시하거나 최신/현재/오늘 기준 외부 정보가 필요한 요청",
+        "- web_url: 사용자가 보낸 웹 URL 본문을 검색 없이 직접 읽고 요약, 분석, 질문 답변을 처리하는 요청",
+        "- confirm_web_search: 검색 필요성이 중간 정도라 사용자에게 웹검색 진행 여부를 먼저 물어야 하는 요청",
         "- reset_context: 현재 대화의 최근 메시지와 압축 요약을 초기화하라는 요청. 장기 기억 삭제가 아님",
         "- manage_task: 할 일 추가, 조회, 완료, 삭제 요청",
         "- manage_reminder: 특정 시각에 사용자 DM으로 알림을 보내 달라는 요청",
@@ -54,6 +70,7 @@ DEFAULT_ROUTING_PROMPT_BLOCK = "\n".join(
 
 def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
     normalized = text.strip().lower()
+    compact = re.sub(r"\s+", "", normalized)
     help_markers = ["도움말", "사용법", "뭘 할 수", "무엇을 할 수", "help", "how to use"]
     status_markers = ["상태", "정상", "status", "health", "설정", "모델 뭐", "어떤 모델"]
     cancel_markers = [
@@ -90,7 +107,19 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
         "remember",
         "save this",
     ]
-    update_markers = ["수정해", "고쳐", "바꿔", "업데이트", "update", "change"]
+    update_markers = [
+        "수정해",
+        "고쳐",
+        "바꿔",
+        "업데이트",
+        "덧붙여",
+        "추가해",
+        "붙여",
+        "update",
+        "change",
+        "append",
+        "add",
+    ]
     delete_markers = ["삭제해", "지워", "잊어", "forget", "delete"]
     restore_markers = ["복구", "되돌려", "되살려", "restore", "undo delete"]
     list_markers = ["목록", "리스트", "뭘 기억", "무엇을 기억", "기억 상태", "저장 상태", "list memories"]
@@ -111,12 +140,63 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
         "analyze",
         "compare",
     ]
+    weather_markers = [
+        "날씨",
+        "예보",
+        "비 와",
+        "비올",
+        "비 올",
+        "눈 와",
+        "눈올",
+        "눈 올",
+        "우산",
+        "기온",
+        "온도",
+        "강수",
+        "특보",
+        "주의보",
+        "경보",
+        "폭염",
+        "한파",
+        "호우",
+        "미세먼지",
+        "초미세먼지",
+        "대기질",
+        "공기질",
+        "weather",
+        "forecast",
+    ]
     quota_markers = ["잔여", "남은", "용량", "쿼터", "quota", "limit"]
 
     if any(marker in normalized for marker in quota_markers) and any(
         marker in normalized for marker in ["이미지", "비전", "ocr", "분석"]
     ):
         return RoutingResult("analyze_document", 0.94, "비전 OCR 잔여 용량 조회 요청 감지")
+    if asks_about_web_search_capability(text):
+        return RoutingResult("help", 0.95, "웹검색 기능 문의 감지")
+    if extract_urls(text):
+        return RoutingResult("web_url", 0.96, "웹 URL 직접 활용 요청 감지")
+    if any(marker in normalized or marker in compact for marker in weather_markers):
+        return RoutingResult("weather", 0.95, "날씨/예특보/대기질 요청 감지")
+    search_need = score_web_search_need(text)
+    if search_need.decision == "required":
+        return RoutingResult(
+            "web_search",
+            0.95,
+            search_need.reason,
+            search_need_score=search_need.score,
+            search_decision=search_need.decision,
+            search_reason=search_need.reason,
+        )
+    if search_need.decision == "ask_user":
+        return RoutingResult(
+            "confirm_web_search",
+            0.82,
+            search_need.reason,
+            search_need_score=search_need.score,
+            search_decision=search_need.decision,
+            search_reason=search_need.reason,
+        )
     if is_reminder_request(text):
         return RoutingResult("manage_reminder", 0.95, "사용자 알림 요청 감지")
     if asks_current_time(text):
@@ -157,7 +237,14 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
         return RoutingResult("chat", 0.95, "첨부만 있어 저장 확인 필요")
     if any(marker in normalized for marker in recall_markers):
         return RoutingResult("recall", 0.78, "저장 정보 회상 가능성 감지")
-    return RoutingResult("chat", 0.7, "일반 대화로 판단")
+    return RoutingResult(
+        "chat",
+        0.7,
+        "일반 대화로 판단",
+        search_need_score=search_need.score,
+        search_decision=search_need.decision,
+        search_reason=search_need.reason,
+    )
 
 
 def asks_current_time(text: str) -> bool:
@@ -187,6 +274,204 @@ def asks_current_time(text: str) -> bool:
     return any(marker in normalized or marker in compact for marker in [*time_markers, *date_markers])
 
 
+def asks_about_web_search_capability(text: str) -> bool:
+    normalized = text.casefold()
+    compact = re.sub(r"\s+", "", normalized)
+    web_markers = ["웹검색", "웹 검색", "네이버 검색", "인터넷 검색", "최신 정보", "web search"]
+    capability_markers = ["할 수", "가능", "기능", "지원", "돼", "되", "있어", "can you", "support"]
+    return any(marker in normalized or marker in compact for marker in web_markers) and any(
+        marker in normalized or marker in compact for marker in capability_markers
+    )
+
+
+def is_web_search_request(text: str) -> bool:
+    return score_web_search_need(text).decision == "required"
+
+
+URL_PATTERN = re.compile(r"https?://[^\s<>()\[\]{}\"']+", flags=re.IGNORECASE)
+
+
+def extract_urls(text: str) -> list[str]:
+    urls: list[str] = []
+    seen: set[str] = set()
+    for match in URL_PATTERN.finditer(text):
+        url = match.group(0).rstrip(".,;:!?，。)")
+        if url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
+def is_url_only_message(text: str) -> bool:
+    cleaned = text.strip()
+    if not cleaned:
+        return False
+    without_urls = URL_PATTERN.sub("", cleaned)
+    without_urls = re.sub(r"[\s.,;:!?，。()]+", "", without_urls)
+    return without_urls == "" and bool(extract_urls(cleaned))
+
+
+def score_web_search_need(text: str) -> WebSearchNeed:
+    normalized = text.casefold()
+    compact = re.sub(r"\s+", "", normalized)
+
+    if _is_internal_search_context(normalized, compact):
+        return WebSearchNeed(0, "not_needed", "저장 기억/문서/할 일 등 내부 검색 맥락")
+
+    explicit_web_markers = [
+        "웹에서",
+        "웹 검색",
+        "웹검색",
+        "네이버에서",
+        "네이버 검색",
+        "인터넷에서",
+        "인터넷 검색",
+        "구글에서",
+        "구글 검색",
+        "검색해서",
+        "검색해줘",
+        "검색해",
+        "출처 찾아",
+        "출처를 찾아",
+        "web search",
+        "search the web",
+    ]
+    freshness_markers = [
+        "최신",
+        "현재",
+        "오늘 기준",
+        "지금 가격",
+        "최근 뉴스",
+        "속보",
+        "최신 버전",
+        "변경사항",
+        "업데이트",
+        "공식 문서",
+        "공식문서",
+        "릴리스",
+        "release",
+        "latest",
+        "current",
+        "today",
+        "news",
+    ]
+    external_subject_markers = [
+        "뉴스",
+        "가격",
+        "환율",
+        "비트코인",
+        "주가",
+        "버전",
+        "라이브러리",
+        "프레임워크",
+        "동향",
+        "문서",
+        "api",
+        "설치",
+        "공식",
+    ]
+    reference_markers = [
+        "공개표",
+        "확률공개",
+        "확률 공개",
+        "확률표",
+        "참고해서",
+        "참고해",
+        "기준으로",
+        "공식 문서",
+        "공식문서",
+        "자료 기준",
+        "표 보고",
+        "출처 기준",
+        "원문 기준",
+    ]
+    volatile_domain_markers = [
+        "메이플스토리",
+        "스타포스",
+        "확률",
+        "게임",
+        "패치",
+        "정책",
+        "요금",
+        "수수료",
+        "가격",
+        "환율",
+        "주가",
+        "비트코인",
+        "설치",
+        "세금",
+        "법",
+        "규정",
+        "api",
+        "sdk",
+        "next.js",
+        "nextjs",
+        "react",
+        "vue",
+        "라이브러리",
+        "프레임워크",
+    ]
+    calculation_markers = ["기댓값", "계산", "산출", "비용", "메소", "확률", "expected"]
+    generic_advice_markers = ["어떻게 생각", "추천", "괜찮아", "써도", "요즘"]
+
+    score = 0
+    reasons: list[str] = []
+
+    if any(marker in normalized or marker in compact for marker in explicit_web_markers):
+        score += 80
+        reasons.append("명시적 웹검색 표현")
+    if any(marker in normalized or marker in compact for marker in freshness_markers) and any(
+        marker in normalized or marker in compact for marker in external_subject_markers
+    ):
+        score += 45
+        reasons.append("최신/현재 외부 정보")
+    if any(marker in normalized or marker in compact for marker in reference_markers):
+        score += 45
+        reasons.append("외부 기준표/문서 참조")
+    if any(marker in normalized or marker in compact for marker in volatile_domain_markers):
+        score += 25
+        reasons.append("변동 가능성이 있는 외부 도메인")
+    if any(marker in normalized or marker in compact for marker in calculation_markers) and any(
+        marker in normalized or marker in compact for marker in reference_markers + volatile_domain_markers
+    ):
+        score += 25
+        reasons.append("외부 기준이 필요한 계산")
+    if any(marker in normalized or marker in compact for marker in generic_advice_markers):
+        score += 30
+        reasons.append("현 시점 평가 가능성")
+    if asks_about_web_search_capability(text):
+        score = 0
+        reasons = ["웹검색 기능 문의"]
+
+    score = max(0, min(score, 100))
+    if score >= 70:
+        decision = "required"
+    elif score >= 45:
+        decision = "ask_user"
+    else:
+        decision = "not_needed"
+    reason = ", ".join(reasons) if reasons else "검색 필요 신호 없음"
+    return WebSearchNeed(score, decision, reason)
+
+
+def _is_internal_search_context(normalized: str, compact: str) -> bool:
+    internal_patterns = [
+        "저장한",
+        "저장된",
+        "기억",
+        "메모",
+        "회의록",
+        "내가최근에",
+        "최근에내가",
+        "최근대화",
+        "대화기준",
+        "말한내용",
+        "할일",
+        "할 일",
+    ]
+    return any(pattern in normalized or pattern in compact for pattern in internal_patterns)
+
+
 def parse_routing_result(output: str, *, allowed_intents: set[str] | None = None) -> RoutingResult:
     try:
         match = re.search(r"\{.*\}", output, flags=re.DOTALL)
@@ -194,10 +479,35 @@ def parse_routing_result(output: str, *, allowed_intents: set[str] | None = None
         intent = data.get("intent", "chat")
         if intent not in (allowed_intents or DEFAULT_ALLOWED_INTENTS):
             intent = "chat"
+        score = int(float(data.get("search_need_score", 0)))
+        score = max(0, min(score, 100))
+        decision = str(data.get("search_decision", "") or "")
+        if decision not in {"required", "ask_user", "not_needed"}:
+            if score >= 70:
+                decision = "required"
+            elif score >= 45:
+                decision = "ask_user"
+            else:
+                decision = "not_needed"
+        if (
+            intent != "web_url"
+            and decision == "required"
+            and "web_search" in (allowed_intents or DEFAULT_ALLOWED_INTENTS)
+        ):
+            intent = "web_search"
+        if (
+            intent != "web_url"
+            and decision == "ask_user"
+            and "confirm_web_search" in (allowed_intents or DEFAULT_ALLOWED_INTENTS)
+        ):
+            intent = "confirm_web_search"
         return RoutingResult(
             intent=intent,
             confidence=float(data.get("confidence", 0.5)),
             reason=str(data.get("reason", "라우터 응답")),
+            search_need_score=score,
+            search_decision=decision,
+            search_reason=str(data.get("search_reason", "")),
         )
     except Exception:
         return RoutingResult("chat", 0.3, "라우터 JSON 파싱 실패")
@@ -314,13 +624,36 @@ def asks_to_delete_latest_memory(text: str) -> bool:
 def asks_to_update_latest_memory(text: str) -> bool:
     normalized = text.casefold()
     compact = re.sub(r"\s+", "", normalized)
-    latest_markers = ["방금", "최근", "마지막", "직전", "latest", "last"]
+    latest_markers = ["방금", "아까", "그거", "그 메모", "최근", "마지막", "직전", "latest", "last"]
     memory_markers = ["저장", "기억", "메모", "memory"]
-    update_markers = ["수정", "고쳐", "바꿔", "변경", "업데이트", "update", "change"]
+    update_markers = [
+        "수정",
+        "고쳐",
+        "바꿔",
+        "변경",
+        "업데이트",
+        "덧붙여",
+        "추가",
+        "붙여",
+        "update",
+        "change",
+        "append",
+        "add",
+    ]
     return (
         any(marker in normalized or marker in compact for marker in latest_markers)
         and any(marker in normalized or marker in compact for marker in memory_markers)
         and any(marker in normalized or marker in compact for marker in update_markers)
+    )
+
+
+def is_append_memory_update(text: str) -> bool:
+    normalized = text.casefold()
+    compact = re.sub(r"\s+", "", normalized)
+    append_markers = ["덧붙여", "추가", "붙여", "뒤에", "끝에", "append", "add"]
+    target_markers = ["메모", "기억", "memory", "방금", "아까", "그거", "최근", "마지막", "직전"]
+    return any(marker in normalized or marker in compact for marker in append_markers) and any(
+        marker in normalized or marker in compact for marker in target_markers
     )
 
 
@@ -386,6 +719,19 @@ def extract_update_text(text: str) -> str:
         r".+?(?:을|를)\s*(?P<value>.+?)\s*(?:로|으로)\s*(?:수정해줘|수정해|바꿔줘|바꿔|고쳐줘|고쳐|업데이트해줘|업데이트해)\.?$",
         r"(?:수정|변경|업데이트)\s*(?:내용)?\s*[:：]\s*(?P<value>.+)$",
         r"(?:to|as)\s+['\"]?(?P<value>.+?)['\"]?\s*(?:update|change)?$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text.strip(), flags=re.IGNORECASE)
+        if match:
+            return match.group("value").strip(" '\"")
+    return ""
+
+
+def extract_append_update_text(text: str) -> str:
+    patterns = [
+        r"(?:메모|기억|memory)\s*#?\d+\s*(?:에|에게|뒤에|끝에)?\s*(?P<value>.+?)\s*(?:덧붙여줘|덧붙여|추가해줘|추가해|붙여줘|붙여|append|add)\.?$",
+        r"(?:방금|아까|최근|마지막|직전).+?(?:저장한\s*)?(?:메모|기억|memory)\s*(?:에|에게|뒤에|끝에)?\s*(?P<value>.+?)\s*(?:덧붙여줘|덧붙여|추가해줘|추가해|붙여줘|붙여|append|add)\.?$",
+        r"(?:그거|그\s*메모)\s*(?:에|에게|뒤에|끝에)?\s*(?P<value>.+?)\s*(?:덧붙여줘|덧붙여|추가해줘|추가해|붙여줘|붙여|append|add)\.?$",
     ]
     for pattern in patterns:
         match = re.search(pattern, text.strip(), flags=re.IGNORECASE)

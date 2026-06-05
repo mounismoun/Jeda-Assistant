@@ -4,7 +4,7 @@ import assistant_bot.agents.document_analysis as document_analysis
 from assistant_bot.agents.document_analysis import DocumentAnalysisAgent
 from assistant_bot.config import Config
 from assistant_bot.database import AppDatabase
-from assistant_bot.models import ConversationScope
+from assistant_bot.models import ConversationScope, ExecutionContext
 from assistant_bot.stores import AgentLogStore, MemoryStore, VisionOcrUsageStore
 
 
@@ -87,6 +87,41 @@ async def test_document_analysis_agent_uses_fixed_vision_model_and_auto_detail(t
         user_id=scope.user_id,
         usage_date="2026-06-05",
     ) == len(b"fake-image-bytes")
+
+
+@pytest.mark.anyio
+async def test_document_analysis_agent_includes_execution_context_in_answer_prompt(tmp_path) -> None:
+    database = AppDatabase(str(tmp_path / "assistant.sqlite"))
+    openai = FakeOpenAI()
+    config = make_config(str(tmp_path / "assistant.sqlite"))
+    scope = make_scope()
+    agent = DocumentAnalysisAgent(
+        config=config,
+        openai=openai,  # type: ignore[arg-type]
+        memories=MemoryStore(database.connection, openai),  # type: ignore[arg-type]
+        usage=VisionOcrUsageStore(database.connection),
+        logs=AgentLogStore(database.connection),
+    )
+    execution_context = ExecutionContext(
+        focused_context="assistant: 직전에는 계약서의 해지 조항을 검토하고 있었다.",
+    )
+
+    result = await agent.analyze(
+        text="같은 기준으로 이 문서도 봐줘",
+        scope=scope,
+        message_id="100",
+        attachments=[
+            FakeAttachment(
+                filename="contract.txt",
+                data="제5조 해지: 위반 시 즉시 해지할 수 있다.".encode(),
+                content_type="text/plain",
+            )  # type: ignore[list-item]
+        ],
+        execution_context=execution_context,
+    )
+
+    assert result.status == "success"
+    assert "직전에는 계약서의 해지 조항" in openai.text_requests[0]["input_text"]
 
 
 @pytest.mark.anyio

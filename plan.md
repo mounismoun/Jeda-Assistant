@@ -37,7 +37,14 @@
 - `.docx` 첨부 파일
 - `.xlsx` 첨부 파일
 - `.csv` 첨부 파일
+- `.pptx` 첨부 파일
+- `.hwpx` 첨부 파일
+- `.json`, `.jsonl`, `.yaml`, `.yml`, `.xml`, `.html`, `.htm`, `.tsv` 구조화 텍스트 파일
+- `.log`, `.text`, `.rst`, `.ini`, `.conf`, `.cfg` 일반 텍스트 파일
+- `.odt`, `.ods` 오픈 문서 파일
 - `.png`, `.jpg`, `.jpeg`, `.webp` 이미지 첨부 파일
+
+구형/전용 포맷인 `.hwp`, `.ppt`, `.xls`, `.doc`, `.pages`, `.key`, `.numbers`는 직접 지원하지 않고, PDF, DOCX, PPTX, HWPX, XLSX, CSV, TXT 등으로 변환하도록 안내한다.
 
 PDF는 먼저 로컬 텍스트 추출을 시도한다. 텍스트를 읽을 수 없는 스캔 PDF는 페이지 이미지를 만들어 비전 OCR로 분석한다.
 텍스트와 이미지가 함께 있는 혼합 PDF는 페이지 이미지를 비전으로 선별하고, 차트/표/그래프/도식처럼 중요한 시각 자료가 있는 페이지만 이미지 분석 결과를 본문 분석에 합친다.
@@ -69,9 +76,11 @@ PDF는 먼저 로컬 텍스트 추출을 시도한다. 텍스트를 읽을 수 �
   - `update_memory`
   - `delete_memory`
   - `restore_memory`
+  - `web_search`
   - `daily_briefing`
   - `reset_context`
   - `manage_task`
+  - `manage_reminder`
   - `analyze_document`
   - `unsupported`
 - 대상 전문 에이전트를 선택한다.
@@ -84,7 +93,13 @@ PDF는 먼저 로컬 텍스트 추출을 시도한다. 텍스트를 읽을 수 �
 - Discord 채널, 스레드, DM, 사용자 기준으로 최근 대화 컨텍스트를 유지한다.
 - 필요할 때 관련 장기 기억을 함께 사용한다.
 - 대화 컨텍스트가 설정한 기준보다 커지면 압축 요약을 생성한다.
+- 압축 요약은 마지막 요약 이후 새로 쌓인 대화가 기준을 넘었을 때 갱신해 불필요한 반복 요약을 막는다.
+- 새 압축 요약은 기존 요약과 최근 대화를 함께 입력으로 사용해 오래된 핵심 맥락을 유지한다.
 - 압축된 대화 요약은 명시적 장기 기억과 별도로 저장한다.
+- 전체 에이전트 실행에는 압축 요약, 최근 대화, focused context를 묶은 실행 컨텍스트를 전달한다.
+- 라우터는 압축 요약과 최근 대화를 보고 intent를 판단하고, 전문 에이전트는 비용 절감을 위해 focused context를 우선 사용한다.
+- 같은 사용자가 다른 DM, 채널, 스레드에서 나눈 최근 맥락은 별도 제한값 안에서 짧게 포함해 위치 이동을 인지한다.
+- focused context는 직전 대화, 후속 질문 대상, 최근 작업 결과를 중심으로 짧게 구성한다.
 
 ### Memory Agent
 
@@ -98,6 +113,30 @@ PDF는 먼저 로컬 텍스트 추출을 시도한다. 텍스트를 읽을 수 �
 - 저장된 텍스트 메모를 ID 또는 관련 키워드 기반으로 수정한다.
 - 사용자가 명확히 전체 삭제를 요청하면 확인을 받은 뒤 사용자 기준 장기 기억과 문서를 모두 삭제한다.
 - "내 운동 관련 기억 삭제해줘" 같은 자연어 삭제 요청을 처리한다.
+
+### Web Search Agent
+
+- 사용자가 웹, 네이버, 인터넷 검색을 명시하면 Naver Search API로 검색한다.
+- 최신, 현재, 오늘 기준, 뉴스, 가격, 공식 문서처럼 외부 최신 정보가 필요한 요청을 처리한다.
+- LLM이 사용자 요청을 검색용 query로 재작성한다.
+- 계산형 질문은 필요한 기준표, 비용, 확률, 규칙을 나눠 최대 4개 query로 검색한다.
+- 각 query는 검색 결과 10개를 받고, LLM 판단으로 전체 결과 중 답변에 필요한 링크 최대 5개 본문을 확인한 뒤 출처 URL을 함께 제공한다.
+- 검색 필요도 70점 이상은 바로 검색하고, 45~69점은 사용자에게 검색해볼지 먼저 묻고, 44점 이하는 일반 답변으로 처리한다.
+- 저장된 기억, 저장 문서, 할 일 검색 요청은 웹검색으로 처리하지 않는다.
+- 공개 HTML 본문 확인만 수행하며 로그인, 폼 제출, 댓글 작성 같은 웹 조작은 하지 않는다.
+- 사용자가 웹 URL을 보내면 검색이 아니라 URL 본문 직접 확인 경로로 처리한다.
+- URL만 보낸 경우에는 본문을 짧게 요약하고 추가 요청사항이 있는지 묻는다.
+- URL과 함께 요약, 분석, 번역, 질문 답변 같은 요청을 보내면 URL 본문만 근거로 요청을 처리한다.
+- URL과 함께 관련 내용 검색을 명시하면 URL 본문을 먼저 확인하고, 필요한 관련 검색을 Naver Search API로 수행해 URL 본문과 검색 자료를 구분해서 함께 사용한다.
+- 검색 결과와 선별 링크 본문은 SQLite 캐시에 저장한다. 최종 답변 자체는 캐시하지 않는다.
+- 캐시 hit/miss는 저장소가 `provider`, `category`, 정규화 검색어 또는 정규화 URL, TTL, JSON 파싱 성공 여부로 기계적으로 판단한다.
+- Web Search Agent는 요청 문구를 기준으로 캐시 정책을 정한다.
+- 일반 정보 요청: TTL 내 캐시를 먼저 사용한다.
+- 최신, 오늘 기준, 뉴스, 주가, 환율, 실시간 요청: 새 조회를 우선하고 실패 시 유효 캐시로 fallback한다.
+- 사용자가 다시 검색, 새로 검색, 캐시 없이 검색을 명시한 요청: 캐시 조회를 건너뛰고 새 조회를 수행한 뒤 캐시를 갱신한다.
+- URL 직접 확인도 페이지 본문 캐시를 사용한다. 같은 URL을 반복해서 활용하면 TTL 내에서는 다시 fetch하지 않는다.
+- 기본 TTL은 검색 결과 30분, 페이지 본문 360분이다.
+- 만료 캐시는 봇 시작 시 자동 정리하고, 운영 CLI에서 `assistant-admin cleanup --target cache --force`로 정리할 수 있다.
 
 ## 모델 선택
 
@@ -164,16 +203,26 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - `OPENAI_MEDIUM_MODEL=gpt-5.4`
 - `OPENAI_HARD_MODEL=gpt-5.5`
 - `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
-- `OPENAI_TIMEOUT_SECONDS=30`
+- `OPENAI_TIMEOUT_SECONDS=0`
 - `OPENAI_MAX_RETRIES=2`
 - `DATABASE_PATH=./data/assistant.sqlite`
 - `ASSISTANT_TIMEZONE=Asia/Seoul`
 - `MAX_ATTACHMENT_BYTES=10485760`
 - `CONTEXT_COMPRESSION_CHARS=20000`
 - `RETRIEVAL_LIMIT=8`
+- `ROUTER_CONTEXT_MESSAGES=16`
+- `AGENT_CONTEXT_MESSAGES=12`
+- `FOCUSED_CONTEXT_MAX_CHARS=2000`
+- `RESPONSE_CONTEXT_MAX_CHARS=1200`
+- `USER_CONTEXT_CONVERSATIONS=3`
+- `USER_CONTEXT_MAX_CHARS=1000`
 - `PENDING_CONFIRMATION_TTL_MINUTES=10`
 - `TASK_REMINDER_INTERVAL_MINUTES=1`
 - `TASK_REMINDER_BATCH_SIZE=20`
+- `WEB_CACHE_ENABLED=true`
+- `WEB_SEARCH_CACHE_TTL_MINUTES=30`
+- `WEB_PAGE_CACHE_TTL_MINUTES=360`
+- `WEB_CACHE_FALLBACK_ON_ERROR=true`
 - `LOG_LEVEL=INFO`
 - `LOG_FILE=./data/assistant.log`
 
@@ -205,6 +254,17 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - 동일한 텍스트 메모는 중복 저장하지 않고 기존 메모 ID와 저장 위치를 안내하도록 구현했다.
 - 동일한 문서 내용은 `content_hash`로 중복 저장을 방지하고 기존 문서 ID와 저장 위치를 안내하도록 구현했다.
 - 자연어 기반 기억 목록 조회와 기억 상태 확인을 구현했다.
+- Naver Search API 기반 웹검색 에이전트, 검색 필요도 점수화, 검색 확인 대기, 다중 검색어 생성, 선별 링크 본문 확인을 구현했다.
+- 웹검색 결과 캐시와 페이지 본문 캐시를 SQLite에 구현했다.
+- 캐시는 서버 재시작 후에도 유지되며, 만료된 항목은 봇 시작 시와 운영 CLI 정리 명령으로 삭제된다.
+- 사용자가 보낸 URL을 검색 없이 직접 읽고, URL만 보낸 경우 짧게 요약한 뒤 추가 요청을 묻는 흐름을 구현했다.
+- URL 요청에 관련 검색 요구가 함께 있으면 URL 본문과 Naver 검색 자료를 함께 활용하도록 구현했다.
+- 라우터와 전문 에이전트가 공통 실행 컨텍스트를 전달받도록 구현했다.
+- 실행 컨텍스트는 압축 요약, 최근 대화, focused context, 라우터 판단 이유와 검색 필요도 정보를 포함한다.
+- 웹검색 검색 계획 생성은 focused context를 사용해 `임기가 언제까지지?` 같은 후속 질문의 생략된 대상을 복원한다.
+- 문서 분석 에이전트도 focused context를 받아 직전 대화의 기준, 비교 대상, 분석 관점을 문서 분석 프롬프트에 반영하도록 구현했다.
+- 대화 압축은 대화 에이전트 응답에만 의존하지 않고 전체 메시지 처리 후 마지막 요약 이후 누적 문자 수를 기준으로 갱신하도록 구현했다.
+- 실행 컨텍스트에 같은 사용자의 다른 대화 위치 최근 맥락을 포함해 DM에서 하던 이야기를 서버/스레드에서 이어갈 때도 위치 이동을 인지하도록 구현했다.
 - `방금 말한 거 기억해줘`, `그거 기억해줘`처럼 직전 사용자 발화를 장기 기억으로 저장하도록 구현했다.
 - 자연어 기반 도움말과 봇 상태 확인을 구현했다.
 - `오늘 브리핑 해줘`로 오늘까지 할 일, 열린/완료 작업 수, 최근 기억, 최근 대화 위치를 한 번에 보여주도록 구현했다.
@@ -247,9 +307,10 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - `assistant-admin undelete`로 삭제된 메모와 문서를 user_id와 ID 기준으로 복구하도록 구현했다.
 - `assistant-admin export`로 저장된 메모, 문서, 할 일을 전체 또는 user_id 기준으로 JSON 내보내도록 구현했다.
 - `assistant-admin search`로 저장된 메모, 문서, 할 일을 전체 또는 user_id 기준으로 로컬 SQLite에서 키워드 검색하도록 구현했다.
-- `assistant-admin ingest`로 로컬 `.txt`, `.md`, `.pdf` 파일을 Discord 없이 사용자 장기 기억 문서로 저장하도록 구현했다.
+- `assistant-admin ingest`로 로컬 `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv` 파일을 Discord 없이 사용자 장기 기억 문서로 저장하도록 구현했다.
 - `Document Analysis Agent`를 분리해 첨부 파일 요약, 질문 답변, OCR, 이미지 분석, 비전 OCR 잔여 용량 조회를 처리하도록 구현했다.
 - `.docx`, `.xlsx`, `.csv` 로컬 텍스트 추출을 추가하고, `.png`, `.jpg`, `.jpeg`, `.webp` 이미지와 스캔 PDF는 `gpt-5.4-mini` 비전 OCR로 분석하도록 구현했다.
+- `.pptx`, `.hwpx`, `.json`, `.jsonl`, `.yaml`, `.yml`, `.xml`, `.html`, `.htm`, `.tsv`, `.odt`, `.ods` 등 안정 포맷 텍스트 추출을 추가했다.
 - 비전 OCR detail은 `auto`로 고정하고, 1회 10MB와 사용자별 하루 50MB 제한을 `vision_ocr_usage` 테이블로 추적하도록 구현했다.
 - 텍스트와 이미지가 함께 있는 PDF는 이미지 리소스가 있을 때 페이지 단위 비전 선별을 수행하고, 중요한 시각 자료가 있는 페이지만 이미지 분석을 추가하도록 구현했다.
 - `assistant-admin route`로 OpenAI 호출 없이 휴리스틱 fallback intent를 미리 확인하도록 구현했다.

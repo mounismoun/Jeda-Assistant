@@ -4,7 +4,7 @@ from assistant_bot.agent_toolkits import build_conversation_read_tools
 from assistant_bot.capabilities import capability_prompt_block
 from assistant_bot.config import Config
 from assistant_bot.model_selector import choose_model
-from assistant_bot.models import ConversationScope
+from assistant_bot.models import ConversationScope, ExecutionContext
 from assistant_bot.openai_service import OpenAIService
 from assistant_bot.persona import ASSISTANT_KOREAN_NAME, ASSISTANT_NAME, ASSISTANT_PERSONA
 from assistant_bot.stores import AgentLogStore, ConversationStore, MemoryStore, TaskStore
@@ -38,18 +38,22 @@ class ConversationAgent:
         scope: ConversationScope,
         author_name: str,
         location_label: str,
+        execution_context: ExecutionContext | None = None,
     ) -> str:
         recent = self.conversations.recent_messages(scope.conversation_id)
         summary = self.conversations.latest_summary(scope.conversation_id)
         conversation_context = format_conversation_context(recent)
-        context = "\n\n".join(
-            part
-            for part in [
-                f"이전 요약:\n{summary}" if summary else "",
-                f"최근 대화:\n{conversation_context}" if conversation_context else "",
-            ]
-            if part
-        )
+        if execution_context is not None and (execution_context.latest_summary or execution_context.recent_context):
+            context = execution_context.for_router()
+        else:
+            context = "\n\n".join(
+                part
+                for part in [
+                    f"이전 요약:\n{summary}" if summary else "",
+                    f"최근 대화:\n{conversation_context}" if conversation_context else "",
+                ]
+                if part
+            )
         choice = choose_model(
             self.config,
             text,
@@ -100,7 +104,7 @@ class ConversationAgent:
             temperature=0.4,
         )
 
-        recent_chars = self.conversations.recent_char_count(scope.conversation_id)
+        recent_chars = self.conversations.char_count_since_latest_summary(scope.conversation_id)
         if recent_chars >= self.config.context_compression_chars:
             await self.compress_context(scope.conversation_id)
 
@@ -111,10 +115,22 @@ class ConversationAgent:
         context = format_conversation_context(recent)
         if not context:
             return
+        previous_summary = self.conversations.latest_summary(conversation_id)
+        input_text = "\n\n".join(
+            part
+            for part in [
+                f"기존 요약:\n{previous_summary}" if previous_summary else "",
+                f"최근 대화:\n{context}",
+            ]
+            if part
+        )
         summary = await self.openai.text_response(
             model=self.config.easy_model,
-            instructions="대화의 핵심 맥락, 사용자 선호, 미해결 작업만 짧게 한글로 요약한다.",
-            input_text=context,
+            instructions=(
+                "기존 요약이 있으면 유지할 핵심 맥락을 보존하면서 최근 대화를 반영해 갱신한다. "
+                "사용자 선호, 미해결 작업, 후속 질문에 필요한 지시 대상과 결정 사항만 짧게 한글로 요약한다."
+            ),
+            input_text=input_text,
             temperature=0.1,
         )
         self.conversations.add_summary(conversation_id, summary)

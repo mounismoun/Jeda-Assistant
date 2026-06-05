@@ -9,7 +9,7 @@ Discord에서 멘션, 답글, DM으로 대화하는 개인 비서다. 사용자�
 - 명시적 요청이 있을 때만 장기 기억 저장
 - 같은 사용자의 장기 기억은 DM, 서버, 스레드 어디서든 유지
 - 답변과 상태 확인에서 현재 대화 위치 인지
-- 텍스트 메모, `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv` 첨부 저장
+- 텍스트 메모, `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv`, `.pptx`, `.hwpx` 등 안정 포맷 첨부 저장
 - 이미지, 스캔 PDF, 중요 시각 자료가 포함된 혼합 PDF를 `gpt-5.4-mini` 비전 OCR로 분석
 - 비전 OCR은 이미지 detail `auto`, 1회 10MB, 사용자별 하루 50MB 제한
 - UTF-8이 아니거나 의미 있는 텍스트가 없는 첨부 저장 방지
@@ -19,6 +19,9 @@ Discord에서 멘션, 답글, DM으로 대화하는 개인 비서다. 사용자�
 - embedding 기반 의미 검색
 - 자연어 기억 목록 조회와 상태 확인
 - 자연어 도움말과 봇 상태 확인
+- 기상청 API허브 예특보 API 기반 날씨 예보, 기온, 강수, 특보 조회와 사용자별 최근 날씨 지역 기억
+- 미세먼지와 대기질처럼 기상청 예특보 범위 밖의 정보는 가능한 경우 웹검색으로 보조 조회
+- Naver Search API 기반 웹검색, LLM 검색 계획 생성, 선별 링크 본문 확인 후 답변
 - 오늘 브리핑으로 오늘까지 할 일, 최근 기억, 최근 대화 위치 확인
 - 현재 대화 맥락 초기화
 - 자연어 기반 사용자별 할 일 추가, 중복 방지, 상세 조회, 전체/오늘 목록 조회, 최근 대화 추출, 제목/우선순위 수정, 완료, 완료 취소, 미루기, 삭제
@@ -58,7 +61,51 @@ DISCORD_TOKEN=your_discord_bot_token
 OPENAI_API_KEY=your_openai_api_key
 ```
 
-OpenAI 호출은 기본적으로 30초 timeout과 2회 재시도를 사용한다. 필요하면 `.env`에서 `OPENAI_TIMEOUT_SECONDS`, `OPENAI_MAX_RETRIES`를 조정한다.
+웹검색을 사용하려면 Naver Search API 키를 `.env`에 추가한다.
+
+```bash
+WEB_SEARCH_PROVIDER=naver
+NAVER_SEARCH_CLIENT_ID=your_naver_search_client_id
+NAVER_SEARCH_CLIENT_SECRET=your_naver_search_client_secret
+WEB_SEARCH_MAX_RESULTS=10
+WEB_SEARCH_TIMEOUT_SECONDS=10
+WEB_SEARCH_DAILY_LIMIT_PER_USER=50
+WEB_SEARCH_REQUIRED_THRESHOLD=70
+WEB_SEARCH_CONFIRM_THRESHOLD=45
+WEB_SEARCH_READ_TOP_N=5
+WEB_CACHE_ENABLED=true
+WEB_SEARCH_CACHE_TTL_MINUTES=30
+WEB_PAGE_CACHE_TTL_MINUTES=360
+WEB_CACHE_FALLBACK_ON_ERROR=true
+WEB_PAGE_TIMEOUT_SECONDS=8
+WEB_PAGE_MAX_CHARS=6000
+WEB_PAGE_MAX_BYTES=1048576
+```
+
+날씨 조회를 사용하려면 기상청 API허브 인증키를 `.env`에 추가한다.
+
+```bash
+KMA_API_AUTH_KEY=your_kma_apihub_auth_key
+KMA_API_TIMEOUT_SECONDS=8
+KMA_API_CACHE_TTL_MINUTES=20
+KMA_LOCATION_RESOURCE_PATH=resources/kma_locations.csv
+```
+
+지역 매핑은 `KMA_LOCATION_RESOURCE_PATH`의 CSV를 사용한다. 기본 파일은 주요 지역 시드이며, 기상청 동네예보 좌표 참고자료 기반 전국 읍면동 CSV를 같은 헤더로 확장하면 더 넓은 지역 요청을 처리할 수 있다. 공식 동네예보 좌표 엑셀을 `resources/nxy.xlsx`에 둔 뒤 아래 명령으로 변환할 수 있다.
+
+```bash
+assistant-admin import-kma-locations --input resources/nxy.xlsx --output resources/kma_locations.csv
+```
+
+변환기는 엑셀의 `1단계`, `2단계`, `3단계`, `격자 X`, `격자 Y` 컬럼을 읽는다. 기본 시드와 일치하는 주요 지역은 특보 코드도 보존하고, 특보 코드가 없는 읍면동은 단기예보만 조회한다.
+
+웹검색 캐시는 최종 답변이 아니라 Naver Search API 결과와 선별 링크 본문만 SQLite에 저장한다. 기본 TTL은 검색 결과 30분, 페이지 본문 360분이다. 최신성 높은 요청은 먼저 새로 조회하고, API나 페이지 읽기가 실패했을 때만 유효한 캐시를 fallback으로 쓴다. 만료 캐시는 봇 시작 시 자동 정리되며 `assistant-admin cleanup --target cache --force`로도 정리할 수 있다.
+
+사용자가 URL을 보내면 Naver 검색을 거치지 않고 해당 URL 본문을 직접 확인한다. URL만 보낸 경우에는 짧게 요약하고 추가 요청이 있는지 묻는다. `이 URL 내용과 관련 내용도 검색해줘 https://example.com/article`처럼 관련 검색을 명시하면 URL 본문과 Naver 검색 자료를 함께 사용한다. URL 본문도 페이지 캐시에 저장되므로 같은 URL을 반복해서 사용할 때 TTL 내에서는 다시 fetch하지 않는다.
+
+OpenAI 호출은 정확한 답변을 위해 SDK timeout 없이 끝까지 기다린다. 처리가 길어지면 Discord 채팅창에 진행 메시지 하나를 보내고, 15초마다 같은 메시지를 수정해 상태를 갱신한다. `OPENAI_TIMEOUT_SECONDS=0`은 timeout 비활성화를 의미하며, 재시도 횟수는 `.env`의 `OPENAI_MAX_RETRIES`로 조정한다.
+
+컨텍스트 관리는 압축 요약과 최근 대화를 함께 사용하되, 단계별로 필요한 만큼만 전달한다. `ROUTER_CONTEXT_MESSAGES`는 라우터가 볼 최근 메시지 수, `AGENT_CONTEXT_MESSAGES`는 전문 에이전트용 최근 메시지 수다. `FOCUSED_CONTEXT_MAX_CHARS`는 후속 질문 해소용 관련 맥락 최대 길이, `RESPONSE_CONTEXT_MAX_CHARS`는 최종 답변 작성자가 참고할 맥락 최대 길이다. `USER_CONTEXT_CONVERSATIONS`와 `USER_CONTEXT_MAX_CHARS`는 같은 사용자가 다른 DM/채널/스레드에서 나눈 최근 맥락을 얼마나 포함할지 제한한다. 압축 요약은 마지막 요약 이후 새로 쌓인 대화가 `CONTEXT_COMPRESSION_CHARS`를 넘었을 때 기존 요약과 최근 대화를 함께 사용해 갱신된다.
 
 할 일 날짜 계산은 기본적으로 `Asia/Seoul` 기준이다. 필요하면 `.env`에서 `ASSISTANT_TIMEZONE`을 IANA 타임존 이름으로 조정한다.
 
@@ -156,7 +203,7 @@ assistant-admin search 운동
 assistant-admin search 운동 --user-id 123456789
 ```
 
-Discord에 올리지 않고 로컬 파일을 바로 사용자 장기 기억 문서로 저장한다. `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv`를 지원한다.
+Discord에 올리지 않고 로컬 파일을 바로 사용자 장기 기억 문서로 저장한다. `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv`, `.pptx`, `.hwpx`, `.json`, `.html`, `.tsv`, `.odt`, `.ods` 등을 지원한다.
 
 ```bash
 assistant-admin ingest ./meeting.md --user-id 123456789
@@ -164,6 +211,8 @@ assistant-admin ingest ./notes.md ./plan.pdf --user-id 123456789
 ```
 
 첨부 파일 분석은 별도 문서 분석 에이전트가 처리한다. 텍스트만 있는 문서는 로컬에서 추출해 분석하므로 비전 OCR 한도에서 차감하지 않는다. 이미지, 스캔 PDF, 중요 시각 자료가 포함된 혼합 PDF는 `gpt-5.4-mini`와 이미지 detail `auto`로 분석하며, 1회 10MB, 사용자별 하루 50MB 제한을 적용한다. 혼합 PDF는 먼저 페이지 이미지를 비전으로 선별하고, 차트/표/그래프/도식처럼 중요한 페이지에 대해서만 이미지 분석을 추가한다.
+
+구형/전용 포맷인 `.hwp`, `.ppt`, `.xls`, `.doc`, `.pages`, `.key`, `.numbers`는 안정적인 분석을 위해 직접 지원하지 않는다. 이런 파일은 PDF, DOCX, PPTX, HWPX, XLSX, CSV, TXT 등으로 변환해 업로드한다.
 
 OpenAI 호출 없이 휴리스틱 fallback 기준 intent를 빠르게 확인한다. 실제 봇은 라우팅 모델을 먼저 사용하므로,
 최종 판단은 `assistant-admin ask`나 Discord 실행 경로에서 확인한다.
@@ -337,6 +386,21 @@ assistant-admin restore --input backup.sqlite --force
 ```
 
 브리핑은 오늘까지 처리해야 하는 열린 할 일, 열린/완료 할 일 수, 최근 저장 기억을 함께 보여준다.
+
+웹검색:
+
+```text
+@봇 네이버에서 최신 AI 뉴스 찾아줘.
+@봇 웹에서 이 라이브러리 최신 버전 확인해줘.
+@봇 오늘 기준 환율 알려줘.
+@봇 공식 문서 찾아서 설치 방법 알려줘.
+@봇 메이플스토리 확률공개표 참고해서 200제 스타포스 12성에서 22성 기댓값 메소 알려줘.
+```
+
+웹검색은 LLM이 사용자 요청을 검색용 query로 재작성한다. 계산형 질문은 필요한 기준표, 비용, 확률, 규칙을 나눠 최대 4개 query로 검색한다.
+각 query는 Naver Search API 결과 10개를 받고, 전체 결과 중 LLM 판단으로 답변에 필요한 링크 최대 5개 본문을 확인한다. 본문 확인에 실패한 링크는 검색 snippet 자료로만 사용한다.
+검색 필요도 점수 70점 이상은 바로 검색하고, 45~69점은 사용자에게 검색해볼지 먼저 묻고, 44점 이하는 일반 답변으로 처리한다.
+`운동 관련 기억 찾아줘`, `제안서 할 일 찾아줘`처럼 내부 기억이나 할 일을 찾는 요청은 웹검색으로 보내지 않는다.
 
 대화 맥락 초기화:
 

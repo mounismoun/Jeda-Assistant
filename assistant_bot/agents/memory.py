@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from assistant_bot.agent_toolkits import build_memory_read_tools
 from assistant_bot.config import Config
 from assistant_bot.model_selector import choose_model
-from assistant_bot.models import ConversationScope
+from assistant_bot.models import ConversationScope, ExecutionContext
 from assistant_bot.openai_service import OpenAIService
 from assistant_bot.operation_result import OperationResult
 from assistant_bot.persona import ASSISTANT_PERSONA
@@ -22,6 +22,7 @@ from .common import (
     asks_to_show_latest_memory,
     asks_to_update_latest_memory,
     compact_preview,
+    extract_append_update_text,
     extract_delete_ids,
     extract_delete_query,
     extract_memory_search_query,
@@ -33,6 +34,7 @@ from .common import (
     extract_update_text,
     format_detail,
     has_substantive_memory_text,
+    is_append_memory_update,
 )
 
 
@@ -208,7 +210,13 @@ JSON만 반환한다.
                 "AI 판정 실패 후 휴리스틱 fallback",
             )
 
-    async def recall(self, *, text: str, scope: ConversationScope) -> str:
+    async def recall(
+        self,
+        *,
+        text: str,
+        scope: ConversationScope,
+        execution_context: ExecutionContext | None = None,
+    ) -> str:
         if asks_to_show_latest_memory(text):
             self.logs.add(
                 conversation_id=scope.conversation_id,
@@ -262,7 +270,10 @@ JSON만 반환한다.
         return await self.openai.tool_response(
             model=choice.model,
             instructions=instructions,
-            input_text=f"질문:\n{text}",
+            input_text=(
+                f"최근 대화 맥락:\n{execution_context.for_agent() if execution_context else '(없음)'}\n\n"
+                f"질문:\n{text}"
+            ),
             tools=build_memory_read_tools(config=self.config, memories=self.memories, scope=scope),
             temperature=0.2,
         )
@@ -354,7 +365,13 @@ JSON만 반환한다.
             preserve_values=tuple(str(value) for value in memory_ids + document_ids),
         )
 
-    async def delete(self, *, text: str, scope: ConversationScope) -> OperationResult:
+    async def delete(
+        self,
+        *,
+        text: str,
+        scope: ConversationScope,
+        execution_context: ExecutionContext | None = None,
+    ) -> OperationResult:
         if asks_to_delete_all_memories(text):
             self.logs.add(
                 conversation_id=scope.conversation_id,
@@ -652,9 +669,19 @@ JSON만 반환한다.
             next_actions=("상세 조회가 필요하면 ID로 요청할 수 있음을 짧게 안내한다",),
         )
 
-    async def update(self, *, text: str, scope: ConversationScope) -> OperationResult:
+    async def update(
+        self,
+        *,
+        text: str,
+        scope: ConversationScope,
+        execution_context: ExecutionContext | None = None,
+    ) -> OperationResult:
         memory_ids, document_ids = extract_update_ids(text)
-        replacement = extract_update_text(text)
+        append_text = extract_append_update_text(text) if is_append_memory_update(text) else ""
+        referenced_assistant_replacement = (
+            self._extract_referenced_assistant_update_text(text, scope=scope) if not append_text else ""
+        )
+        replacement = referenced_assistant_replacement or extract_update_text(text)
         choice = choose_model(self.config, text)
         self.logs.add(
             conversation_id=scope.conversation_id,
@@ -679,7 +706,7 @@ JSON만 반환한다.
                 next_actions=("새 문서를 다시 기억시키고 기존 문서를 삭제하는 대안을 안내한다",),
             )
 
-        if not replacement:
+        if not replacement and not append_text:
             return self._result(
                 "어떤 내용으로 수정할지 모르겠어요. 예: `메모 3을 나는 오전 운동을 선호한다로 수정해줘`",
                 status="needs_input",
@@ -687,7 +714,7 @@ JSON만 반환한다.
                 next_actions=("수정할 내용을 물어본다",),
             )
 
-        if asks_to_update_latest_memory(text):
+        if asks_to_update_latest_memory(text) or bool(referenced_assistant_replacement):
             items = self.memories.recent_items(scope=scope, limit=1)
             if not items:
                 return self._result(
@@ -709,12 +736,30 @@ JSON만 반환한다.
                     preserve_values=(str(latest_item.id), latest_item.title),
                     next_actions=("새 문서를 다시 기억시키고 기존 문서를 삭제하는 대안을 안내한다",),
                 )
-            await self.memories.update_text_memory(scope=scope, memory_id=latest_item.id, text=replacement)
+            new_text = await self._build_updated_memory_text(
+                scope=scope,
+                memory_id=latest_item.id,
+                replacement=replacement,
+                append_text=append_text,
+            )
+            if new_text is None:
+                return self._result(
+                    "수정할 최근 메모 내용을 다시 확인하지 못했어요.",
+                    status="not_found",
+                    summary="최근 저장 메모 상세 조회 실패",
+                    facts={"memory_id": latest_item.id},
+                    preserve_values=(str(latest_item.id),),
+                )
+            await self.memories.update_text_memory(scope=scope, memory_id=latest_item.id, text=new_text)
+            if append_text:
+                fallback = f"가장 최근에 저장한 메모 `{latest_item.id}`에 덧붙였어요."
+            else:
+                fallback = f"가장 최근에 저장한 메모 `{latest_item.id}`를 수정했어요."
             return self._result(
-                f"가장 최근에 저장한 메모 `{latest_item.id}`를 수정했어요.",
+                fallback,
                 status="success",
                 summary="최근 저장 메모 수정 완료",
-                facts={"memory_id": latest_item.id, "replacement": replacement},
+                facts={"memory_id": latest_item.id, "replacement": replacement, "append_text": append_text},
                 preserve_values=(str(latest_item.id),),
             )
 
@@ -722,7 +767,13 @@ JSON만 반환한다.
             updated = 0
             missing: list[str] = []
             for memory_id in memory_ids:
-                if await self.memories.update_text_memory(scope=scope, memory_id=memory_id, text=replacement):
+                new_text = await self._build_updated_memory_text(
+                    scope=scope,
+                    memory_id=memory_id,
+                    replacement=replacement,
+                    append_text=append_text,
+                )
+                if new_text and await self.memories.update_text_memory(scope=scope, memory_id=memory_id, text=new_text):
                     updated += 1
                 else:
                     missing.append(f"메모 `{memory_id}`")
@@ -774,14 +825,77 @@ JSON만 반환한다.
             )
 
         memory_id = memory_candidates[0].id
-        await self.memories.update_text_memory(scope=scope, memory_id=memory_id, text=replacement)
+        new_text = await self._build_updated_memory_text(
+            scope=scope,
+            memory_id=memory_id,
+            replacement=replacement,
+            append_text=append_text,
+        )
+        if new_text is None:
+            return self._result(
+                "수정할 메모를 다시 확인하지 못했어요.",
+                status="not_found",
+                summary="검색 기반 수정 대상 상세 조회 실패",
+                facts={"memory_id": memory_id, "query": query},
+                preserve_values=(str(memory_id), query),
+            )
+        await self.memories.update_text_memory(scope=scope, memory_id=memory_id, text=new_text)
         return self._result(
             f"가장 관련 있어 보이는 메모 `{memory_id}`를 수정했어요.",
             status="success",
             summary="검색 기반 메모 수정 완료",
-            facts={"memory_id": memory_id, "query": query, "replacement": replacement},
+            facts={"memory_id": memory_id, "query": query, "replacement": replacement, "append_text": append_text},
             preserve_values=(str(memory_id), query),
         )
+
+    async def _build_updated_memory_text(
+        self,
+        *,
+        scope: ConversationScope,
+        memory_id: int,
+        replacement: str,
+        append_text: str,
+    ) -> str | None:
+        if not append_text:
+            return replacement
+        detail = self.memories.get_memory_detail(scope=scope, memory_id=memory_id)
+        if detail is None:
+            return None
+        if append_text in detail.text:
+            return detail.text
+        separator = "\n" if "\n" in detail.text else " "
+        return f"{detail.text.rstrip()}{separator}{append_text.strip()}"
+
+    def _extract_referenced_assistant_update_text(self, text: str, *, scope: ConversationScope) -> str:
+        if self.conversations is None:
+            return ""
+        normalized = re.sub(r"\s+", "", text.casefold())
+        reference_markers = ["네가예", "니가예", "예로든", "예시", "그대로"]
+        update_markers = ["수정", "고쳐", "바꿔", "변경", "업데이트"]
+        if not any(marker in normalized for marker in reference_markers):
+            return ""
+        if not any(marker in normalized for marker in update_markers):
+            return ""
+        rows = self.conversations.recent_messages(scope.conversation_id, limit=8)
+        for row in reversed(rows):
+            if row["role"] != "assistant":
+                continue
+            content = str(row["content"])
+            for quoted in re.findall(r"[`'\"]([^`'\"]+)[`'\"]", content):
+                parsed = extract_update_text(quoted)
+                if parsed:
+                    return parsed
+            parsed = extract_update_text(content)
+            if parsed:
+                return parsed
+            match = re.search(
+                r"메모\s*#?\d+[^`'\"]+?['`\"](?P<value>[^`'\"]+)['`\"](?:로|으로)\s*(?:수정|변경|바꿔|고쳐)",
+                content,
+                flags=re.IGNORECASE,
+            )
+            if match:
+                return match.group("value").strip()
+        return ""
 
     def _result(
         self,
