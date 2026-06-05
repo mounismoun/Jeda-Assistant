@@ -16,7 +16,6 @@ from assistant_bot.agents import (
     asks_to_delete_all_memories,
     format_conversation_context,
     format_task_priority,
-    has_substantive_memory_text,
 )
 from assistant_bot.config import Config
 from assistant_bot.database import AppDatabase
@@ -24,6 +23,7 @@ from assistant_bot.file_extractor import extract_attachment_text, is_supported_a
 from assistant_bot.models import ConversationScope
 from assistant_bot.openai_service import OpenAIService
 from assistant_bot.operation_result import AgentOutput, OperationResult
+from assistant_bot.persona import ASSISTANT_PERSONA
 from assistant_bot.response_composer import ResponseComposer
 from assistant_bot.stores import (
     AgentLogStore,
@@ -317,6 +317,21 @@ class AssistantBot(discord.Client):
             scope=scope,
             conversation_context=conversation_context,
         )
+
+        if supported_attachments and text.strip() and route.intent != "unsupported":
+            save_result = await self.handle_remember(
+                message=message,
+                text=text,
+                attachments=supported_attachments,
+                scope=scope,
+            )
+            if asks_attached_document_response(text):
+                return await self.answer_about_attached_documents(
+                    text=text,
+                    scope=scope,
+                    save_result=save_result,
+                )
+            return save_result
 
         if route.intent == "remember":
             remember_result = await self.handle_remember(
@@ -640,7 +655,7 @@ class AssistantBot(discord.Client):
                     source_message_id = str(original_message.id)
                     pending_request_id = pending.id
 
-        if text.strip() and (not effective_attachments or has_substantive_memory_text(text)):
+        if text.strip() and not effective_attachments:
             saved_results.append(
                 await self.memory_agent.remember_text(
                     text=text,
@@ -769,10 +784,127 @@ class AssistantBot(discord.Client):
             fallback_text=fallback,
         )
 
+    async def answer_about_attached_documents(
+        self,
+        *,
+        text: str,
+        scope: ConversationScope,
+        save_result: AgentOutput,
+    ) -> OperationResult:
+        operation_result = (
+            save_result
+            if isinstance(save_result, OperationResult)
+            else OperationResult.legacy(str(save_result))
+        )
+        document_ids = extract_saved_document_ids(operation_result)
+        documents = [
+            detail
+            for document_id in document_ids
+            if (detail := self.memories.get_document_detail(scope=scope, document_id=document_id)) is not None
+        ]
+        if not documents:
+            return operation_result
+
+        document_context = "\n\n".join(
+            f"[문서 {detail.id}: {detail.title}]\n{detail.text[:8000]}"
+            for detail in documents
+        )
+        answer = await self.openai.text_response(
+            model=self.config.medium_model,
+            instructions=f"""
+{ASSISTANT_PERSONA}
+
+너는 방금 사용자가 첨부한 문서를 읽고 요청에 바로 답한다.
+문서는 이미 코드가 장기 기억에 저장했다.
+사용자 요청이 요약이면 핵심 내용을 간결하게 정리한다.
+문서에 없는 내용은 추측하지 않는다.
+답변 끝에 참고한 문서 ID와 파일명을 짧게 적는다.
+""",
+            input_text=(
+                f"사용자 요청:\n{text}\n\n"
+                f"방금 저장된 첨부 문서:\n{document_context}"
+            ),
+            temperature=0.2,
+        )
+        self.logs.add(
+            conversation_id=scope.conversation_id,
+            agent="memory",
+            intent="recall",
+            difficulty="medium",
+            model=self.config.medium_model,
+            reason="첨부 문서 자동 저장 후 사용자 요청에 즉시 답변",
+        )
+        return OperationResult(
+            agent="memory",
+            intent="recall",
+            status="success",
+            summary="첨부 문서 자동 저장 후 요청 답변 완료",
+            facts={
+                "document_ids": document_ids,
+                "saved_result": operation_result.to_prompt_text(),
+                "answer": answer.strip(),
+            },
+            items=tuple(
+                {
+                    "kind": "document",
+                    "id": detail.id,
+                    "title": detail.title,
+                    "chunk_count": detail.chunk_count,
+                }
+                for detail in documents
+            ),
+            preserve_values=tuple(str(document_id) for document_id in document_ids),
+            fallback_text=answer.strip(),
+        )
+
 
 def asks_to_remember(text: str) -> bool:
     lowered = text.lower()
     return any(marker in lowered for marker in ["기억해", "저장해", "remember", "save this"])
+
+
+def asks_attached_document_response(text: str) -> bool:
+    normalized = text.casefold()
+    compact = "".join(normalized.split())
+    document_markers = ["문서", "파일", "첨부", "pdf", "document", "file"]
+    action_markers = [
+        "요약",
+        "정리",
+        "분석",
+        "설명",
+        "검토",
+        "알려",
+        "찾아",
+        "뽑아",
+        "추출",
+        "봐",
+        "해봐",
+        "summary",
+        "summarize",
+        "analyze",
+        "explain",
+    ]
+    return any(marker in normalized or marker in compact for marker in document_markers) and any(
+        marker in normalized or marker in compact for marker in action_markers
+    )
+
+
+def extract_saved_document_ids(result: OperationResult) -> list[int]:
+    ids: list[int] = []
+    for key in ("document_id", "duplicate_document_id"):
+        value = result.facts.get(key)
+        if isinstance(value, int):
+            ids.append(value)
+    for item in result.items:
+        facts = item.get("facts")
+        if isinstance(facts, dict):
+            for key in ("document_id", "duplicate_document_id"):
+                value = facts.get(key)
+                if isinstance(value, int):
+                    ids.append(value)
+        if item.get("kind") == "document" and isinstance(item.get("id"), int):
+            ids.append(int(item["id"]))
+    return list(dict.fromkeys(ids))
 
 
 def is_positive_confirmation(text: str) -> bool:
