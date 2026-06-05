@@ -321,6 +321,8 @@ class AssistantBot(discord.Client):
             await interaction.response.send_message("이 확인 버튼은 요청한 사용자만 누를 수 있어요.", ephemeral=True)
             return
 
+        await self.acknowledge_confirmation_interaction(interaction)
+
         if action == "delete_all_memories":
             text = "응, 전부 삭제해" if approved else "취소해"
             result = self.handle_pending_memory_deletion_confirmation(text=text, scope=scope)
@@ -394,7 +396,7 @@ class AssistantBot(discord.Client):
             location_label="Discord 버튼",
             conversation_context="",
         )
-        await interaction.response.edit_message(content=answer, view=None)
+        await self.update_confirmation_message(interaction, answer)
         if self.user:
             self.conversations.add_message(
                 conversation_id=scope.conversation_id,
@@ -408,6 +410,35 @@ class AssistantBot(discord.Client):
                 user_id=str(self.user.id),
                 content=answer,
             )
+
+    async def acknowledge_confirmation_interaction(self, interaction: discord.Interaction) -> None:
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+        except discord.NotFound:
+            logger.warning("Discord 확인 버튼 interaction이 만료되어 defer에 실패했습니다.")
+        except discord.HTTPException:
+            logger.exception("Discord 확인 버튼 interaction defer 중 오류가 발생했습니다.")
+
+    async def update_confirmation_message(self, interaction: discord.Interaction, answer: str) -> None:
+        if interaction.message is not None:
+            try:
+                await interaction.message.edit(content=answer, view=None)
+                return
+            except discord.NotFound:
+                logger.warning("확인 버튼 원본 메시지를 찾지 못해 후속 응답으로 대체합니다.")
+            except discord.HTTPException:
+                logger.exception("확인 버튼 원본 메시지 수정 중 오류가 발생했습니다.")
+
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(content=answer, view=None)
+            else:
+                await interaction.followup.send(answer, ephemeral=True)
+        except discord.NotFound:
+            logger.warning("확인 버튼 interaction 응답이 만료되어 결과 메시지를 전송하지 못했습니다.")
+        except discord.HTTPException:
+            logger.exception("확인 버튼 결과 응답 중 오류가 발생했습니다.")
 
     async def should_respond(self, message: discord.Message) -> bool:
         if isinstance(message.channel, discord.DMChannel):

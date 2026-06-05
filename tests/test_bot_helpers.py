@@ -61,6 +61,55 @@ class FakeMessage:
     id = 12345
 
 
+class FakeInteractionResponse:
+    def __init__(self) -> None:
+        self.deferred = False
+        self.edited_messages: list[dict[str, object]] = []
+        self.sent_messages: list[dict[str, object]] = []
+
+    def is_done(self) -> bool:
+        return self.deferred or bool(self.edited_messages or self.sent_messages)
+
+    async def defer(self) -> None:
+        self.deferred = True
+
+    async def edit_message(self, **kwargs: object) -> None:
+        self.edited_messages.append(kwargs)
+
+    async def send_message(self, content: str, **kwargs: object) -> None:
+        self.sent_messages.append({"content": content, **kwargs})
+
+
+class FakeInteractionMessage:
+    def __init__(self) -> None:
+        self.edits: list[dict[str, object]] = []
+
+    async def edit(self, **kwargs: object) -> None:
+        self.edits.append(kwargs)
+
+
+class FakeInteractionFollowup:
+    def __init__(self) -> None:
+        self.sent_messages: list[dict[str, object]] = []
+
+    async def send(self, content: str, **kwargs: object) -> None:
+        self.sent_messages.append({"content": content, **kwargs})
+
+
+class FakeInteraction:
+    def __init__(self, user_id: str) -> None:
+        self.user = type("User", (), {"id": int(user_id)})()
+        self.response = FakeInteractionResponse()
+        self.message = FakeInteractionMessage()
+        self.followup = FakeInteractionFollowup()
+
+
+class FakeResponseComposer:
+    async def compose(self, **kwargs: object) -> str:
+        raw_response = kwargs["raw_response"]
+        return str(raw_response)
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -464,6 +513,57 @@ async def test_assistant_bot_attaches_buttons_to_memory_delete_confirmation(tmp_
         assert view is not None
         assert bot.confirmation_action_for(result, scope) == "delete_all_memories"
         assert [child.label for child in view.children] == ["승인", "거부"]
+    finally:
+        await bot.close()
+
+
+@pytest.mark.anyio
+async def test_confirmation_button_defers_before_editing_original_message(tmp_path) -> None:
+    config = Config(
+        discord_token="discord-token",
+        discord_client_id="client-id",
+        openai_api_key="openai-key",
+        router_model="gpt-5.4-mini",
+        easy_model="gpt-5.4-mini",
+        medium_model="gpt-5.4",
+        hard_model="gpt-5.5",
+        embedding_model="text-embedding-3-small",
+        database_path=str(tmp_path / "assistant.sqlite"),
+        max_attachment_bytes=1024,
+        context_compression_chars=20000,
+        retrieval_limit=8,
+        openai_timeout_seconds=30,
+        openai_max_retries=2,
+        pending_confirmation_ttl_minutes=10,
+        task_reminder_interval_minutes=60,
+        task_reminder_batch_size=20,
+        timezone="Asia/Seoul",
+        log_level="INFO",
+        log_file=None,
+    )
+    bot = AssistantBot(config)
+    bot.response_composer = FakeResponseComposer()  # type: ignore[assignment]
+    scope = ConversationScope(
+        conversation_id="dm:123",
+        channel_id="dm",
+        user_id="123",
+        guild_id=None,
+    )
+    interaction = FakeInteraction(user_id="123")
+
+    try:
+        await bot.handle_confirmation_button(
+            interaction,  # type: ignore[arg-type]
+            scope=scope,
+            action="unknown",
+            approved=True,
+        )
+
+        assert interaction.response.deferred is True
+        assert interaction.response.edited_messages == []
+        assert interaction.message.edits
+        assert interaction.message.edits[-1]["view"] is None
+        assert "처리할 수 있는 작업" in str(interaction.message.edits[-1]["content"])
     finally:
         await bot.close()
 

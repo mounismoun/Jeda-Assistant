@@ -1418,3 +1418,15 @@
   - README, 계획 문서, `.env.example`, 운영 CLI 안내 문구에 새 지원 범위와 비전 OCR 제한을 반영했다.
   - 상태 메시지는 사용자 요청에 따라 기존 `멘션하여 슬립지피티를 호출해보세요.` 문구를 유지했다.
   - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests`, `git diff --check` 검증을 통과했다.
+
+## 2026-06-05 - Discord 확인 버튼 응답 안정화
+
+- 작업 이름: 승인/거부 버튼 interaction 만료 오류 수정
+- 진행상황: 완료
+- 진행내용:
+  - 이미지 첨부 후 `승인` 버튼을 눌렀을 때 `Unknown interaction` 오류가 발생하는 로그를 확인했다.
+  - 버튼 클릭 직후 `interaction.response.defer()`로 먼저 Discord에 응답 확인을 보내도록 변경했다.
+  - 실제 저장/삭제 작업이 끝난 뒤에는 interaction 직접 응답 대신 원본 버튼 메시지를 수정해 결과를 표시하도록 했다.
+  - 원본 메시지 수정이 실패하면 후속 ephemeral 응답으로 대체하고, 만료된 interaction은 로그만 남기도록 방어했다.
+  - 버튼 처리 시 defer 후 원본 메시지를 수정하는 테스트를 추가했다.
+  - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests`, `git diff --check` 검증을 통과했다.
