@@ -39,6 +39,7 @@ from assistant_bot.text_utils import split_discord_message, strip_bot_mentions
 from assistant_bot.time_utils import humanize_datetime_text, now_in_timezone, today_string
 
 logger = logging.getLogger(__name__)
+BOT_STATUS_MESSAGE = "범용 AI 비서입니다."
 
 
 class AssistantBot(discord.Client):
@@ -117,6 +118,7 @@ class AssistantBot(discord.Client):
 
     async def on_ready(self) -> None:
         logger.info("Discord bot logged in as %s (%s)", self.user, self.user.id if self.user else "?")
+        await self.change_presence(activity=discord.CustomActivity(name=BOT_STATUS_MESSAGE))
         if not self._task_reminder_started:
             self._task_reminder_started = True
             self.loop.create_task(self.task_reminder_loop())
