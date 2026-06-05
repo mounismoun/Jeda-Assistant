@@ -1313,3 +1313,14 @@
   - `cancel_pending` 응답도 `OperationResult`로 전환해 대기 작업 취소 안내가 고정 문자열로 직접 노출되지 않게 했다.
   - 주요 에이전트 직접 반환 문자열 검색 결과, 사용자-facing 에이전트 경로는 `OperationResult` 또는 공통 persona 기반 모델 응답을 통과하도록 정리했다.
   - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - 메모 예고 문장 저장 방지
+
+- 작업 이름: 빈 메모 의도 오저장 방지
+- 진행상황: 완료
+- 진행내용:
+  - `메모 하나 할게`, `메모할게` 같은 저장 의도 예고 문장이 실제 메모 내용처럼 저장되는 문제를 확인했다.
+  - 실질적인 기억 내용 판정에서 메모 예고 문장을 제외하도록 보정했다.
+  - 라우터가 실수로 `remember`로 보낸 경우에도 `MemoryAgent`가 저장하지 않고 메모할 실제 내용을 물어보도록 안전장치를 추가했다.
+  - 예고 문장이 저장되지 않는 휴리스틱 테스트와 에이전트 저장 테스트를 추가했다.
+  - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.

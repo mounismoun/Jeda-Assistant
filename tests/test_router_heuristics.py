@@ -194,6 +194,8 @@ def test_heuristic_route_memory_search() -> None:
 def test_substantive_memory_text_ignores_file_only_instruction() -> None:
     assert not has_substantive_memory_text("이 파일 기억해줘")
     assert has_substantive_memory_text("이거 기억해줘: 나는 오전에 집중이 잘 돼")
+    assert not has_substantive_memory_text("메모 하나 할게")
+    assert not has_substantive_memory_text("메모할게")
     assert asks_to_remember_recent_message("방금 말한 거 기억해줘")
     assert asks_to_remember_recent_message("그거 기억해줘")
     assert asks_to_remember_recent_message("이것도 저장해줘")

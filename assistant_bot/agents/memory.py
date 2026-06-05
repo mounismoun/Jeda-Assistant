@@ -28,6 +28,7 @@ from .common import (
     extract_update_query,
     extract_update_text,
     format_detail,
+    has_substantive_memory_text,
 )
 
 
@@ -77,6 +78,13 @@ class MemoryAgent:
                     next_actions=("기억할 내용을 직접 물어본다",),
                 )
             memory_text = recent_text
+        elif not has_substantive_memory_text(text):
+            return self._result(
+                "메모할 내용을 알려주세요. 예: `메모: 나는 오전에 집중이 잘 된다`",
+                status="needs_input",
+                summary="저장할 메모 내용 필요",
+                next_actions=("메모할 실제 내용을 물어본다",),
+            )
         duplicate = self.memories.find_duplicate_text_memory(scope=scope, text=memory_text)
         if duplicate is not None:
             self.logs.add(

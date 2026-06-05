@@ -1242,6 +1242,31 @@ async def test_memory_agent_does_not_save_duplicate_text_memory() -> None:
 
 
 @pytest.mark.anyio
+async def test_memory_agent_does_not_save_memory_setup_phrase() -> None:
+    database = AppDatabase(":memory:")
+    store = MemoryStore(database.connection, FakeOpenAI())  # type: ignore[arg-type]
+    agent = MemoryAgent(
+        config=make_test_config(),
+        openai=FakeOpenAI(),  # type: ignore[arg-type]
+        memories=store,
+        logs=AgentLogStore(database.connection),
+    )
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+
+    response = await agent.remember_text(text="메모 하나 할게", scope=scope, message_id="m1")
+
+    assert isinstance(response, OperationResult)
+    assert response.status == "needs_input"
+    assert "메모할 내용을 알려주세요" in response
+    assert store.stats(scope=scope)["memories"] == 0
+
+
+@pytest.mark.anyio
 async def test_memory_agent_remembers_previous_user_message() -> None:
     database = AppDatabase(":memory:")
     conversations = ConversationStore(database.connection)

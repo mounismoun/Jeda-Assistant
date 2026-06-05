@@ -213,7 +213,24 @@ def has_substantive_memory_text(text: str) -> bool:
         "document",
     ]
     normalized = cleaned.strip().lower()
-    return bool(normalized) and normalized not in instruction_words and len(normalized) >= 4
+    setup_phrases = [
+        "메모 하나 할게",
+        "메모할게",
+        "메모 할게",
+        "기억할게",
+        "기억 하나 할게",
+        "저장할게",
+        "저장 하나 할게",
+        "메모 좀 할게",
+        "기억 좀 할게",
+        "나 메모할게",
+        "나 메모 할게",
+    ]
+    compact = re.sub(r"\s+", "", normalized)
+    setup_compacts = {re.sub(r"\s+", "", phrase) for phrase in setup_phrases}
+    if normalized in instruction_words or normalized in setup_phrases or compact in setup_compacts:
+        return False
+    return bool(normalized) and len(normalized) >= 4
 
 
 def extract_delete_query(text: str) -> str:
