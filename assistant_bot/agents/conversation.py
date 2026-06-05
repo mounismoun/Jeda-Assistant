@@ -6,7 +6,7 @@ from assistant_bot.config import Config
 from assistant_bot.model_selector import choose_model
 from assistant_bot.models import ConversationScope
 from assistant_bot.openai_service import OpenAIService
-from assistant_bot.persona import ASSISTANT_PERSONA
+from assistant_bot.persona import ASSISTANT_KOREAN_NAME, ASSISTANT_NAME, ASSISTANT_PERSONA
 from assistant_bot.stores import AgentLogStore, ConversationStore, MemoryStore, TaskStore
 from assistant_bot.time_utils import current_time_context
 
@@ -88,6 +88,7 @@ class ConversationAgent:
             instructions=instructions,
             input_text=(
                 f"사용자 이름: {author_name}\n\n"
+                f"비서 이름: {ASSISTANT_NAME} (한국어 표기: {ASSISTANT_KOREAN_NAME})\n"
                 f"현재 대화 위치: {location_label}\n"
                 f"현재 날짜와 시간: {current_time_context(self.config.timezone)}\n"
                 "저장된 기억은 같은 사용자 기준으로 DM과 서버 어디서든 이어진다. "

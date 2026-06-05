@@ -28,6 +28,8 @@ async def test_response_composer_uses_model_output() -> None:
     assert "실행 결과" in openai.requests[0]["input_text"]
     assert "2026-06-05 07:04" in openai.requests[0]["input_text"]
     assert "친근한 존댓말" in openai.requests[0]["instructions"]
+    assert '너의 기본 이름은 "SleepGPT"다.' in openai.requests[0]["instructions"]
+    assert "비서 이름: SleepGPT (한국어 표기: 슬립지피티)" in openai.requests[0]["input_text"]
 
 
 @pytest.mark.anyio

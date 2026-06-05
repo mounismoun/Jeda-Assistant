@@ -4,6 +4,7 @@ from assistant_bot.capabilities import capability_prompt_block
 from assistant_bot.config import Config
 from assistant_bot.models import ConversationScope, RoutingResult
 from assistant_bot.openai_service import OpenAIService
+from assistant_bot.persona import ASSISTANT_KOREAN_NAME, ASSISTANT_NAME
 from assistant_bot.stores import AgentLogStore
 from assistant_bot.time_utils import current_time_context
 
@@ -55,6 +56,7 @@ JSON만 반환한다. 형식: {{"intent":"chat","confidence":0.0,"reason":"짧�
                 instructions=instructions,
                 input_text=(
                     f"대화 ID: {scope.conversation_id}\n"
+                    f"비서 이름: {ASSISTANT_NAME} (한국어 표기: {ASSISTANT_KOREAN_NAME})\n"
                     f"첨부 파일 있음: {has_attachments}\n\n"
                     f"현재 날짜와 시간:\n{current_time_context(self.config.timezone)}\n\n"
                     f"최근 대화 맥락:\n{conversation_context or '(없음)'}\n\n"

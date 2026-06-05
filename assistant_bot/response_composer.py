@@ -7,7 +7,7 @@ from assistant_bot.config import Config
 from assistant_bot.models import ConversationScope
 from assistant_bot.openai_service import OpenAIService
 from assistant_bot.operation_result import AgentOutput, OperationResult
-from assistant_bot.persona import ASSISTANT_PERSONA
+from assistant_bot.persona import ASSISTANT_KOREAN_NAME, ASSISTANT_NAME, ASSISTANT_PERSONA
 from assistant_bot.time_utils import current_time_context, human_current_time_context
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,7 @@ class ResponseComposer:
                 input_text=(
                     f"현재 날짜와 시간: {human_current_time_context(self.config.timezone)}\n"
                     f"시스템 기준 시각: {current_time_context(self.config.timezone)}\n"
+                    f"비서 이름: {ASSISTANT_NAME} (한국어 표기: {ASSISTANT_KOREAN_NAME})\n"
                     f"대화 위치: {location_label}\n"
                     f"대화 ID: {scope.conversation_id}\n\n"
                     f"최근 대화:\n{conversation_context or '(없음)'}\n\n"
