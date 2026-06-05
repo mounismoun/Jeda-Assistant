@@ -39,6 +39,17 @@ class FakeOpenAI:
         return "도구 기반 회상 답변"
 
 
+class FakeMemoryClassifierOpenAI(FakeOpenAI):
+    def __init__(self, output: str) -> None:
+        super().__init__()
+        self.output = output
+        self.text_requests: list[dict[str, object]] = []
+
+    async def text_response(self, **kwargs) -> str:
+        self.text_requests.append(kwargs)
+        return self.output
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -1264,6 +1275,67 @@ async def test_memory_agent_does_not_save_memory_setup_phrase() -> None:
     assert response.status == "needs_input"
     assert "메모할 내용을 알려주세요" in response
     assert store.stats(scope=scope)["memories"] == 0
+
+
+@pytest.mark.anyio
+async def test_memory_agent_uses_model_to_reject_memory_request_without_content() -> None:
+    database = AppDatabase(":memory:")
+    store = MemoryStore(database.connection, FakeOpenAI())  # type: ignore[arg-type]
+    openai = FakeMemoryClassifierOpenAI(
+        '{"has_memory_content": false, "memory_text": "", "reason": "저장할 본문 없이 메모 예고만 있음"}'
+    )
+    agent = MemoryAgent(
+        config=make_test_config(),
+        openai=openai,  # type: ignore[arg-type]
+        memories=store,
+        logs=AgentLogStore(database.connection),
+    )
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+
+    for text in ["다음 내용 메모로 남겨줘", "지금부터 메모 할게", "지금부터 메모 하나 할게"]:
+        response = await agent.remember_text(text=text, scope=scope, message_id="m1")
+
+        assert response.status == "needs_input"
+        assert "메모할 내용을 알려주세요" in response
+
+    assert len(openai.text_requests) == 3
+    assert store.stats(scope=scope)["memories"] == 0
+
+
+@pytest.mark.anyio
+async def test_memory_agent_uses_model_extracted_memory_text() -> None:
+    database = AppDatabase(":memory:")
+    store = MemoryStore(database.connection, FakeOpenAI())  # type: ignore[arg-type]
+    openai = FakeMemoryClassifierOpenAI(
+        '{"has_memory_content": true, "memory_text": "나는 오전에 집중이 잘 된다", "reason": "저장할 본문 있음"}'
+    )
+    agent = MemoryAgent(
+        config=make_test_config(),
+        openai=openai,  # type: ignore[arg-type]
+        memories=store,
+        logs=AgentLogStore(database.connection),
+    )
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+
+    response = await agent.remember_text(
+        text="다음 내용 메모로 남겨줘: 나는 오전에 집중이 잘 된다",
+        scope=scope,
+        message_id="m1",
+    )
+
+    assert response.status == "success"
+    assert response.facts["text"] == "나는 오전에 집중이 잘 된다"
+    assert store.get_memory_detail(scope=scope, memory_id=1).text == "나는 오전에 집중이 잘 된다"
 
 
 @pytest.mark.anyio

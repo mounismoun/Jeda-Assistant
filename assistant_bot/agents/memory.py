@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import re
+from dataclasses import dataclass
+
 from assistant_bot.agent_toolkits import build_memory_read_tools
 from assistant_bot.config import Config
 from assistant_bot.model_selector import choose_model
@@ -30,6 +34,13 @@ from .common import (
     format_detail,
     has_substantive_memory_text,
 )
+
+
+@dataclass(frozen=True)
+class MemoryContentDecision:
+    has_content: bool
+    memory_text: str
+    reason: str
 
 
 class MemoryAgent:
@@ -78,13 +89,17 @@ class MemoryAgent:
                     next_actions=("기억할 내용을 직접 물어본다",),
                 )
             memory_text = recent_text
-        elif not has_substantive_memory_text(text):
-            return self._result(
-                "메모할 내용을 알려주세요. 예: `메모: 나는 오전에 집중이 잘 된다`",
-                status="needs_input",
-                summary="저장할 메모 내용 필요",
-                next_actions=("메모할 실제 내용을 물어본다",),
-            )
+        else:
+            decision = await self.classify_memory_content(text)
+            if not decision.has_content:
+                return self._result(
+                    "메모할 내용을 알려주세요. 예: `메모: 나는 오전에 집중이 잘 된다`",
+                    status="needs_input",
+                    summary="저장할 메모 내용 필요",
+                    facts={"classification_reason": decision.reason},
+                    next_actions=("메모할 실제 내용을 물어본다",),
+                )
+            memory_text = decision.memory_text
         duplicate = self.memories.find_duplicate_text_memory(scope=scope, text=memory_text)
         if duplicate is not None:
             self.logs.add(
@@ -127,6 +142,40 @@ class MemoryAgent:
             facts={"memory_id": memory_id, "text": memory_text},
             preserve_values=(str(memory_id),),
         )
+
+    async def classify_memory_content(self, text: str) -> MemoryContentDecision:
+        try:
+            output = await self.openai.text_response(
+                model=self.config.easy_model,
+                instructions="""
+너는 메모 저장 요청을 분류한다.
+사용자 메시지가 실제로 저장할 내용을 포함하는지, 아니면 "메모할게", "다음 내용 메모로 남겨줘",
+"지금부터 메모 하나 할게"처럼 저장을 부탁하거나 예고만 하는 문장인지 구분한다.
+
+판정 기준:
+- 실제 저장할 사실, 선호, 일정, 정보, 문장 내용이 있으면 has_memory_content=true.
+- 저장 의도만 있고 저장할 본문이 없으면 has_memory_content=false.
+- "다음 내용", "지금부터", "메모 하나" 같은 표현만 있으면 저장 내용이 아니다.
+- memory_text에는 저장할 실제 내용만 넣고, "메모해줘", "저장해줘" 같은 요청 표현은 제외한다.
+
+JSON만 반환한다.
+형식: {"has_memory_content":true,"memory_text":"저장할 실제 내용","reason":"짧은 이유"}
+""",
+                input_text=f"사용자 메시지:\n{text}",
+                temperature=0,
+            )
+            data = _parse_memory_content_decision(output)
+            memory_text = str(data.get("memory_text") or "").strip()
+            has_content = bool(data.get("has_memory_content")) and bool(memory_text)
+            return MemoryContentDecision(
+                has_content=has_content,
+                memory_text=memory_text,
+                reason=str(data.get("reason") or "AI 메모 내용 판정"),
+            )
+        except Exception:
+            if not has_substantive_memory_text(text):
+                return MemoryContentDecision(False, "", "휴리스틱상 저장할 실제 내용 없음")
+            return MemoryContentDecision(True, extract_memory_text(text), "AI 판정 실패 후 휴리스틱 fallback")
 
     async def recall(self, *, text: str, scope: ConversationScope) -> str:
         if asks_to_show_latest_memory(text):
@@ -727,3 +776,8 @@ class MemoryAgent:
             "source_location": item.source_location,
             "created_at": getattr(item, "created_at", None),
         }
+
+
+def _parse_memory_content_decision(output: str) -> dict[str, object]:
+    match = re.search(r"\{.*\}", output, flags=re.DOTALL)
+    return json.loads(match.group(0) if match else output)

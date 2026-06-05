@@ -1324,3 +1324,15 @@
   - 라우터가 실수로 `remember`로 보낸 경우에도 `MemoryAgent`가 저장하지 않고 메모할 실제 내용을 물어보도록 안전장치를 추가했다.
   - 예고 문장이 저장되지 않는 휴리스틱 테스트와 에이전트 저장 테스트를 추가했다.
   - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - AI 기반 메모 내용 판정 도입
+
+- 작업 이름: 메모 요청과 메모 본문 구분
+- 진행상황: 완료
+- 진행내용:
+  - `다음 내용 메모로 남겨줘`, `지금부터 메모 할게`, `지금부터 메모 하나 할게`처럼 저장 요청/예고 문장 자체가 메모로 저장되는 문제를 확인했다.
+  - `MemoryAgent`에 AI 기반 메모 내용 판정 계층을 추가해, `remember` 라우팅 이후에도 실제 저장할 본문이 있는지 다시 판단하도록 했다.
+  - 판정 모델은 JSON으로 `has_memory_content`, `memory_text`, `reason`을 반환하고, 저장할 본문이 없으면 저장하지 않고 내용을 물어보도록 했다.
+  - 모델 호출 실패 시에는 기존 휴리스틱으로 fallback하되, 실질 내용이 없다고 판단되는 경우 저장하지 않도록 보수적으로 처리했다.
+  - 저장 요청만 있는 문장을 거부하는 테스트와, 본문이 포함된 요청에서 본문만 저장하는 테스트를 추가했다.
+  - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
