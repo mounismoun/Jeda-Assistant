@@ -317,13 +317,24 @@ class PendingMemoryDeletionStore:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
 
-    def add(self, *, scope: ConversationScope, message_id: str, memory_count: int, document_count: int) -> int:
+    def add(
+        self,
+        *,
+        scope: ConversationScope,
+        message_id: str,
+        memory_count: int,
+        document_count: int,
+        mode: str = "all",
+        memory_ids: list[int] | None = None,
+        document_ids: list[int] | None = None,
+    ) -> int:
         cursor = self.connection.execute(
             """
             INSERT INTO pending_memory_deletions (
-              conversation_id, channel_id, message_id, user_id, guild_id, memory_count, document_count
+              conversation_id, channel_id, message_id, user_id, guild_id,
+              memory_count, document_count, mode, memory_ids_json, document_ids_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 scope.conversation_id,
@@ -333,6 +344,9 @@ class PendingMemoryDeletionStore:
                 scope.guild_id,
                 memory_count,
                 document_count,
+                mode,
+                json.dumps(memory_ids or []),
+                json.dumps(document_ids or []),
             ),
         )
         self.connection.commit()
@@ -345,7 +359,7 @@ class PendingMemoryDeletionStore:
             """
             SELECT
               id, conversation_id, channel_id, message_id, user_id, guild_id,
-              memory_count, document_count, created_at
+              memory_count, document_count, mode, memory_ids_json, document_ids_json, created_at
             FROM pending_memory_deletions
             WHERE resolved_at IS NULL
               AND conversation_id = ?
@@ -367,6 +381,9 @@ class PendingMemoryDeletionStore:
             guild_id=str(row["guild_id"]) if row["guild_id"] else None,
             memory_count=int(row["memory_count"]),
             document_count=int(row["document_count"]),
+            mode=str(row["mode"]),
+            memory_ids=[int(value) for value in json.loads(row["memory_ids_json"] or "[]")],
+            document_ids=[int(value) for value in json.loads(row["document_ids_json"] or "[]")],
             created_at=str(row["created_at"]),
         )
 

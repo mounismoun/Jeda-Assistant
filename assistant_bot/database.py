@@ -99,6 +99,9 @@ class AppDatabase:
               guild_id TEXT,
               memory_count INTEGER NOT NULL,
               document_count INTEGER NOT NULL,
+              mode TEXT NOT NULL DEFAULT 'all',
+              memory_ids_json TEXT NOT NULL DEFAULT '[]',
+              document_ids_json TEXT NOT NULL DEFAULT '[]',
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               resolved_at TEXT
             );
@@ -150,6 +153,9 @@ class AppDatabase:
         self.add_column_if_missing("tasks", "channel_id", "TEXT")
         self.add_column_if_missing("tasks", "reminder_sent_at", "TEXT")
         self.add_column_if_missing("tasks", "priority", "TEXT NOT NULL DEFAULT 'normal'")
+        self.add_column_if_missing("pending_memory_deletions", "mode", "TEXT NOT NULL DEFAULT 'all'")
+        self.add_column_if_missing("pending_memory_deletions", "memory_ids_json", "TEXT NOT NULL DEFAULT '[]'")
+        self.add_column_if_missing("pending_memory_deletions", "document_ids_json", "TEXT NOT NULL DEFAULT '[]'")
         self.connection.commit()
 
     def add_column_if_missing(self, table: str, column: str, definition: str) -> None:

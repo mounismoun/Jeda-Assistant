@@ -39,6 +39,11 @@ class FakeRouter:
         return RoutingResult("recall", 0.99, "첨부 문서 요약 요청")
 
 
+class FakeDeleteRouter:
+    async def route(self, **kwargs) -> RoutingResult:
+        return RoutingResult("delete_memory", 0.99, "ID 기반 기억 삭제 요청")
+
+
 class FakeAttachment:
     filename = "contract.txt"
     content_type = "text/plain"
@@ -450,5 +455,83 @@ async def test_assistant_bot_attaches_buttons_to_memory_delete_confirmation(tmp_
         assert view is not None
         assert bot.confirmation_action_for(result, scope) == "delete_all_memories"
         assert [child.label for child in view.children] == ["승인", "거부"]
+    finally:
+        await bot.close()
+
+
+@pytest.mark.anyio
+async def test_assistant_bot_confirms_memory_and_document_id_deletion_before_delete(tmp_path) -> None:
+    config = Config(
+        discord_token="discord-token",
+        discord_client_id="client-id",
+        openai_api_key="openai-key",
+        router_model="gpt-5.4-mini",
+        easy_model="gpt-5.4-mini",
+        medium_model="gpt-5.4",
+        hard_model="gpt-5.5",
+        embedding_model="text-embedding-3-small",
+        database_path=str(tmp_path / "assistant.sqlite"),
+        max_attachment_bytes=4096,
+        context_compression_chars=20000,
+        retrieval_limit=8,
+        openai_timeout_seconds=30,
+        openai_max_retries=2,
+        pending_confirmation_ttl_minutes=10,
+        task_reminder_interval_minutes=60,
+        task_reminder_batch_size=20,
+        timezone="Asia/Seoul",
+        log_level="INFO",
+        log_file=None,
+    )
+    bot = AssistantBot(config)
+    bot.memories = MemoryStore(bot.database.connection, FakeOpenAI())  # type: ignore[assignment]
+    bot.router = FakeDeleteRouter()  # type: ignore[assignment]
+    scope = ConversationScope(
+        conversation_id="dm:123",
+        channel_id="dm",
+        user_id="123",
+        guild_id=None,
+    )
+
+    try:
+        memory_id = await bot.memories.save_text_memory(
+            scope=scope,
+            text="삭제 확인 테스트 메모",
+            source_message_id="m1",
+        )
+        document_id, _ = await bot.memories.save_document(
+            scope=scope,
+            filename="delete-test.txt",
+            content_type="text/plain",
+            text="삭제 확인 테스트 문서",
+            source_message_id="d1",
+        )
+
+        response = await bot.handle_message(
+            message=FakeMessage(),  # type: ignore[arg-type]
+            text=f"메모 {memory_id} 삭제해, 문서 {document_id} 삭제해",
+            attachments=[],
+            scope=scope,
+            author_name="moun",
+            conversation_context="",
+        )
+
+        assert isinstance(response, OperationResult)
+        assert response.status == "confirm_required"
+        assert response.facts["memory_ids"] == [memory_id]
+        assert response.facts["document_ids"] == [document_id]
+        assert bot.memories.get_memory_detail(scope=scope, memory_id=memory_id) is not None
+        assert bot.memories.get_document_detail(scope=scope, document_id=document_id) is not None
+        pending = bot.pending_memory_deletions.latest(scope=scope)
+        assert pending is not None
+        assert pending.mode == "targets"
+
+        confirmed = bot.handle_pending_memory_deletion_confirmation(text="응", scope=scope)
+
+        assert confirmed is not None
+        assert confirmed.status == "success"
+        assert confirmed.facts["deleted_count"] == 2
+        assert bot.memories.get_memory_detail(scope=scope, memory_id=memory_id) is None
+        assert bot.memories.get_document_detail(scope=scope, document_id=document_id) is None
     finally:
         await bot.close()

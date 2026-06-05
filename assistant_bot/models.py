@@ -110,6 +110,9 @@ class PendingMemoryDeletion:
     guild_id: str | None
     memory_count: int
     document_count: int
+    mode: str
+    memory_ids: list[int]
+    document_ids: list[int]
     created_at: str
 
 

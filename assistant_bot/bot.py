@@ -15,6 +15,7 @@ from assistant_bot.agents import (
     TaskAgent,
     UtilityAgent,
     asks_to_delete_all_memories,
+    extract_delete_ids,
     format_conversation_context,
     format_task_priority,
 )
@@ -40,7 +41,7 @@ from assistant_bot.text_utils import split_discord_message, strip_bot_mentions
 from assistant_bot.time_utils import humanize_datetime_text, now_in_timezone, today_string
 
 logger = logging.getLogger(__name__)
-BOT_STATUS_MESSAGE = "범용 AI 비서입니다."
+BOT_STATUS_MESSAGE = "멘션하여 슬립지피티를 호출해보세요."
 
 
 class AssistantBot(discord.Client):
@@ -493,6 +494,14 @@ class AssistantBot(discord.Client):
                     message_id=str(message.id),
                     scope=scope,
                 )
+            exact_memory_ids, exact_document_ids = extract_delete_ids(text)
+            if exact_memory_ids or exact_document_ids:
+                return self.request_target_memory_deletion_confirmation(
+                    message_id=str(message.id),
+                    scope=scope,
+                    memory_ids=exact_memory_ids,
+                    document_ids=exact_document_ids,
+                )
 
         if route.intent == "unsupported":
             return await self.agent_registry.dispatch(
@@ -571,15 +580,15 @@ class AssistantBot(discord.Client):
         if pending is None:
             if expired_count and (is_positive_confirmation(text) or is_negative_confirmation(text)):
                 fallback = (
-                    "전체 기억 삭제 확인 시간이 만료됐어요. "
-                    "삭제하려면 다시 `내 기억 전부 삭제해줘`라고 말해 주세요."
+                    "기억 삭제 확인 시간이 만료됐어요. "
+                    "삭제하려면 다시 삭제할 대상을 말해 주세요."
                 )
                 return OperationResult(
                     agent="memory",
                     intent="delete_memory",
                     status="confirm_required",
-                    summary="전체 기억 삭제 확인 시간 만료",
-                    next_actions=("삭제하려면 다시 전체 기억 삭제를 요청하도록 안내한다",),
+                    summary="기억 삭제 확인 시간 만료",
+                    next_actions=("삭제하려면 다시 삭제 요청을 하도록 안내한다",),
                     fallback_text=fallback,
                 )
             return None
@@ -592,18 +601,39 @@ class AssistantBot(discord.Client):
                 summary="전체 기억 삭제 취소",
                 fallback_text="전체 기억 삭제를 취소했어요.",
             )
-        if not is_memory_deletion_confirmation(text):
+        if pending.mode == "targets":
+            if not is_positive_confirmation(text):
+                return None
+        elif not is_memory_deletion_confirmation(text):
             return None
 
         self.pending_memory_deletions.resolve(pending.id)
-        deleted_count = self.memories.delete_all_for_user(scope=scope)
+        if pending.mode == "targets":
+            deleted_count = self.memories.delete_memory_ids(scope=scope, memory_ids=pending.memory_ids)
+            deleted_count += self.memories.delete_document_ids(scope=scope, document_ids=pending.document_ids)
+            summary = "지정한 기억 삭제 완료"
+            fallback_text = f"확인했어요. 지정한 기억 {deleted_count}개를 삭제 처리했어요."
+            facts = {
+                "deleted_count": deleted_count,
+                "memory_ids": pending.memory_ids,
+                "document_ids": pending.document_ids,
+            }
+            preserve_values = (str(deleted_count),) + tuple(
+                str(value) for value in pending.memory_ids + pending.document_ids
+            )
+        else:
+            deleted_count = self.memories.delete_all_for_user(scope=scope)
+            summary = "사용자 기준 저장 기억 전체 삭제 완료"
+            fallback_text = f"확인했어요. 사용자 기준 저장 기억 {deleted_count}개를 모두 삭제 처리했어요."
+            facts = {"deleted_count": deleted_count}
+            preserve_values = (str(deleted_count),)
         self.logs.add(
             conversation_id=scope.conversation_id,
             agent="memory",
             intent="delete_memory",
             difficulty="easy",
             model=self.config.easy_model,
-            reason="사용자 전체 장기 기억 삭제 확인 후 실행",
+            reason="사용자 장기 기억 삭제 확인 후 실행",
         )
         if deleted_count == 0:
             return OperationResult(
@@ -617,10 +647,10 @@ class AssistantBot(discord.Client):
             agent="memory",
             intent="delete_memory",
             status="success",
-            summary="사용자 기준 저장 기억 전체 삭제 완료",
-            facts={"deleted_count": deleted_count},
-            preserve_values=(str(deleted_count),),
-            fallback_text=f"확인했어요. 사용자 기준 저장 기억 {deleted_count}개를 모두 삭제 처리했어요.",
+            summary=summary,
+            facts=facts,
+            preserve_values=preserve_values,
+            fallback_text=fallback_text,
         )
 
     async def handle_pending_memory_capture(
@@ -736,6 +766,7 @@ class AssistantBot(discord.Client):
             message_id=message_id,
             memory_count=stats["memories"],
             document_count=stats["documents"],
+            mode="all",
         )
         fallback = (
             f"정말 사용자 기준 저장 기억 전체를 삭제할까요? "
@@ -759,6 +790,70 @@ class AssistantBot(discord.Client):
                 str(stats["documents"]),
                 str(self.config.pending_confirmation_ttl_minutes),
             ),
+            fallback_text=fallback,
+        )
+
+    def request_target_memory_deletion_confirmation(
+        self,
+        *,
+        message_id: str,
+        scope: ConversationScope,
+        memory_ids: list[int],
+        document_ids: list[int],
+    ) -> OperationResult:
+        found_memory_ids = [
+            memory_id
+            for memory_id in memory_ids
+            if self.memories.get_memory_detail(scope=scope, memory_id=memory_id) is not None
+        ]
+        found_document_ids = [
+            document_id
+            for document_id in document_ids
+            if self.memories.get_document_detail(scope=scope, document_id=document_id) is not None
+        ]
+        target_count = len(found_memory_ids) + len(found_document_ids)
+        if target_count == 0:
+            return OperationResult(
+                agent="memory",
+                intent="delete_memory",
+                status="not_found",
+                summary="삭제할 지정 기억 없음",
+                facts={"memory_ids": memory_ids, "document_ids": document_ids},
+                preserve_values=tuple(str(value) for value in memory_ids + document_ids),
+                fallback_text="삭제할 지정 메모나 문서를 찾지 못했어요.",
+            )
+
+        self.pending_memory_deletions.add(
+            scope=scope,
+            message_id=message_id,
+            memory_count=len(found_memory_ids),
+            document_count=len(found_document_ids),
+            mode="targets",
+            memory_ids=found_memory_ids,
+            document_ids=found_document_ids,
+        )
+        targets = []
+        if found_memory_ids:
+            targets.append("메모 " + ", ".join(f"`{memory_id}`" for memory_id in found_memory_ids))
+        if found_document_ids:
+            targets.append("문서 " + ", ".join(f"`{document_id}`" for document_id in found_document_ids))
+        fallback = (
+            f"{' · '.join(targets)}을 삭제할까요? "
+            "삭제하려면 `승인`을 누르고, 취소하려면 `거부`를 눌러 주세요."
+        )
+        return OperationResult(
+            agent="memory",
+            intent="delete_memory",
+            status="confirm_required",
+            summary="지정 기억 삭제 확인 필요",
+            facts={
+                "memory_ids": found_memory_ids,
+                "document_ids": found_document_ids,
+                "target_count": target_count,
+                "ttl_minutes": self.config.pending_confirmation_ttl_minutes,
+            },
+            next_actions=("삭제하려면 승인 버튼을 누르도록 안내한다", "취소하려면 거부 버튼을 누르도록 안내한다"),
+            preserve_values=tuple(str(value) for value in found_memory_ids + found_document_ids),
             fallback_text=fallback,
         )
 
