@@ -33,8 +33,8 @@ DEFAULT_ROUTING_PROMPT_BLOCK = "\n".join(
         "- help: 사용법, 할 수 있는 일, 예시를 묻는 요청",
         "- status: 봇 상태, 설정 모델, 저장소 상태, 현재 동작 상태를 묻는 요청",
         "- current_time: 현재 날짜, 현재 시간, 오늘 날짜를 묻는 요청",
-        "- cancel_pending: 직전 첨부 저장 확인이나 대기 중인 저장 요청을 취소하는 요청",
-        "- remember: 사용자가 무언가를 기억/저장하라고 명시적으로 요청",
+        "- cancel_pending: 직전 첨부 저장 확인, 메모 대기, 대기 중인 저장 요청을 취소하는 요청",
+        "- remember: 사용자가 무언가를 기억/저장하라고 명시적으로 요청. 다음 메시지를 메모로 받으라는 예고도 포함",
         "- recall: 저장된 기억이나 문서에 근거해 답해야 하는 질문",
         "- list_memory: 저장된 기억 목록, 상태, 개수, 무엇을 기억하는지 묻는 요청",
         "- update_memory: 저장된 텍스트 메모를 수정하거나 바꾸라는 요청",
@@ -54,7 +54,19 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
     normalized = text.strip().lower()
     help_markers = ["도움말", "사용법", "뭘 할 수", "무엇을 할 수", "help", "how to use"]
     status_markers = ["상태", "정상", "status", "health", "설정", "모델 뭐", "어떤 모델"]
-    cancel_markers = ["취소", "저장하지마", "저장하지 마", "기억하지마", "기억하지 마", "cancel", "never mind"]
+    cancel_markers = [
+        "취소",
+        "저장하지마",
+        "저장하지 마",
+        "기억하지마",
+        "기억하지 마",
+        "메모 그만",
+        "메모그만",
+        "메모 취소",
+        "메모취소",
+        "cancel",
+        "never mind",
+    ]
     reset_context_markers = [
         "대화 맥락 초기화",
         "대화맥락초기화",
@@ -65,7 +77,17 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
         "reset context",
         "clear context",
     ]
-    remember_markers = ["기억해", "저장해", "기억해줘", "저장해줘", "remember", "save this"]
+    remember_markers = [
+        "기억해",
+        "저장해",
+        "기억해줘",
+        "저장해줘",
+        "메모로 남겨",
+        "메모 할게",
+        "메모할게",
+        "remember",
+        "save this",
+    ]
     update_markers = ["수정해", "고쳐", "바꿔", "업데이트", "update", "change"]
     delete_markers = ["삭제해", "지워", "잊어", "forget", "delete"]
     restore_markers = ["복구", "되돌려", "되살려", "restore", "undo delete"]

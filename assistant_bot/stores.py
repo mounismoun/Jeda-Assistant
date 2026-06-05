@@ -11,6 +11,7 @@ from assistant_bot.models import (
     MemoryListItem,
     MemorySearchResult,
     PendingAttachmentRequest,
+    PendingMemoryCapture,
     PendingMemoryDeletion,
     ReminderItem,
     TaskItem,
@@ -414,6 +415,133 @@ class PendingMemoryDeletionStore:
         cursor = self.connection.execute(
             """
             UPDATE pending_memory_deletions
+            SET resolved_at = CURRENT_TIMESTAMP
+            WHERE resolved_at IS NULL
+              AND conversation_id = ?
+              AND user_id = ?
+              AND (guild_id IS NULL OR guild_id = ?)
+              AND created_at < ?
+            """,
+            (scope.conversation_id, scope.user_id, scope.guild_id, cutoff_text),
+        )
+        self.connection.commit()
+        return int(cursor.rowcount)
+
+
+class PendingMemoryCaptureStore:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.connection = connection
+
+    def add(self, *, scope: ConversationScope, message_id: str, mode: str = "next_message") -> int:
+        self.resolve_open(scope=scope)
+        cursor = self.connection.execute(
+            """
+            INSERT INTO pending_memory_captures (
+              conversation_id, channel_id, message_id, user_id, guild_id, mode
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                scope.conversation_id,
+                scope.channel_id,
+                message_id,
+                scope.user_id,
+                scope.guild_id,
+                mode,
+            ),
+        )
+        self.connection.commit()
+        return int(cursor.lastrowid)
+
+    def latest(self, *, scope: ConversationScope, ttl_minutes: int | None = None) -> PendingMemoryCapture | None:
+        if ttl_minutes is not None:
+            self.resolve_expired(scope=scope, ttl_minutes=ttl_minutes)
+        row = self.connection.execute(
+            """
+            SELECT id, conversation_id, channel_id, message_id, user_id, guild_id, mode, created_at
+            FROM pending_memory_captures
+            WHERE resolved_at IS NULL
+              AND conversation_id = ?
+              AND user_id = ?
+              AND (guild_id IS NULL OR guild_id = ?)
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (scope.conversation_id, scope.user_id, scope.guild_id),
+        ).fetchone()
+        if not row:
+            return None
+        return PendingMemoryCapture(
+            id=int(row["id"]),
+            conversation_id=str(row["conversation_id"]),
+            channel_id=str(row["channel_id"]),
+            message_id=str(row["message_id"]),
+            user_id=str(row["user_id"]),
+            guild_id=str(row["guild_id"]) if row["guild_id"] else None,
+            mode=str(row["mode"]),
+            created_at=str(row["created_at"]),
+        )
+
+    def unresolved_count(self, *, scope: ConversationScope, ttl_minutes: int | None = None) -> int:
+        if ttl_minutes is not None:
+            self.resolve_expired(scope=scope, ttl_minutes=ttl_minutes)
+        row = self.connection.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM pending_memory_captures
+            WHERE resolved_at IS NULL
+              AND conversation_id = ?
+              AND user_id = ?
+              AND (guild_id IS NULL OR guild_id = ?)
+            """,
+            (scope.conversation_id, scope.user_id, scope.guild_id),
+        ).fetchone()
+        return int(row["count"])
+
+    def resolve(self, request_id: int) -> None:
+        self.connection.execute(
+            """
+            UPDATE pending_memory_captures
+            SET resolved_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (request_id,),
+        )
+        self.connection.commit()
+
+    def resolve_latest(
+        self,
+        *,
+        scope: ConversationScope,
+        ttl_minutes: int | None = None,
+    ) -> PendingMemoryCapture | None:
+        request = self.latest(scope=scope, ttl_minutes=ttl_minutes)
+        if request is None:
+            return None
+        self.resolve(request.id)
+        return request
+
+    def resolve_open(self, *, scope: ConversationScope) -> int:
+        cursor = self.connection.execute(
+            """
+            UPDATE pending_memory_captures
+            SET resolved_at = CURRENT_TIMESTAMP
+            WHERE resolved_at IS NULL
+              AND conversation_id = ?
+              AND user_id = ?
+              AND (guild_id IS NULL OR guild_id = ?)
+            """,
+            (scope.conversation_id, scope.user_id, scope.guild_id),
+        )
+        self.connection.commit()
+        return int(cursor.rowcount)
+
+    def resolve_expired(self, *, scope: ConversationScope, ttl_minutes: int) -> int:
+        cutoff = datetime.now(UTC) - timedelta(minutes=ttl_minutes)
+        cutoff_text = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+        cursor = self.connection.execute(
+            """
+            UPDATE pending_memory_captures
             SET resolved_at = CURRENT_TIMESTAMP
             WHERE resolved_at IS NULL
               AND conversation_id = ?
@@ -1190,37 +1318,47 @@ class MemoryStore:
         ]
         return sorted(results, key=lambda result: result.score, reverse=True)[:limit]
 
-    def recent_items(self, *, scope: ConversationScope, limit: int = 10) -> list[MemoryListItem]:
-        memory_rows = self.connection.execute(
-            """
-            SELECT id, title, text AS detail, guild_id, created_at
-            FROM user_memories
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (scope.user_id, limit),
-        ).fetchall()
+    def recent_items(
+        self,
+        *,
+        scope: ConversationScope,
+        limit: int = 10,
+        kind: str | None = None,
+    ) -> list[MemoryListItem]:
+        memory_rows = []
+        document_rows = []
+        if kind in (None, "memory"):
+            memory_rows = self.connection.execute(
+                """
+                SELECT id, title, text AS detail, guild_id, created_at
+                FROM user_memories
+                WHERE deleted_at IS NULL
+                  AND user_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (scope.user_id, limit),
+            ).fetchall()
 
-        document_rows = self.connection.execute(
-            """
-            SELECT
-              documents.id AS id,
-              documents.filename AS title,
-              COUNT(document_chunks.id) || ' chunks' AS detail,
-              documents.guild_id AS guild_id,
-              documents.created_at AS created_at
-            FROM documents
-            LEFT JOIN document_chunks ON document_chunks.document_id = documents.id
-            WHERE documents.deleted_at IS NULL
-              AND documents.user_id = ?
-            GROUP BY documents.id
-            ORDER BY documents.id DESC
-            LIMIT ?
-            """,
-            (scope.user_id, limit),
-        ).fetchall()
+        if kind in (None, "document"):
+            document_rows = self.connection.execute(
+                """
+                SELECT
+                  documents.id AS id,
+                  documents.filename AS title,
+                  COUNT(document_chunks.id) || ' chunks' AS detail,
+                  documents.guild_id AS guild_id,
+                  documents.created_at AS created_at
+                FROM documents
+                LEFT JOIN document_chunks ON document_chunks.document_id = documents.id
+                WHERE documents.deleted_at IS NULL
+                  AND documents.user_id = ?
+                GROUP BY documents.id
+                ORDER BY documents.id DESC
+                LIMIT ?
+                """,
+                (scope.user_id, limit),
+            ).fetchall()
 
         items = [
             MemoryListItem(

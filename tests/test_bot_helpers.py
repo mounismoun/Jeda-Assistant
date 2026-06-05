@@ -2,12 +2,14 @@ import pytest
 
 from assistant_bot.bot import (
     AssistantBot,
+    is_memory_capture_cancel,
     is_memory_deletion_confirmation,
     is_negative_confirmation,
     is_positive_confirmation,
 )
 from assistant_bot.config import Config
 from assistant_bot.models import ConversationScope
+from assistant_bot.stores import MemoryStore
 
 
 class FakeDestination:
@@ -16,6 +18,12 @@ class FakeDestination:
 
     async def send(self, message: str) -> None:
         self.messages.append(message)
+
+
+class FakeOpenAI:
+    async def embedding(self, text: str) -> list[float]:
+        lowered = text.lower()
+        return [1.0 if "점심" in lowered or "병원" in lowered else 0.0, 1.0]
 
 
 @pytest.fixture
@@ -42,6 +50,13 @@ def test_memory_deletion_confirmation_requires_destructive_scope() -> None:
     assert not is_memory_deletion_confirmation("삭제해")
     assert not is_memory_deletion_confirmation("메모 삭제해")
     assert not is_memory_deletion_confirmation("전부 보여줘")
+
+
+def test_memory_capture_cancel_helpers() -> None:
+    assert is_memory_capture_cancel("메모 그만해")
+    assert is_memory_capture_cancel("메모 취소해")
+    assert is_memory_capture_cancel("저장하지 마")
+    assert not is_memory_capture_cancel("있다가 점심 뭐먹지")
 
 
 @pytest.mark.anyio
@@ -144,5 +159,104 @@ async def test_assistant_bot_sends_guild_reminders_by_dm(tmp_path) -> None:
         assert sent_count == 1
         assert destination.messages[0].startswith("알림입니다.")
         assert "<@123>" not in destination.messages[0]
+    finally:
+        await bot.close()
+
+
+@pytest.mark.anyio
+async def test_assistant_bot_saves_next_message_from_pending_memory_capture(tmp_path) -> None:
+    config = Config(
+        discord_token="discord-token",
+        discord_client_id="client-id",
+        openai_api_key="openai-key",
+        router_model="gpt-5.4-mini",
+        easy_model="gpt-5.4-mini",
+        medium_model="gpt-5.4",
+        hard_model="gpt-5.5",
+        embedding_model="text-embedding-3-small",
+        database_path=str(tmp_path / "assistant.sqlite"),
+        max_attachment_bytes=1024,
+        context_compression_chars=20000,
+        retrieval_limit=8,
+        openai_timeout_seconds=30,
+        openai_max_retries=2,
+        pending_confirmation_ttl_minutes=10,
+        task_reminder_interval_minutes=60,
+        task_reminder_batch_size=20,
+        timezone="Asia/Seoul",
+        log_level="INFO",
+        log_file=None,
+    )
+    bot = AssistantBot(config)
+    bot.memories = MemoryStore(bot.database.connection, FakeOpenAI())  # type: ignore[assignment]
+    scope = ConversationScope(
+        conversation_id="dm:123",
+        channel_id="dm",
+        user_id="123",
+        guild_id=None,
+    )
+    bot.pending_memory_captures.add(scope=scope, message_id="100")
+
+    try:
+        response = await bot.handle_pending_memory_capture(
+            text="있다가 점심 뭐먹지",
+            scope=scope,
+            message_id="101",
+        )
+
+        assert response is not None
+        assert response.status == "success"
+        assert response.facts["text"] == "있다가 점심 뭐먹지"
+        assert bot.pending_memory_captures.latest(scope=scope) is None
+        assert bot.memories.get_memory_detail(scope=scope, memory_id=1).text == "있다가 점심 뭐먹지"
+    finally:
+        await bot.close()
+
+
+@pytest.mark.anyio
+async def test_assistant_bot_cancels_pending_memory_capture(tmp_path) -> None:
+    config = Config(
+        discord_token="discord-token",
+        discord_client_id="client-id",
+        openai_api_key="openai-key",
+        router_model="gpt-5.4-mini",
+        easy_model="gpt-5.4-mini",
+        medium_model="gpt-5.4",
+        hard_model="gpt-5.5",
+        embedding_model="text-embedding-3-small",
+        database_path=str(tmp_path / "assistant.sqlite"),
+        max_attachment_bytes=1024,
+        context_compression_chars=20000,
+        retrieval_limit=8,
+        openai_timeout_seconds=30,
+        openai_max_retries=2,
+        pending_confirmation_ttl_minutes=10,
+        task_reminder_interval_minutes=60,
+        task_reminder_batch_size=20,
+        timezone="Asia/Seoul",
+        log_level="INFO",
+        log_file=None,
+    )
+    bot = AssistantBot(config)
+    bot.memories = MemoryStore(bot.database.connection, FakeOpenAI())  # type: ignore[assignment]
+    scope = ConversationScope(
+        conversation_id="dm:123",
+        channel_id="dm",
+        user_id="123",
+        guild_id=None,
+    )
+    bot.pending_memory_captures.add(scope=scope, message_id="100")
+
+    try:
+        response = await bot.handle_pending_memory_capture(
+            text="메모 그만해",
+            scope=scope,
+            message_id="101",
+        )
+
+        assert response is not None
+        assert response.summary == "메모 대기 취소"
+        assert bot.pending_memory_captures.latest(scope=scope) is None
+        assert bot.memories.stats(scope=scope)["memories"] == 0
     finally:
         await bot.close()

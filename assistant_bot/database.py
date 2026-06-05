@@ -103,6 +103,18 @@ class AppDatabase:
               resolved_at TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS pending_memory_captures (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              conversation_id TEXT NOT NULL,
+              channel_id TEXT NOT NULL,
+              message_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              guild_id TEXT,
+              mode TEXT NOT NULL DEFAULT 'next_message',
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              resolved_at TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS tasks (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               user_id TEXT NOT NULL,

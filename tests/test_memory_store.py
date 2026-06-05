@@ -14,6 +14,7 @@ from assistant_bot.stores import (
     ConversationStore,
     MemoryStore,
     PendingAttachmentStore,
+    PendingMemoryCaptureStore,
     PendingMemoryDeletionStore,
     ReminderStore,
     TaskStore,
@@ -905,6 +906,8 @@ async def test_memory_store_lists_stats_and_deletes() -> None:
     assert chunk_count == 1
     assert store.stats(scope=scope) == {"memories": 1, "documents": 1, "chunks": 1}
     assert len(store.recent_items(scope=scope)) == 2
+    assert [item.kind for item in store.recent_items(scope=scope, kind="memory")] == ["memory"]
+    assert [item.kind for item in store.recent_items(scope=scope, kind="document")] == ["document"]
     memory_detail = store.get_memory_detail(scope=scope, memory_id=memory_id)
     assert memory_detail is not None
     assert memory_detail.title.startswith("운동은")
@@ -1308,6 +1311,34 @@ async def test_memory_agent_uses_model_to_reject_memory_request_without_content(
 
 
 @pytest.mark.anyio
+async def test_memory_agent_uses_model_to_capture_next_message() -> None:
+    database = AppDatabase(":memory:")
+    store = MemoryStore(database.connection, FakeOpenAI())  # type: ignore[arg-type]
+    openai = FakeMemoryClassifierOpenAI(
+        '{"action": "capture_next", "has_memory_content": false, "memory_text": "", "reason": "다음 메시지 메모 요청"}'
+    )
+    agent = MemoryAgent(
+        config=make_test_config(),
+        openai=openai,  # type: ignore[arg-type]
+        memories=store,
+        logs=AgentLogStore(database.connection),
+    )
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+
+    response = await agent.remember_text(text="다음 내용 메모로 남겨줘", scope=scope, message_id="m1")
+
+    assert response.status == "confirm_required"
+    assert response.facts["capture_mode"] == "next_message"
+    assert "다음 메시지를 메모로 받을게요" in response
+    assert store.stats(scope=scope)["memories"] == 0
+
+
+@pytest.mark.anyio
 async def test_memory_agent_uses_model_extracted_memory_text() -> None:
     database = AppDatabase(":memory:")
     store = MemoryStore(database.connection, FakeOpenAI())  # type: ignore[arg-type]
@@ -1463,6 +1494,45 @@ async def test_memory_agent_searches_saved_memories_as_list() -> None:
     assert "`운동` 관련 저장 기억" in response
     assert f"메모 `{memory_id}`" in response
     assert "자세히 보려면" in response
+
+
+@pytest.mark.anyio
+async def test_memory_agent_lists_memos_and_files_separately() -> None:
+    database = AppDatabase(":memory:")
+    store = MemoryStore(database.connection, FakeOpenAI())  # type: ignore[arg-type]
+    agent = MemoryAgent(
+        config=make_test_config(),
+        openai=FakeOpenAI(),  # type: ignore[arg-type]
+        memories=store,
+        logs=AgentLogStore(database.connection),
+    )
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+    memory_id = await store.save_text_memory(scope=scope, text="텍스트 메모", source_message_id="m1")
+    document_id, _ = await store.save_document(
+        scope=scope,
+        filename="notes.md",
+        content_type="text/markdown",
+        text="파일 내용",
+        source_message_id="m2",
+    )
+
+    memo_response = await agent.list_memories(text="메모 목록 보여줘", scope=scope)
+    file_response = await agent.list_memories(text="파일 목록 보여줘", scope=scope)
+
+    assert memo_response.facts["kind_filter"] == "memory"
+    assert file_response.facts["kind_filter"] == "document"
+    assert memo_response.items[0]["kind"] == "memory"
+    assert file_response.items[0]["kind"] == "document"
+    assert f"메모 `{memory_id}`" in memo_response
+    assert "notes.md" not in memo_response
+    assert f"문서 `{document_id}`" in file_response
+    assert "notes.md" in file_response
+    assert "텍스트 메모" not in file_response
 
 
 @pytest.mark.anyio
@@ -1863,6 +1933,61 @@ def test_pending_memory_deletion_store_expires_old_requests() -> None:
     database.connection.execute(
         """
         UPDATE pending_memory_deletions
+        SET created_at = '2000-01-01 00:00:00'
+        WHERE id = ?
+        """,
+        (request_id,),
+    )
+    database.connection.commit()
+
+    assert store.latest(scope=scope, ttl_minutes=10) is None
+    assert store.unresolved_count(scope=scope, ttl_minutes=10) == 0
+
+
+def test_pending_memory_capture_store_tracks_single_open_request() -> None:
+    database = AppDatabase(":memory:")
+    store = PendingMemoryCaptureStore(database.connection)
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+
+    first_id = store.add(scope=scope, message_id="100")
+    second_id = store.add(scope=scope, message_id="101")
+
+    latest = store.latest(scope=scope)
+
+    assert latest is not None
+    assert latest.id == second_id
+    assert latest.message_id == "101"
+    assert latest.mode == "next_message"
+    assert store.unresolved_count(scope=scope) == 1
+    assert first_id != second_id
+
+    resolved = store.resolve_latest(scope=scope)
+
+    assert resolved is not None
+    assert resolved.id == second_id
+    assert store.latest(scope=scope) is None
+    assert store.unresolved_count(scope=scope) == 0
+
+
+def test_pending_memory_capture_store_expires_old_requests() -> None:
+    database = AppDatabase(":memory:")
+    store = PendingMemoryCaptureStore(database.connection)
+    scope = ConversationScope(
+        conversation_id="dm:user-1",
+        channel_id="dm",
+        user_id="user-1",
+        guild_id=None,
+    )
+
+    request_id = store.add(scope=scope, message_id="100")
+    database.connection.execute(
+        """
+        UPDATE pending_memory_captures
         SET created_at = '2000-01-01 00:00:00'
         WHERE id = ?
         """,

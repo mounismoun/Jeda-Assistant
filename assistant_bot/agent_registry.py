@@ -140,6 +140,7 @@ def build_agent_registry(
     reminder_agent,
     conversation_agent,
     pending_attachments,
+    pending_memory_captures,
     pending_memory_deletions,
     pending_confirmation_ttl_minutes: int,
     catalog_path: str | Path = DEFAULT_AGENT_CATALOG_PATH,
@@ -175,6 +176,10 @@ def build_agent_registry(
         return utility_agent.status(
             scope=context.scope,
             pending_count=pending_attachments.unresolved_count(
+                scope=context.scope,
+                ttl_minutes=pending_confirmation_ttl_minutes,
+            )
+            + pending_memory_captures.unresolved_count(
                 scope=context.scope,
                 ttl_minutes=pending_confirmation_ttl_minutes,
             ),
@@ -220,6 +225,18 @@ def build_agent_registry(
                 status="success",
                 summary="전체 기억 삭제 대기 작업 취소",
                 fallback_text="전체 기억 삭제를 취소했어요.",
+            )
+        pending_capture = pending_memory_captures.resolve_latest(
+            scope=context.scope,
+            ttl_minutes=pending_confirmation_ttl_minutes,
+        )
+        if pending_capture is not None:
+            return OperationResult(
+                agent="registry",
+                intent="cancel_pending",
+                status="success",
+                summary="메모 대기 작업 취소",
+                fallback_text="알겠어요. 이번 메모 대기는 취소할게요.",
             )
         pending = pending_attachments.resolve_latest(
             scope=context.scope,

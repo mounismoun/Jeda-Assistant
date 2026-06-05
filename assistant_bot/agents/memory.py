@@ -38,9 +38,13 @@ from .common import (
 
 @dataclass(frozen=True)
 class MemoryContentDecision:
-    has_content: bool
+    action: str
     memory_text: str
     reason: str
+
+    @property
+    def has_content(self) -> bool:
+        return self.action == "save_content" and bool(self.memory_text)
 
 
 class MemoryAgent:
@@ -91,6 +95,14 @@ class MemoryAgent:
             memory_text = recent_text
         else:
             decision = await self.classify_memory_content(text)
+            if decision.action == "capture_next":
+                return self._result(
+                    "좋아요. 다음 메시지를 메모로 받을게요.",
+                    status="confirm_required",
+                    summary="다음 메시지 메모 캡처 대기 필요",
+                    facts={"capture_mode": "next_message", "classification_reason": decision.reason},
+                    next_actions=("다음 사용자 메시지를 메모 본문으로 저장한다",),
+                )
             if not decision.has_content:
                 return self._result(
                     "메모할 내용을 알려주세요. 예: `메모: 나는 오전에 집중이 잘 된다`",
@@ -158,8 +170,14 @@ class MemoryAgent:
 - "다음 내용", "지금부터", "메모 하나" 같은 표현만 있으면 저장 내용이 아니다.
 - memory_text에는 저장할 실제 내용만 넣고, "메모해줘", "저장해줘" 같은 요청 표현은 제외한다.
 
+action 값:
+- save_content: 현재 메시지 안에 저장할 실제 본문이 있음
+- capture_next: 현재 메시지는 다음 메시지를 메모로 받으라는 예고/요청임
+- needs_content: 저장 요청은 있지만 저장할 본문이 없음
+- cancel_pending: 메모 대기나 저장을 취소하려는 요청임
+
 JSON만 반환한다.
-형식: {"has_memory_content":true,"memory_text":"저장할 실제 내용","reason":"짧은 이유"}
+형식: {"action":"save_content","has_memory_content":true,"memory_text":"저장할 실제 내용","reason":"짧은 이유"}
 """,
                 input_text=f"사용자 메시지:\n{text}",
                 temperature=0,
@@ -167,15 +185,28 @@ JSON만 반환한다.
             data = _parse_memory_content_decision(output)
             memory_text = str(data.get("memory_text") or "").strip()
             has_content = bool(data.get("has_memory_content")) and bool(memory_text)
+            action = str(data.get("action") or "").strip()
+            if not action:
+                action = "save_content" if has_content else "needs_content"
+            if action == "content":
+                action = "save_content"
+            if action == "no_content":
+                action = "needs_content"
+            if action not in {"save_content", "capture_next", "needs_content", "cancel_pending"}:
+                action = "save_content" if has_content else "needs_content"
             return MemoryContentDecision(
-                has_content=has_content,
+                action=action,
                 memory_text=memory_text,
                 reason=str(data.get("reason") or "AI 메모 내용 판정"),
             )
         except Exception:
             if not has_substantive_memory_text(text):
-                return MemoryContentDecision(False, "", "휴리스틱상 저장할 실제 내용 없음")
-            return MemoryContentDecision(True, extract_memory_text(text), "AI 판정 실패 후 휴리스틱 fallback")
+                return MemoryContentDecision("needs_content", "", "휴리스틱상 저장할 실제 내용 없음")
+            return MemoryContentDecision(
+                "save_content",
+                extract_memory_text(text),
+                "AI 판정 실패 후 휴리스틱 fallback",
+            )
 
     async def recall(self, *, text: str, scope: ConversationScope) -> str:
         if asks_to_show_latest_memory(text):
@@ -515,7 +546,8 @@ JSON만 반환한다.
             return await self.search_memories(query=query, scope=scope)
 
         stats = self.memories.stats(scope=scope)
-        items = self.memories.recent_items(scope=scope, limit=10)
+        kind_filter = memory_list_kind(text)
+        items = self.memories.recent_items(scope=scope, limit=10, kind=kind_filter)
         self.logs.add(
             conversation_id=scope.conversation_id,
             agent="memory",
@@ -526,20 +558,29 @@ JSON만 반환한다.
         )
 
         if not items:
+            empty_label = {
+                "memory": "아직 저장된 메모가 없어요.",
+                "document": "아직 저장된 파일이나 문서가 없어요.",
+            }.get(kind_filter, "아직 저장된 기억이 없어요. “이거 기억해줘: ...”처럼 말하면 장기 기억에 저장합니다.")
             return self._result(
-                "아직 저장된 기억이 없어요. “이거 기억해줘: ...”처럼 말하면 장기 기억에 저장합니다.",
+                empty_label,
                 status="success",
                 summary="저장된 기억 없음",
-                facts=stats,
+                facts={**stats, "kind_filter": kind_filter},
                 next_actions=("새 기억을 저장할 수 있음을 짧게 안내한다",),
             )
 
+        heading = {
+            "memory": f"현재 텍스트 메모 {stats['memories']}개를 기억하고 있어요.",
+            "document": f"현재 파일/문서 {stats['documents']}개({stats['chunks']} chunks)를 기억하고 있어요.",
+        }.get(
+            kind_filter,
+            f"현재 텍스트 기억 {stats['memories']}개, 문서 {stats['documents']}개"
+            f"({stats['chunks']} chunks)를 기억하고 있어요.",
+        )
         lines = [
-            (
-                f"현재 텍스트 기억 {stats['memories']}개, 문서 {stats['documents']}개"
-                f"({stats['chunks']} chunks)를 기억하고 있어요."
-            ),
-            "최근 기억:",
+            heading,
+            {"memory": "최근 메모:", "document": "최근 파일/문서:"}.get(kind_filter, "최근 기억:"),
         ]
         for item in items:
             label = "메모" if item.kind == "memory" else "문서"
@@ -548,7 +589,7 @@ JSON만 반환한다.
             "\n".join(lines),
             status="success",
             summary="저장된 기억 목록 조회",
-            facts=stats,
+            facts={**stats, "kind_filter": kind_filter},
             items=tuple(self._stored_item(item) for item in items),
             preserve_values=tuple(str(item.id) for item in items),
         )
@@ -781,3 +822,15 @@ JSON만 반환한다.
 def _parse_memory_content_decision(output: str) -> dict[str, object]:
     match = re.search(r"\{.*\}", output, flags=re.DOTALL)
     return json.loads(match.group(0) if match else output)
+
+
+def memory_list_kind(text: str) -> str | None:
+    normalized = text.casefold()
+    compact = re.sub(r"\s+", "", normalized)
+    document_markers = ["파일", "문서", "첨부", "pdf", "document", "documents", "file", "files"]
+    memory_markers = ["메모", "텍스트 기억", "text memory", "memo", "memos"]
+    if any(marker in normalized or marker in compact for marker in document_markers):
+        return "document"
+    if any(marker in normalized or marker in compact for marker in memory_markers):
+        return "memory"
+    return None

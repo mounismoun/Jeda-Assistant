@@ -30,7 +30,12 @@ from assistant_bot.agents import (
     format_task_detail,
     format_task_priority,
 )
-from assistant_bot.bot import is_memory_deletion_confirmation, is_negative_confirmation, is_positive_confirmation
+from assistant_bot.bot import (
+    is_memory_capture_cancel,
+    is_memory_deletion_confirmation,
+    is_negative_confirmation,
+    is_positive_confirmation,
+)
 from assistant_bot.config import Config
 from assistant_bot.database import AppDatabase
 from assistant_bot.file_extractor import extract_local_file_text
@@ -42,6 +47,7 @@ from assistant_bot.stores import (
     ConversationStore,
     MemoryStore,
     PendingAttachmentStore,
+    PendingMemoryCaptureStore,
     PendingMemoryDeletionStore,
     ReminderStore,
     TaskStore,
@@ -2307,6 +2313,7 @@ async def run_local_text_interaction(
     logs = AgentLogStore(database.connection)
     conversations = ConversationStore(database.connection)
     pending_attachments = PendingAttachmentStore(database.connection)
+    pending_memory_captures = PendingMemoryCaptureStore(database.connection)
     pending_memory_deletions = PendingMemoryDeletionStore(database.connection)
     tasks = TaskStore(database.connection)
     reminders = ReminderStore(database.connection)
@@ -2342,6 +2349,7 @@ async def run_local_text_interaction(
         reminder_agent=reminder_agent,
         conversation_agent=conversation_agent,
         pending_attachments=pending_attachments,
+        pending_memory_captures=pending_memory_captures,
         pending_memory_deletions=pending_memory_deletions,
         pending_confirmation_ttl_minutes=config.pending_confirmation_ttl_minutes,
     )
@@ -2371,6 +2379,15 @@ async def run_local_text_interaction(
         pending_memory_deletions=pending_memory_deletions,
     )
     if answer is None:
+        answer = await handle_local_pending_memory_capture(
+            text=text,
+            scope=scope,
+            config=config,
+            memories=memories,
+            logs=logs,
+            pending_memory_captures=pending_memory_captures,
+        )
+    if answer is None:
         route = await router.route(
             text=text,
             has_attachments=False,
@@ -2397,7 +2414,7 @@ async def run_local_text_interaction(
                     ),
                 )
         else:
-            answer = await agent_registry.dispatch(
+            answer_result = await agent_registry.dispatch(
                 route.intent,
                 AgentContext(
                     text=text,
@@ -2407,6 +2424,13 @@ async def run_local_text_interaction(
                     location_label=local_location_label(guild_id),
                 ),
             )
+            if route.intent == "remember" and answer_result.facts.get("capture_mode") == "next_message":
+                pending_memory_captures.add(
+                    scope=scope,
+                    message_id=make_local_message_id(),
+                    mode="next_message",
+                )
+            answer = answer_result
 
     answer = await ResponseComposer(config=config, openai=openai).compose(
         user_text=text,
@@ -2532,6 +2556,57 @@ def format_ingest_results(results: list[dict[str, object]]) -> str:
         else:
             lines.append(f"- 실패: {result['path']} · {result['detail']}")
     return "\n".join(lines)
+
+
+async def handle_local_pending_memory_capture(
+    *,
+    text: str,
+    scope: ConversationScope,
+    config: Config,
+    memories: MemoryStore,
+    logs: AgentLogStore,
+    pending_memory_captures: PendingMemoryCaptureStore,
+) -> str | None:
+    pending = pending_memory_captures.latest(
+        scope=scope,
+        ttl_minutes=config.pending_confirmation_ttl_minutes,
+    )
+    if pending is None:
+        return None
+    if is_memory_capture_cancel(text):
+        pending_memory_captures.resolve(pending.id)
+        return "알겠어요. 이번 메모 대기는 취소할게요."
+    if not text.strip():
+        return "이건 메모 내용으로 보기 어려워요. 저장할 내용을 한 번만 더 적어주세요."
+
+    duplicate = memories.find_duplicate_text_memory(scope=scope, text=text)
+    if duplicate is not None:
+        pending_memory_captures.resolve(pending.id)
+        return f"이미 같은 내용을 기억하고 있어요. 기존 메모 ID는 `{duplicate.id}`입니다."
+
+    similar = await memories.search(scope=scope, query=text, limit=1)
+    if similar and similar[0].kind == "memory" and similar[0].score >= 0.82:
+        pending_memory_captures.resolve(pending.id)
+        return (
+            f"비슷한 메모 `{similar[0].id}` · {similar[0].title}가 있어요. "
+            "기존 메모에 덧붙일까요, 새로 저장할까요?"
+        )
+
+    pending_memory_captures.resolve(pending.id)
+    memory_id = await memories.save_text_memory(
+        scope=scope,
+        text=text,
+        source_message_id=make_local_message_id(),
+    )
+    logs.add(
+        conversation_id=scope.conversation_id,
+        agent="memory",
+        intent="remember",
+        difficulty="easy",
+        model=config.easy_model,
+        reason="로컬 CLI 메모 대기 상태에서 다음 메시지 저장",
+    )
+    return f"메모해뒀어요. 저장 ID는 `{memory_id}`예요."
 
 
 def handle_local_pending_memory_deletion(

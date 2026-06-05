@@ -30,6 +30,7 @@ from assistant_bot.stores import (
     ConversationStore,
     MemoryStore,
     PendingAttachmentStore,
+    PendingMemoryCaptureStore,
     PendingMemoryDeletionStore,
     ReminderStore,
     TaskStore,
@@ -56,6 +57,7 @@ class AssistantBot(discord.Client):
         self.logs = AgentLogStore(self.database.connection)
         self.conversations = ConversationStore(self.database.connection)
         self.pending_attachments = PendingAttachmentStore(self.database.connection)
+        self.pending_memory_captures = PendingMemoryCaptureStore(self.database.connection)
         self.pending_memory_deletions = PendingMemoryDeletionStore(self.database.connection)
         self.tasks = TaskStore(self.database.connection)
         self.reminders = ReminderStore(self.database.connection)
@@ -100,6 +102,7 @@ class AssistantBot(discord.Client):
             reminder_agent=self.reminder_agent,
             conversation_agent=self.conversation_agent,
             pending_attachments=self.pending_attachments,
+            pending_memory_captures=self.pending_memory_captures,
             pending_memory_deletions=self.pending_memory_deletions,
             pending_confirmation_ttl_minutes=self.config.pending_confirmation_ttl_minutes,
         )
@@ -298,6 +301,14 @@ class AssistantBot(discord.Client):
         if pending_deletion_response is not None:
             return pending_deletion_response
 
+        pending_capture_response = await self.handle_pending_memory_capture(
+            text=text,
+            scope=scope,
+            message_id=str(message.id),
+        )
+        if pending_capture_response is not None:
+            return pending_capture_response
+
         route = await self.router.route(
             text=text,
             has_attachments=bool(supported_attachments),
@@ -306,12 +317,18 @@ class AssistantBot(discord.Client):
         )
 
         if route.intent == "remember":
-            return await self.handle_remember(
+            remember_result = await self.handle_remember(
                 message=message,
                 text=text,
                 attachments=supported_attachments,
                 scope=scope,
             )
+            if (
+                isinstance(remember_result, OperationResult)
+                and remember_result.facts.get("capture_mode") == "next_message"
+            ):
+                self.pending_memory_captures.add(scope=scope, message_id=str(message.id))
+            return remember_result
 
         if route.intent == "delete_memory":
             if asks_to_delete_all_memories(text):
@@ -447,6 +464,103 @@ class AssistantBot(discord.Client):
             facts={"deleted_count": deleted_count},
             preserve_values=(str(deleted_count),),
             fallback_text=f"확인했어요. 사용자 기준 저장 기억 {deleted_count}개를 모두 삭제 처리했어요.",
+        )
+
+    async def handle_pending_memory_capture(
+        self,
+        *,
+        text: str,
+        scope: ConversationScope,
+        message_id: str,
+    ) -> OperationResult | None:
+        pending = self.pending_memory_captures.latest(
+            scope=scope,
+            ttl_minutes=self.config.pending_confirmation_ttl_minutes,
+        )
+        if pending is None:
+            return None
+        if is_memory_capture_cancel(text):
+            self.pending_memory_captures.resolve(pending.id)
+            return OperationResult(
+                agent="memory",
+                intent="remember",
+                status="success",
+                summary="메모 대기 취소",
+                fallback_text="알겠어요. 이번 메모 대기는 취소할게요.",
+            )
+        if not text.strip():
+            return OperationResult(
+                agent="memory",
+                intent="remember",
+                status="needs_input",
+                summary="메모 대기 중 빈 메시지 수신",
+                next_actions=("저장할 내용을 한 번 더 요청한다",),
+                fallback_text="이건 메모 내용으로 보기 어려워요. 저장할 내용을 한 번만 더 적어주세요.",
+            )
+
+        duplicate = self.memories.find_duplicate_text_memory(scope=scope, text=text)
+        if duplicate is not None:
+            self.pending_memory_captures.resolve(pending.id)
+            return OperationResult(
+                agent="memory",
+                intent="remember",
+                status="success",
+                summary="메모 대기 중 정확한 중복 확인",
+                facts={
+                    "duplicate_memory_id": duplicate.id,
+                    "source_location": duplicate.source_location,
+                    "text": text,
+                },
+                preserve_values=(str(duplicate.id), duplicate.source_location),
+                fallback_text=(
+                    f"이미 같은 내용을 기억하고 있어요. 기존 메모 ID는 `{duplicate.id}`이고, "
+                    f"저장 위치는 {duplicate.source_location}입니다."
+                ),
+            )
+
+        similar = await self.memories.search(scope=scope, query=text, limit=1)
+        if similar and similar[0].kind == "memory" and similar[0].score >= 0.82:
+            self.pending_memory_captures.resolve(pending.id)
+            return OperationResult(
+                agent="memory",
+                intent="remember",
+                status="confirm_required",
+                summary="유사 메모 수정/병합 제안",
+                facts={
+                    "candidate_memory_id": similar[0].id,
+                    "candidate_title": similar[0].title,
+                    "similarity": similar[0].score,
+                    "new_text": text,
+                },
+                preserve_values=(str(similar[0].id), similar[0].title),
+                fallback_text=(
+                    f"비슷한 메모 `{similar[0].id}` · {similar[0].title}가 있어요. "
+                    "기존 메모에 덧붙일까요, 새로 저장할까요?"
+                ),
+            )
+
+        self.pending_memory_captures.resolve(pending.id)
+        memory_id = await self.memories.save_text_memory(
+            scope=scope,
+            text=text,
+            source_message_id=message_id,
+        )
+        self.logs.add(
+            conversation_id=scope.conversation_id,
+            agent="memory",
+            intent="remember",
+            difficulty="easy",
+            model=self.config.easy_model,
+            reason="대기 중인 다음 메시지 메모 저장",
+        )
+        return OperationResult(
+            agent="memory",
+            intent="remember",
+            status="success",
+            summary="대기 중인 다음 메시지 메모 저장 완료",
+            facts={"memory_id": memory_id, "text": text},
+            preserve_values=(str(memory_id),),
+            fallback_text=f"메모해뒀어요. 저장 ID는 `{memory_id}`입니다.",
         )
 
     def request_memory_deletion_confirmation(self, *, message_id: str, scope: ConversationScope) -> OperationResult:
@@ -697,6 +811,25 @@ def is_negative_confirmation(text: str) -> bool:
         marker in normalized
         for marker in ["취소", "아니", "하지마", "하지 마", "no", "cancel", "never mind"]
     )
+
+
+def is_memory_capture_cancel(text: str) -> bool:
+    normalized = text.strip().lower()
+    compact = "".join(normalized.split())
+    markers = [
+        "메모 그만",
+        "메모그만",
+        "메모 취소",
+        "메모취소",
+        "저장하지 마",
+        "저장하지마",
+        "기억하지 마",
+        "기억하지마",
+        "취소",
+        "cancel",
+        "stop memo",
+    ]
+    return any(marker in normalized or marker in compact for marker in markers)
 
 
 def describe_attachments(attachments: list[discord.Attachment]) -> str:

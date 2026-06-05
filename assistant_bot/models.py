@@ -114,6 +114,18 @@ class PendingMemoryDeletion:
 
 
 @dataclass(frozen=True)
+class PendingMemoryCapture:
+    id: int
+    conversation_id: str
+    channel_id: str
+    message_id: str
+    user_id: str
+    guild_id: str | None
+    mode: str
+    created_at: str
+
+
+@dataclass(frozen=True)
 class TaskItem:
     id: int
     user_id: str
