@@ -99,6 +99,21 @@ def extract_pdf_text(data: bytes) -> str:
     return "\n\n".join(page.strip() for page in pages if page.strip()).strip()
 
 
+def pdf_has_images(data: bytes) -> bool:
+    reader = PdfReader(BytesIO(data))
+    for page in reader.pages:
+        resources = page.get("/Resources") or {}
+        xobjects = resources.get("/XObject")
+        if xobjects is None:
+            continue
+        xobject_map = xobjects.get_object()
+        for xobject in xobject_map.values():
+            candidate = xobject.get_object()
+            if candidate.get("/Subtype") == "/Image":
+                return True
+    return False
+
+
 def render_pdf_pages_to_png(data: bytes, *, filename: str) -> list[tuple[str, bytes]]:
     try:
         import fitz

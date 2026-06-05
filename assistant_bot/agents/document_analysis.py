@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 import discord
@@ -9,6 +10,7 @@ from assistant_bot.file_extractor import (
     content_type_for_filename,
     extract_bytes_text,
     is_vision_attachment,
+    pdf_has_images,
     render_pdf_pages_to_png,
     validate_extracted_text,
 )
@@ -25,6 +27,15 @@ class OcrTarget:
     filename: str
     content_type: str | None
     source_size: int
+    images: tuple[tuple[str, bytes], ...]
+
+
+@dataclass(frozen=True)
+class PdfVisualCandidate:
+    filename: str
+    content_type: str | None
+    source_size: int
+    local_text: str
     images: tuple[tuple[str, bytes], ...]
 
 
@@ -85,6 +96,7 @@ class DocumentAnalysisAgent:
 
         prepared: list[PreparedAttachment] = []
         ocr_targets: list[OcrTarget] = []
+        pdf_visual_candidates: list[PdfVisualCandidate] = []
         errors: list[str] = []
 
         for attachment in attachments:
@@ -95,6 +107,27 @@ class DocumentAnalysisAgent:
             try:
                 local_text = extract_bytes_text(data, filename=attachment.filename)
                 validate_extracted_text(local_text, attachment.filename)
+                if (
+                    attachment.filename.lower().endswith(".pdf")
+                    and not wants_text_only_analysis(text)
+                    and pdf_has_images(data)
+                ):
+                    try:
+                        images = render_pdf_pages_to_png(data, filename=attachment.filename)
+                    except ValueError as render_error:
+                        errors.append(f"`{attachment.filename}` 이미지 분석 준비 실패: {render_error}")
+                    else:
+                        pdf_visual_candidates.append(
+                            PdfVisualCandidate(
+                                filename=attachment.filename,
+                                content_type=attachment.content_type
+                                or content_type_for_filename(attachment.filename),
+                                source_size=attachment.size,
+                                local_text=local_text,
+                                images=tuple(images),
+                            )
+                        )
+                        continue
                 prepared.append(
                     PreparedAttachment(
                         filename=attachment.filename,
@@ -133,10 +166,65 @@ class DocumentAnalysisAgent:
                     continue
                 errors.append(f"`{attachment.filename}` 분석 실패: {error}")
 
-        ocr_bytes = sum(target.source_size for target in ocr_targets)
+        ocr_bytes = sum(target.source_size for target in ocr_targets) + sum(
+            candidate.source_size for candidate in pdf_visual_candidates
+        )
         quota_result = self._check_quota(scope=scope, ocr_bytes=ocr_bytes)
         if quota_result is not None:
             return quota_result
+
+        charged_vision_bytes = 0
+        for candidate in pdf_visual_candidates:
+            try:
+                selected_images = await self._select_pdf_visual_pages(candidate, user_text=text)
+                charged_vision_bytes += candidate.source_size
+            except Exception as error:
+                errors.append(f"`{candidate.filename}` 이미지 선별 실패: {error}")
+                prepared.append(
+                    PreparedAttachment(
+                        filename=candidate.filename,
+                        content_type=candidate.content_type,
+                        text=candidate.local_text,
+                        size=candidate.source_size,
+                        extraction_method="local",
+                    )
+                )
+                continue
+
+            visual_text = ""
+            if selected_images:
+                try:
+                    visual_text = await self._extract_ocr_text(
+                        OcrTarget(
+                            filename=candidate.filename,
+                            content_type=candidate.content_type,
+                            source_size=candidate.source_size,
+                            images=tuple(selected_images),
+                        )
+                    )
+                    validate_extracted_text(visual_text, candidate.filename)
+                except Exception as error:
+                    errors.append(f"`{candidate.filename}` 중요 이미지 분석 실패: {error}")
+                    visual_text = ""
+
+            combined_text = candidate.local_text
+            used_vision = bool(visual_text)
+            if visual_text:
+                combined_text = (
+                    f"{candidate.local_text}\n\n"
+                    "[PDF 중요 이미지 분석]\n"
+                    f"{visual_text}"
+                )
+            prepared.append(
+                PreparedAttachment(
+                    filename=candidate.filename,
+                    content_type=candidate.content_type,
+                    text=combined_text,
+                    size=candidate.source_size,
+                    extraction_method="mixed_pdf_visual" if used_vision else "local",
+                    used_vision_ocr=used_vision,
+                )
+            )
 
         for target in ocr_targets:
             try:
@@ -152,14 +240,15 @@ class DocumentAnalysisAgent:
                         used_vision_ocr=True,
                     )
                 )
+                charged_vision_bytes += target.source_size
             except Exception as error:
                 errors.append(f"`{target.filename}` OCR 실패: {error}")
 
-        if ocr_bytes and any(item.used_vision_ocr for item in prepared):
+        if charged_vision_bytes:
             self.usage.record_usage(
                 user_id=scope.user_id,
                 usage_date=today_string(self.config.timezone),
-                bytes_used=ocr_bytes,
+                bytes_used=charged_vision_bytes,
                 source_message_id=message_id,
             )
 
@@ -194,7 +283,7 @@ class DocumentAnalysisAgent:
             summary="파일 분석 완료",
             facts={
                 "document_ids": [document.id for document in saved_documents],
-                "vision_ocr_bytes": ocr_bytes,
+                "vision_ocr_bytes": charged_vision_bytes,
                 "vision_ocr_model": self.config.vision_ocr_model,
                 "vision_detail": "auto",
                 "answer": answer,
@@ -285,6 +374,36 @@ class DocumentAnalysisAgent:
             temperature=0.0,
         )
 
+    async def _select_pdf_visual_pages(
+        self,
+        candidate: PdfVisualCandidate,
+        *,
+        user_text: str,
+    ) -> list[tuple[str, bytes]]:
+        mode = "broad" if wants_visual_analysis(user_text) else "normal"
+        response = await self.openai.vision_text_response(
+            model=self.config.vision_ocr_model,
+            instructions=(
+                "너는 PDF 페이지 이미지 선별기다. 사용자의 문서 분석 요청에 답하는 데 필요한 시각 정보가 "
+                "있는 페이지만 고른다. 차트, 표, 그래프, 다이어그램, UI 캡처, 제품 이미지, 계약/문서 스캔 일부, "
+                "본문 텍스트로 설명되지 않은 핵심 시각 정보는 analyze=true다. 로고, 배경 이미지, 장식용 아이콘, "
+                "반복 헤더/푸터, 의미 없는 썸네일, 본문 텍스트와 중복되는 이미지는 analyze=false다. "
+                "JSON만 반환한다."
+            ),
+            prompt=(
+                f"파일명: {candidate.filename}\n"
+                f"선별 모드: {mode}\n"
+                f"사용자 요청: {user_text}\n\n"
+                "응답 형식:\n"
+                '{"pages":[{"filename":"페이지 파일명","analyze":true,"reason":"짧은 이유"}]}'
+            ),
+            images=list(candidate.images),
+            detail="auto",
+            temperature=0.0,
+        )
+        selected_filenames = parse_selected_visual_pages(response)
+        return [image for image in candidate.images if image[0] in selected_filenames]
+
     async def _save_prepared_documents(
         self,
         *,
@@ -364,6 +483,59 @@ def split_text(text: str, *, limit: int) -> list[str]:
         chunks.append(remaining[:cut].strip())
         remaining = remaining[cut:].strip()
     return chunks
+
+
+def wants_text_only_analysis(text: str) -> bool:
+    compact = "".join(text.casefold().split())
+    markers = (
+        "텍스트만",
+        "글자만",
+        "본문만",
+        "이미지는빼고",
+        "이미지빼고",
+        "시각자료빼고",
+        "textonly",
+    )
+    return any(marker in compact for marker in markers)
+
+
+def wants_visual_analysis(text: str) -> bool:
+    compact = "".join(text.casefold().split())
+    markers = (
+        "이미지도",
+        "그림도",
+        "차트도",
+        "그래프도",
+        "표도",
+        "도표도",
+        "시각자료",
+        "이미지까지",
+        "차트까지",
+        "그래프까지",
+        "visual",
+    )
+    return any(marker in compact for marker in markers)
+
+
+def parse_selected_visual_pages(response: str) -> set[str]:
+    cleaned = response.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`").strip()
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:].strip()
+    payload = json.loads(cleaned)
+    pages = payload.get("pages", [])
+    selected: set[str] = set()
+    if not isinstance(pages, list):
+        return selected
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        filename = page.get("filename")
+        analyze = page.get("analyze")
+        if isinstance(filename, str) and analyze is True:
+            selected.add(filename)
+    return selected
 
 
 def format_bytes(value: int) -> str:
