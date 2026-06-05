@@ -1,5 +1,6 @@
 import pytest
 
+from assistant_bot.agents import DocumentAnalysisAgent
 from assistant_bot.bot import (
     AssistantBot,
     is_memory_capture_cancel,
@@ -10,7 +11,7 @@ from assistant_bot.bot import (
 from assistant_bot.config import Config
 from assistant_bot.models import ConversationScope, RoutingResult
 from assistant_bot.operation_result import OperationResult
-from assistant_bot.stores import MemoryStore
+from assistant_bot.stores import MemoryStore, VisionOcrUsageStore
 
 
 class FakeDestination:
@@ -324,6 +325,14 @@ async def test_assistant_bot_auto_saves_and_answers_attached_document_request(tm
     bot = AssistantBot(config)
     bot.openai = fake_openai  # type: ignore[assignment]
     bot.memories = MemoryStore(bot.database.connection, fake_openai)  # type: ignore[arg-type]
+    bot.vision_ocr_usage = VisionOcrUsageStore(bot.database.connection)
+    bot.document_analysis_agent = DocumentAnalysisAgent(
+        config=config,
+        openai=fake_openai,  # type: ignore[arg-type]
+        memories=bot.memories,
+        usage=bot.vision_ocr_usage,
+        logs=bot.logs,
+    )
     bot.router = FakeRouter()  # type: ignore[assignment]
     scope = ConversationScope(
         conversation_id="dm:123",
@@ -343,7 +352,7 @@ async def test_assistant_bot_auto_saves_and_answers_attached_document_request(tm
         )
 
         assert isinstance(response, OperationResult)
-        assert response.intent == "recall"
+        assert response.intent == "analyze_document"
         assert response.facts["document_ids"] == [1]
         assert response.fallback_text.startswith("문서 핵심은")
         assert bot.pending_attachments.unresolved_count(scope=scope) == 0

@@ -139,6 +139,7 @@ def build_agent_registry(
     task_agent,
     reminder_agent,
     conversation_agent,
+    document_analysis_agent,
     pending_attachments,
     pending_memory_captures,
     pending_memory_deletions,
@@ -213,6 +214,14 @@ def build_agent_registry(
             location_label=context.location_label,
         )
 
+    async def analyze_document(context: AgentContext) -> str:
+        return await document_analysis_agent.analyze(
+            text=context.text,
+            scope=context.scope,
+            message_id=context.message_id or "unknown",
+            attachments=[],
+        )
+
     def cancel_pending(context: AgentContext) -> str:
         pending_deletion = pending_memory_deletions.resolve_latest(
             scope=context.scope,
@@ -269,6 +278,7 @@ def build_agent_registry(
         "chat": chat,
         "current_time": current_time,
         "daily_briefing": daily_briefing,
+        "analyze_document": analyze_document,
         "delete_memory": delete_memory,
         "help": help_agent,
         "list_memory": list_memory,

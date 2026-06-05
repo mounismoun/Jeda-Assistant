@@ -15,6 +15,7 @@ RouteIntent = Literal[
     "update_memory",
     "delete_memory",
     "restore_memory",
+    "analyze_document",
     "reset_context",
     "manage_task",
     "manage_reminder",
@@ -52,6 +53,16 @@ class ExtractedAttachment:
     filename: str
     content_type: str | None
     text: str
+
+
+@dataclass(frozen=True)
+class PreparedAttachment:
+    filename: str
+    content_type: str | None
+    text: str
+    size: int
+    extraction_method: str
+    used_vision_ocr: bool = False
 
 
 @dataclass(frozen=True)

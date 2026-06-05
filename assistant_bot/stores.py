@@ -572,6 +572,53 @@ class PendingMemoryCaptureStore:
         return int(cursor.rowcount)
 
 
+class VisionOcrUsageStore:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.connection = connection
+
+    def used_today(self, *, user_id: str, usage_date: str) -> int:
+        row = self.connection.execute(
+            """
+            SELECT COALESCE(SUM(bytes_used), 0) AS total
+            FROM vision_ocr_usage
+            WHERE user_id = ?
+              AND usage_date = ?
+            """,
+            (user_id, usage_date),
+        ).fetchone()
+        return int(row["total"]) if row else 0
+
+    def remaining_today(self, *, user_id: str, usage_date: str, daily_limit_bytes: int) -> int:
+        return max(0, daily_limit_bytes - self.used_today(user_id=user_id, usage_date=usage_date))
+
+    def can_consume(
+        self,
+        *,
+        user_id: str,
+        usage_date: str,
+        bytes_to_consume: int,
+        daily_limit_bytes: int,
+    ) -> bool:
+        return self.used_today(user_id=user_id, usage_date=usage_date) + bytes_to_consume <= daily_limit_bytes
+
+    def record_usage(
+        self,
+        *,
+        user_id: str,
+        usage_date: str,
+        bytes_used: int,
+        source_message_id: str,
+    ) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO vision_ocr_usage (user_id, usage_date, bytes_used, source_message_id)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, usage_date, bytes_used, source_message_id),
+        )
+        self.connection.commit()
+
+
 class TaskStore:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection

@@ -169,6 +169,18 @@ def test_heuristic_route_recall() -> None:
     assert route.intent == "recall"
 
 
+def test_heuristic_route_document_analysis_with_attachment() -> None:
+    route = heuristic_route("이 이미지 분석해줘", True)
+
+    assert route.intent == "analyze_document"
+
+
+def test_heuristic_route_vision_quota_status() -> None:
+    route = heuristic_route("오늘 남은 OCR 분석 용량 알려줘", False)
+
+    assert route.intent == "analyze_document"
+
+
 def test_heuristic_route_latest_memory_detail() -> None:
     route = heuristic_route("방금 저장한 거 보여줘", False)
 

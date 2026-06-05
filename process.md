@@ -1402,3 +1402,19 @@
   - 사용자가 승인 버튼을 누르거나 확인 답변을 하면 pending에 저장된 특정 메모/문서만 삭제하도록 했다.
   - 특정 메모와 문서 삭제가 확인 전에는 유지되고, 확인 후에만 삭제되는 통합 테스트를 추가했다.
   - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests` 검증을 통과했다.
+
+## 2026-06-05 - 문서 분석 에이전트 분리와 비전 OCR 제한 도입
+
+- 작업 이름: 문서 분석 고도화 및 이미지 분석 기반 추가
+- 진행상황: 완료
+- 진행내용:
+  - `Document Analysis Agent`를 새로 분리해 첨부 파일 요약, 질문 답변, 문서 저장, 이미지 OCR, 스캔 PDF OCR, 비전 OCR 잔여 용량 조회를 전담하도록 했다.
+  - 로컬 분석 지원 확장자를 `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv`로 확장하고, 로컬에서 텍스트를 추출할 수 있는 문서는 비전 OCR 용량 제한에서 차감하지 않도록 했다.
+  - 이미지 첨부 `.png`, `.jpg`, `.jpeg`, `.webp`와 텍스트 추출이 안 되는 스캔 PDF는 `gpt-5.4-mini` 비전 OCR로 분석하도록 했다.
+  - 비전 OCR 요청의 이미지 detail 값을 `auto`로 고정했다.
+  - 비전 OCR에만 1회 10MB, 사용자별 하루 50MB 제한을 적용하고, `vision_ocr_usage` 테이블과 전용 저장소로 사용량을 기록하도록 했다.
+  - 사용자가 오늘 남은 분석 가능 용량을 물으면 문서 분석 에이전트가 남은 비전 OCR 용량과 한 번의 채팅 한도를 답하도록 했다.
+  - 첨부 파일이 있는 분석/요약 요청이 기존 메모 저장 흐름으로 새지 않고 문서 분석 에이전트로 라우팅되도록 봇 처리 순서를 정리했다.
+  - README, 계획 문서, `.env.example`, 운영 CLI 안내 문구에 새 지원 범위와 비전 OCR 제한을 반영했다.
+  - 상태 메시지는 사용자 요청에 따라 기존 `멘션하여 슬립지피티를 호출해보세요.` 문구를 유지했다.
+  - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests`, `git diff --check` 검증을 통과했다.

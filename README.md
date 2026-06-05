@@ -9,7 +9,9 @@ Discord에서 멘션, 답글, DM으로 대화하는 개인 비서다. 사용자�
 - 명시적 요청이 있을 때만 장기 기억 저장
 - 같은 사용자의 장기 기억은 DM, 서버, 스레드 어디서든 유지
 - 답변과 상태 확인에서 현재 대화 위치 인지
-- 텍스트 메모, `.txt`, `.md`, `.pdf` 첨부 저장
+- 텍스트 메모, `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv` 첨부 저장
+- 이미지와 스캔 PDF를 `gpt-5.4-mini` 비전 OCR로 분석
+- 비전 OCR은 이미지 detail `auto`, 1회 10MB, 사용자별 하루 50MB 제한
 - UTF-8이 아니거나 의미 있는 텍스트가 없는 첨부 저장 방지
 - 동일한 텍스트 메모 중복 저장 방지
 - 동일한 문서 내용 중복 저장 방지
@@ -154,12 +156,14 @@ assistant-admin search 운동
 assistant-admin search 운동 --user-id 123456789
 ```
 
-Discord에 올리지 않고 로컬 파일을 바로 사용자 장기 기억 문서로 저장한다. `.txt`, `.md`, `.pdf`를 지원한다.
+Discord에 올리지 않고 로컬 파일을 바로 사용자 장기 기억 문서로 저장한다. `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv`를 지원한다.
 
 ```bash
 assistant-admin ingest ./meeting.md --user-id 123456789
 assistant-admin ingest ./notes.md ./plan.pdf --user-id 123456789
 ```
+
+첨부 파일 분석은 별도 문서 분석 에이전트가 처리한다. 텍스트를 로컬에서 추출할 수 있는 문서는 용량 과금 한도에서 차감하지 않고, 이미지와 스캔 PDF처럼 비전 OCR이 필요한 경우에만 1회 10MB, 사용자별 하루 50MB 제한을 적용한다. 비전 OCR 모델은 `gpt-5.4-mini`로 고정하며 이미지 detail은 `auto`로 전송한다.
 
 OpenAI 호출 없이 휴리스틱 fallback 기준 intent를 빠르게 확인한다. 실제 봇은 라우팅 모델을 먼저 사용하므로,
 최종 판단은 `assistant-admin ask`나 Discord 실행 경로에서 확인한다.

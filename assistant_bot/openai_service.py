@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
@@ -43,6 +44,38 @@ class OpenAIService:
         if isinstance(output_text, str) and output_text.strip():
             return output_text.strip()
 
+        return str(getattr(response, "output", "")).strip()
+
+    async def vision_text_response(
+        self,
+        *,
+        model: str,
+        instructions: str,
+        prompt: str,
+        images: list[tuple[str, bytes]],
+        detail: str = "auto",
+        temperature: float = 0.0,
+    ) -> str:
+        content: list[dict[str, object]] = [{"type": "input_text", "text": prompt}]
+        for filename, data in images:
+            content.append(
+                {
+                    "type": "input_image",
+                    "image_url": f"data:{_image_mime_type(filename)};base64,{base64.b64encode(data).decode()}",
+                    "detail": detail,
+                }
+            )
+        response = await self._with_retries(
+            lambda: self.client.responses.create(
+                model=model,
+                instructions=instructions,
+                input=[{"role": "user", "content": content}],
+                temperature=temperature,
+            )
+        )
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text.strip()
         return str(getattr(response, "output", "")).strip()
 
     async def tool_response(
@@ -175,3 +208,12 @@ def _response_item_value(item: Any, field: str) -> Any:
     if isinstance(item, dict):
         return item.get(field)
     return getattr(item, field, None)
+
+
+def _image_mime_type(filename: str) -> str:
+    lowered = filename.lower()
+    if lowered.endswith(".webp"):
+        return "image/webp"
+    if lowered.endswith(".png"):
+        return "image/png"
+    return "image/jpeg"

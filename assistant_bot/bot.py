@@ -9,6 +9,7 @@ import discord
 from assistant_bot.agent_registry import AgentContext, build_agent_registry
 from assistant_bot.agents import (
     ConversationAgent,
+    DocumentAnalysisAgent,
     MemoryAgent,
     ReminderAgent,
     RouterAgent,
@@ -21,7 +22,7 @@ from assistant_bot.agents import (
 )
 from assistant_bot.config import Config
 from assistant_bot.database import AppDatabase
-from assistant_bot.file_extractor import extract_attachment_text, is_supported_attachment
+from assistant_bot.file_extractor import extract_attachment_text, is_supported_attachment, is_vision_attachment
 from assistant_bot.models import ConversationScope
 from assistant_bot.openai_service import OpenAIService
 from assistant_bot.operation_result import AgentOutput, OperationResult
@@ -36,6 +37,7 @@ from assistant_bot.stores import (
     PendingMemoryDeletionStore,
     ReminderStore,
     TaskStore,
+    VisionOcrUsageStore,
 )
 from assistant_bot.text_utils import split_discord_message, strip_bot_mentions
 from assistant_bot.time_utils import humanize_datetime_text, now_in_timezone, today_string
@@ -62,6 +64,7 @@ class AssistantBot(discord.Client):
         self.pending_attachments = PendingAttachmentStore(self.database.connection)
         self.pending_memory_captures = PendingMemoryCaptureStore(self.database.connection)
         self.pending_memory_deletions = PendingMemoryDeletionStore(self.database.connection)
+        self.vision_ocr_usage = VisionOcrUsageStore(self.database.connection)
         self.tasks = TaskStore(self.database.connection)
         self.reminders = ReminderStore(self.database.connection)
         self.memories = MemoryStore(self.database.connection, self.openai)
@@ -98,12 +101,20 @@ class AssistantBot(discord.Client):
             tasks=self.tasks,
             logs=self.logs,
         )
+        self.document_analysis_agent = DocumentAnalysisAgent(
+            config=config,
+            openai=self.openai,
+            memories=self.memories,
+            usage=self.vision_ocr_usage,
+            logs=self.logs,
+        )
         self.agent_registry = build_agent_registry(
             memory_agent=self.memory_agent,
             utility_agent=self.utility_agent,
             task_agent=self.task_agent,
             reminder_agent=self.reminder_agent,
             conversation_agent=self.conversation_agent,
+            document_analysis_agent=self.document_analysis_agent,
             pending_attachments=self.pending_attachments,
             pending_memory_captures=self.pending_memory_captures,
             pending_memory_deletions=self.pending_memory_deletions,
@@ -459,7 +470,27 @@ class AssistantBot(discord.Client):
             conversation_context=conversation_context,
         )
 
+        if route.intent == "analyze_document":
+            return await self.document_analysis_agent.analyze(
+                text=text,
+                scope=scope,
+                message_id=str(message.id),
+                attachments=supported_attachments,
+            )
+
         if supported_attachments and text.strip() and route.intent != "unsupported":
+            should_analyze_attachment = (
+                route.intent != "remember"
+                or asks_attached_document_response(text)
+                or any(is_vision_attachment(attachment.filename) for attachment in supported_attachments)
+            )
+            if should_analyze_attachment:
+                return await self.document_analysis_agent.analyze(
+                    text=text,
+                    scope=scope,
+                    message_id=str(message.id),
+                    attachments=supported_attachments,
+                )
             save_result = await self.handle_remember(
                 message=message,
                 text=text,
@@ -542,7 +573,7 @@ class AssistantBot(discord.Client):
             filenames = ", ".join(attachment.filename for attachment in attachments)
             fallback = (
                 f"`{filenames}` 첨부는 아직 읽을 수 없어요. "
-                "현재는 `.txt`, `.md`, `.pdf` 파일만 기억할 수 있습니다."
+                "현재는 `.txt`, `.md`, `.pdf`, `.docx`, `.xlsx`, `.csv`, 이미지 파일을 분석할 수 있습니다."
             )
             return OperationResult(
                 agent="bot",
@@ -551,7 +582,18 @@ class AssistantBot(discord.Client):
                 summary="지원하지 않는 첨부 파일 형식",
                 facts={
                     "filenames": [attachment.filename for attachment in attachments],
-                    "supported_extensions": [".txt", ".md", ".pdf"],
+                    "supported_extensions": [
+                        ".txt",
+                        ".md",
+                        ".pdf",
+                        ".docx",
+                        ".xlsx",
+                        ".csv",
+                        ".png",
+                        ".jpg",
+                        ".jpeg",
+                        ".webp",
+                    ],
                 },
                 preserve_values=tuple(attachment.filename for attachment in attachments),
                 fallback_text=fallback,

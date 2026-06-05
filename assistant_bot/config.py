@@ -28,6 +28,9 @@ class Config:
     timezone: str
     log_level: str
     log_file: str | None
+    vision_ocr_model: str = "gpt-5.4-mini"
+    vision_ocr_per_message_bytes: int = 10 * 1024 * 1024
+    vision_ocr_daily_bytes: int = 50 * 1024 * 1024
 
 
 def load_config() -> Config:
@@ -57,6 +60,9 @@ def load_config() -> Config:
         timezone=os.getenv("ASSISTANT_TIMEZONE", "Asia/Seoul"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         log_file=os.getenv("LOG_FILE"),
+        vision_ocr_model="gpt-5.4-mini",
+        vision_ocr_per_message_bytes=int(os.getenv("VISION_OCR_PER_MESSAGE_BYTES", str(10 * 1024 * 1024))),
+        vision_ocr_daily_bytes=int(os.getenv("VISION_OCR_DAILY_BYTES", str(50 * 1024 * 1024))),
     )
 
 

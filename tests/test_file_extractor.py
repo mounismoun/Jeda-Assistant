@@ -12,7 +12,7 @@ def test_supported_attachment_extensions() -> None:
     assert is_supported_attachment("note.txt")
     assert is_supported_attachment("plan.md")
     assert is_supported_attachment("meeting.PDF")
-    assert not is_supported_attachment("image.png")
+    assert is_supported_attachment("image.png")
     assert not is_supported_attachment("archive.zip")
 
 
@@ -67,7 +67,7 @@ def test_extract_local_file_text_rejects_unsupported_file(tmp_path) -> None:
     path = tmp_path / "image.png"
     path.write_bytes(b"fake")
 
-    with pytest.raises(ValueError, match="지원하지 않는 파일 형식"):
+    with pytest.raises(ValueError, match="비전 OCR"):
         extract_local_file_text(path, max_bytes=1024)
 
 

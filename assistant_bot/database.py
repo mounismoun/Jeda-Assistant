@@ -147,6 +147,15 @@ class AppDatabase:
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               sent_at TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS vision_ocr_usage (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id TEXT NOT NULL,
+              usage_date TEXT NOT NULL,
+              bytes_used INTEGER NOT NULL,
+              source_message_id TEXT,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
         self.add_column_if_missing("documents", "content_hash", "TEXT")

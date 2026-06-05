@@ -76,6 +76,7 @@ from .common import parse_routing_result as parse_routing_result
 from .common import remove_due_time_text as remove_due_time_text
 from .common import split_task_candidate_sentences as split_task_candidate_sentences
 from .conversation import ConversationAgent as ConversationAgent
+from .document_analysis import DocumentAnalysisAgent as DocumentAnalysisAgent
 from .memory import MemoryAgent as MemoryAgent
 from .reminder import ReminderAgent as ReminderAgent
 from .router import RouterAgent as RouterAgent

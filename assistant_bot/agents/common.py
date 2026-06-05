@@ -20,6 +20,7 @@ DEFAULT_ALLOWED_INTENTS = {
     "update_memory",
     "delete_memory",
     "restore_memory",
+    "analyze_document",
     "reset_context",
     "manage_task",
     "manage_reminder",
@@ -40,6 +41,7 @@ DEFAULT_ROUTING_PROMPT_BLOCK = "\n".join(
         "- update_memory: 저장된 텍스트 메모를 수정하거나 바꾸라는 요청",
         "- delete_memory: 저장된 기억이나 문서를 삭제/잊으라고 요청",
         "- restore_memory: 삭제한 기억이나 문서를 복구하거나, 삭제한 기억 목록을 보려는 요청",
+        "- analyze_document: 첨부 파일 분석, 요약, OCR, 이미지 내용 읽기, 문서 비교, 비전 OCR 잔여 용량 조회",
         "- reset_context: 현재 대화의 최근 메시지와 압축 요약을 초기화하라는 요청. 장기 기억 삭제가 아님",
         "- manage_task: 할 일 추가, 조회, 완료, 삭제 요청",
         "- manage_reminder: 특정 시각에 사용자 DM으로 알림을 보내 달라는 요청",
@@ -93,7 +95,28 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
     restore_markers = ["복구", "되돌려", "되살려", "restore", "undo delete"]
     list_markers = ["목록", "리스트", "뭘 기억", "무엇을 기억", "기억 상태", "저장 상태", "list memories"]
     recall_markers = ["기억", "저장한", "전에", "문서", "파일", "회의록", "recall"]
+    document_analysis_markers = [
+        "요약",
+        "분석",
+        "검토",
+        "비교",
+        "읽어",
+        "추출",
+        "정리",
+        "ocr",
+        "이미지",
+        "사진",
+        "스캔",
+        "summary",
+        "analyze",
+        "compare",
+    ]
+    quota_markers = ["잔여", "남은", "용량", "쿼터", "quota", "limit"]
 
+    if any(marker in normalized for marker in quota_markers) and any(
+        marker in normalized for marker in ["이미지", "비전", "ocr", "분석"]
+    ):
+        return RoutingResult("analyze_document", 0.94, "비전 OCR 잔여 용량 조회 요청 감지")
     if is_reminder_request(text):
         return RoutingResult("manage_reminder", 0.95, "사용자 알림 요청 감지")
     if asks_current_time(text):
@@ -124,6 +147,8 @@ def heuristic_route(text: str, has_attachments: bool) -> RoutingResult:
         return RoutingResult("remember", 0.96, "명시적 기억 요청 감지")
     if asks_to_show_latest_memory(text):
         return RoutingResult("recall", 0.95, "최근 저장 기억 상세 조회 요청 감지")
+    if has_attachments and any(marker in normalized for marker in document_analysis_markers):
+        return RoutingResult("analyze_document", 0.96, "첨부 파일 분석 요청 감지")
     if asks_to_search_memories(text):
         return RoutingResult("list_memory", 0.95, "저장 기억 검색 요청 감지")
     if any(marker in normalized for marker in list_markers):

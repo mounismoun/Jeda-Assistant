@@ -18,6 +18,7 @@ from openai import AsyncOpenAI
 from assistant_bot.agent_registry import AgentContext, build_agent_registry
 from assistant_bot.agents import (
     ConversationAgent,
+    DocumentAnalysisAgent,
     MemoryAgent,
     ReminderAgent,
     RouterAgent,
@@ -51,6 +52,7 @@ from assistant_bot.stores import (
     PendingMemoryDeletionStore,
     ReminderStore,
     TaskStore,
+    VisionOcrUsageStore,
 )
 from assistant_bot.time_utils import now_in_timezone, today_string
 
@@ -132,7 +134,11 @@ def main() -> None:
     search_parser.add_argument("--limit", "-n", type=int, default=10, help="최대 결과 수")
     search_parser.add_argument("--user-id", help="특정 Discord user_id의 데이터만 검색한다")
     ingest_parser = subparsers.add_parser("ingest", help="로컬 파일을 사용자 장기 기억 문서로 저장한다")
-    ingest_parser.add_argument("paths", nargs="+", help="저장할 로컬 파일 경로. .txt, .md, .pdf 지원")
+    ingest_parser.add_argument(
+        "paths",
+        nargs="+",
+        help="저장할 로컬 파일 경로. .txt, .md, .pdf, .docx, .xlsx, .csv 지원",
+    )
     ingest_parser.add_argument("--user-id", default="local-user", help="기억을 저장할 사용자 ID")
     ingest_parser.add_argument("--guild-id", help="서버 위치로 저장할 때 사용할 guild ID")
     route_parser = subparsers.add_parser("route", help="메시지가 어떤 intent로 분류될지 빠르게 확인한다")
@@ -2295,6 +2301,9 @@ def load_cli_config(env: Mapping[str, str]) -> Config:
         timezone=env.get("ASSISTANT_TIMEZONE", "Asia/Seoul"),
         log_level=env.get("LOG_LEVEL", "INFO"),
         log_file=env.get("LOG_FILE"),
+        vision_ocr_model="gpt-5.4-mini",
+        vision_ocr_per_message_bytes=int(env.get("VISION_OCR_PER_MESSAGE_BYTES", str(10 * 1024 * 1024))),
+        vision_ocr_daily_bytes=int(env.get("VISION_OCR_DAILY_BYTES", str(50 * 1024 * 1024))),
     )
 
 
@@ -2315,6 +2324,7 @@ async def run_local_text_interaction(
     pending_attachments = PendingAttachmentStore(database.connection)
     pending_memory_captures = PendingMemoryCaptureStore(database.connection)
     pending_memory_deletions = PendingMemoryDeletionStore(database.connection)
+    vision_ocr_usage = VisionOcrUsageStore(database.connection)
     tasks = TaskStore(database.connection)
     reminders = ReminderStore(database.connection)
     memories = MemoryStore(database.connection, openai)
@@ -2342,12 +2352,20 @@ async def run_local_text_interaction(
         tasks=tasks,
         logs=logs,
     )
+    document_analysis_agent = DocumentAnalysisAgent(
+        config=config,
+        openai=openai,
+        memories=memories,
+        usage=vision_ocr_usage,
+        logs=logs,
+    )
     agent_registry = build_agent_registry(
         memory_agent=memory_agent,
         utility_agent=utility_agent,
         task_agent=task_agent,
         reminder_agent=reminder_agent,
         conversation_agent=conversation_agent,
+        document_analysis_agent=document_analysis_agent,
         pending_attachments=pending_attachments,
         pending_memory_captures=pending_memory_captures,
         pending_memory_deletions=pending_memory_deletions,
@@ -2703,6 +2721,9 @@ def make_cli_utility_config(database_path: str) -> Config:
         timezone=os.getenv("ASSISTANT_TIMEZONE", "Asia/Seoul"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         log_file=os.getenv("LOG_FILE"),
+        vision_ocr_model="gpt-5.4-mini",
+        vision_ocr_per_message_bytes=int(os.getenv("VISION_OCR_PER_MESSAGE_BYTES", str(10 * 1024 * 1024))),
+        vision_ocr_daily_bytes=int(os.getenv("VISION_OCR_DAILY_BYTES", str(50 * 1024 * 1024))),
     )
 
 

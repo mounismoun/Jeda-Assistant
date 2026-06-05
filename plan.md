@@ -34,8 +34,15 @@
 - `.txt` 첨부 파일
 - `.md` 첨부 파일
 - `.pdf` 첨부 파일
+- `.docx` 첨부 파일
+- `.xlsx` 첨부 파일
+- `.csv` 첨부 파일
+- `.png`, `.jpg`, `.jpeg`, `.webp` 이미지 첨부 파일
 
-PDF는 텍스트 추출만 지원한다. 스캔 이미지 OCR은 v1 범위에서 제외한다.
+PDF는 먼저 로컬 텍스트 추출을 시도하고, 텍스트를 읽을 수 없는 스캔 PDF는 페이지 이미지를 만들어 비전 OCR로 분석한다.
+이미지와 스캔 PDF처럼 OpenAI 비전 OCR이 필요한 분석은 `gpt-5.4-mini` 모델을 사용하고 이미지 detail은 `auto`로 고정한다.
+비전 OCR은 한 번의 채팅당 10MB, 사용자별 하루 50MB까지 허용한다.
+로컬에서 텍스트를 추출할 수 있는 문서 분석은 비용이 발생하지 않는 경로이므로 비전 OCR 용량 제한에서 차감하지 않는다.
 텍스트 파일은 UTF-8로 읽을 수 있어야 하며, 의미 있는 문자 없이 기호만 있는 파일은 저장하지 않는다.
 
 ## 에이전트 구조
@@ -63,6 +70,7 @@ PDF는 텍스트 추출만 지원한다. 스캔 이미지 OCR은 v1 범위에서
   - `daily_briefing`
   - `reset_context`
   - `manage_task`
+  - `analyze_document`
   - `unsupported`
 - 대상 전문 에이전트를 선택한다.
 - 짧은 구조화 라우팅 결과만 반환한다.
@@ -238,6 +246,9 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - `assistant-admin export`로 저장된 메모, 문서, 할 일을 전체 또는 user_id 기준으로 JSON 내보내도록 구현했다.
 - `assistant-admin search`로 저장된 메모, 문서, 할 일을 전체 또는 user_id 기준으로 로컬 SQLite에서 키워드 검색하도록 구현했다.
 - `assistant-admin ingest`로 로컬 `.txt`, `.md`, `.pdf` 파일을 Discord 없이 사용자 장기 기억 문서로 저장하도록 구현했다.
+- `Document Analysis Agent`를 분리해 첨부 파일 요약, 질문 답변, OCR, 이미지 분석, 비전 OCR 잔여 용량 조회를 처리하도록 구현했다.
+- `.docx`, `.xlsx`, `.csv` 로컬 텍스트 추출을 추가하고, `.png`, `.jpg`, `.jpeg`, `.webp` 이미지와 스캔 PDF는 `gpt-5.4-mini` 비전 OCR로 분석하도록 구현했다.
+- 비전 OCR detail은 `auto`로 고정하고, 1회 10MB와 사용자별 하루 50MB 제한을 `vision_ocr_usage` 테이블로 추적하도록 구현했다.
 - `assistant-admin route`로 OpenAI 호출 없이 휴리스틱 fallback intent를 미리 확인하도록 구현했다.
 - `assistant-admin ask`로 Discord를 켜기 전 로컬에서 실제 에이전트, OpenAI, SQLite 흐름을 실행하도록 구현했다.
 - `assistant-admin briefing`으로 사용자별 오늘 브리핑을 SQLite 기준으로 출력하도록 구현했다.
