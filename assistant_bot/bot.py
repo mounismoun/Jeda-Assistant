@@ -336,26 +336,10 @@ class AssistantBot(discord.Client):
                 )
         elif action == "save_attachment":
             if approved:
-                channel = interaction.channel
-                if channel is None:
-                    result = OperationResult(
-                        agent="memory",
-                        intent="remember",
-                        status="not_found",
-                        summary="첨부 원본 채널 확인 불가",
-                        fallback_text="첨부 원본 메시지를 확인하지 못했어요.",
-                    )
-                else:
-                    proxy_message = SimpleNamespace(
-                        id=interaction.message.id if interaction.message else 0,
-                        channel=channel,
-                    )
-                    result = await self.handle_remember(
-                        message=proxy_message,  # type: ignore[arg-type]
-                        text="",
-                        attachments=[],
-                        scope=scope,
-                    )
+                result = await self.handle_pending_attachment_approval(
+                    interaction=interaction,
+                    scope=scope,
+                )
             else:
                 pending = self.pending_attachments.resolve_latest(
                     scope=scope,
@@ -379,7 +363,7 @@ class AssistantBot(discord.Client):
                         facts={"filenames": list(pending.filenames)},
                         preserve_values=tuple(pending.filenames),
                         fallback_text=f"`{filenames}` 첨부 저장을 취소했어요.",
-                    )
+                )
         else:
             result = OperationResult(
                 agent="bot",
@@ -410,6 +394,79 @@ class AssistantBot(discord.Client):
                 user_id=str(self.user.id),
                 content=answer,
             )
+
+    async def handle_pending_attachment_approval(
+        self,
+        *,
+        interaction: discord.Interaction,
+        scope: ConversationScope,
+    ) -> AgentOutput:
+        pending = self.pending_attachments.latest(
+            scope=scope,
+            ttl_minutes=self.config.pending_confirmation_ttl_minutes,
+        )
+        if pending is None:
+            return OperationResult(
+                agent="registry",
+                intent="remember",
+                status="not_found",
+                summary="처리할 첨부 저장 대기 작업 없음",
+                fallback_text="처리할 첨부 저장 대기 작업이 없어요.",
+            )
+
+        channel = interaction.channel
+        if channel is None:
+            return OperationResult(
+                agent="memory",
+                intent="remember",
+                status="not_found",
+                summary="첨부 원본 채널 확인 불가",
+                fallback_text="첨부 원본 메시지를 확인하지 못했어요.",
+            )
+
+        try:
+            original_message = await channel.fetch_message(int(pending.message_id))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return OperationResult(
+                agent="memory",
+                intent="remember",
+                status="not_found",
+                summary="첨부 원본 메시지 확인 실패",
+                fallback_text="첨부 원본 메시지를 확인하지 못했어요.",
+            )
+
+        effective_attachments = [
+            attachment
+            for attachment in original_message.attachments
+            if is_supported_attachment(attachment.filename)
+        ]
+        if not effective_attachments:
+            self.pending_attachments.resolve(pending.id)
+            return OperationResult(
+                agent="memory",
+                intent="remember",
+                status="unsupported",
+                summary="저장 가능한 첨부 파일 없음",
+                preserve_values=tuple(pending.filenames),
+                fallback_text="저장하거나 분석할 수 있는 첨부 파일을 찾지 못했어요.",
+            )
+
+        if any(is_vision_attachment(attachment.filename) for attachment in effective_attachments):
+            self.pending_attachments.resolve(pending.id)
+            return await self.document_analysis_agent.analyze(
+                text="이 첨부 이미지를 분석하고 기억해줘",
+                scope=scope,
+                message_id=str(original_message.id),
+                attachments=effective_attachments,
+            )
+
+        proxy_message = SimpleNamespace(id=original_message.id, channel=channel)
+        return await self.handle_remember(
+            message=proxy_message,  # type: ignore[arg-type]
+            text="",
+            attachments=effective_attachments,
+            scope=scope,
+        )
 
     async def acknowledge_confirmation_interaction(self, interaction: discord.Interaction) -> None:
         try:

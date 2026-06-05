@@ -1430,3 +1430,15 @@
   - 원본 메시지 수정이 실패하면 후속 ephemeral 응답으로 대체하고, 만료된 interaction은 로그만 남기도록 방어했다.
   - 버튼 처리 시 defer 후 원본 메시지를 수정하는 테스트를 추가했다.
   - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests`, `git diff --check` 검증을 통과했다.
+
+## 2026-06-05 - 이미지 첨부 승인 후 분석 경로 보정
+
+- 작업 이름: 승인 버튼으로 이미지 첨부 저장 시 문서 분석 에이전트 사용
+- 진행상황: 완료
+- 진행내용:
+  - 이미지 첨부 후 `승인` 버튼을 누르면 기존 메모 저장 경로가 실행되어 `비전 OCR이 필요하지만 처리되지 않았다`는 답변이 나오는 문제를 확인했다.
+  - pending 첨부 승인 시 원본 메시지를 가져온 뒤 이미지 첨부가 포함되어 있으면 `Memory Agent`가 아니라 `Document Analysis Agent`로 넘기도록 변경했다.
+  - 승인된 이미지 분석도 `gpt-5.4-mini`와 detail `auto`를 사용하고, 분석 결과를 문서 기억으로 저장하도록 했다.
+  - 비전 분석 프롬프트를 OCR 중심에서 이미지의 시각적 내용 설명과 텍스트 추출을 함께 수행하는 방향으로 보강했다.
+  - `IMG_7700.jpg` 같은 이미지 첨부 승인 흐름이 비전 분석을 호출하고 문서로 저장되는 회귀 테스트를 추가했다.
+  - `python3 -m pytest -q`, `python3 -m ruff check .`, `python3 -m compileall assistant_bot tests`, `git diff --check` 검증을 통과했다.

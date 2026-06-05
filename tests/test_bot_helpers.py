@@ -25,6 +25,7 @@ class FakeDestination:
 class FakeOpenAI:
     def __init__(self) -> None:
         self.text_requests: list[dict[str, object]] = []
+        self.vision_requests: list[dict[str, object]] = []
 
     async def embedding(self, text: str) -> list[float]:
         lowered = text.lower()
@@ -33,6 +34,10 @@ class FakeOpenAI:
     async def text_response(self, **kwargs) -> str:
         self.text_requests.append(kwargs)
         return "문서 핵심은 계약 일정과 비용 조건입니다.\n참고: 문서 `1` · contract.pdf"
+
+    async def vision_text_response(self, **kwargs) -> str:
+        self.vision_requests.append(kwargs)
+        return "이미지에는 책상 위 노트북이 보입니다. 화면에는 일정표 텍스트가 있습니다."
 
 
 class FakeRouter:
@@ -46,10 +51,15 @@ class FakeDeleteRouter:
 
 
 class FakeAttachment:
-    filename = "contract.txt"
-    content_type = "text/plain"
-
-    def __init__(self, data: str) -> None:
+    def __init__(
+        self,
+        data: str,
+        *,
+        filename: str = "contract.txt",
+        content_type: str = "text/plain",
+    ) -> None:
+        self.filename = filename
+        self.content_type = content_type
         self._data = data.encode()
         self.size = len(self._data)
 
@@ -59,6 +69,22 @@ class FakeAttachment:
 
 class FakeMessage:
     id = 12345
+
+
+class FakeOriginalMessage:
+    def __init__(self, *, message_id: int, attachments: list[FakeAttachment]) -> None:
+        self.id = message_id
+        self.attachments = attachments
+
+
+class FakeChannel:
+    def __init__(self, original_message: FakeOriginalMessage) -> None:
+        self.original_message = original_message
+        self.fetched_ids: list[int] = []
+
+    async def fetch_message(self, message_id: int) -> FakeOriginalMessage:
+        self.fetched_ids.append(message_id)
+        return self.original_message
 
 
 class FakeInteractionResponse:
@@ -97,11 +123,12 @@ class FakeInteractionFollowup:
 
 
 class FakeInteraction:
-    def __init__(self, user_id: str) -> None:
+    def __init__(self, user_id: str, *, channel: FakeChannel | None = None) -> None:
         self.user = type("User", (), {"id": int(user_id)})()
         self.response = FakeInteractionResponse()
         self.message = FakeInteractionMessage()
         self.followup = FakeInteractionFollowup()
+        self.channel = channel
 
 
 class FakeResponseComposer:
@@ -564,6 +591,82 @@ async def test_confirmation_button_defers_before_editing_original_message(tmp_pa
         assert interaction.message.edits
         assert interaction.message.edits[-1]["view"] is None
         assert "처리할 수 있는 작업" in str(interaction.message.edits[-1]["content"])
+    finally:
+        await bot.close()
+
+
+@pytest.mark.anyio
+async def test_confirmation_button_approves_pending_image_with_document_analysis(tmp_path) -> None:
+    config = Config(
+        discord_token="discord-token",
+        discord_client_id="client-id",
+        openai_api_key="openai-key",
+        router_model="gpt-5.4-mini",
+        easy_model="gpt-5.4-mini",
+        medium_model="gpt-5.4",
+        hard_model="gpt-5.5",
+        embedding_model="text-embedding-3-small",
+        database_path=str(tmp_path / "assistant.sqlite"),
+        max_attachment_bytes=1024,
+        context_compression_chars=20000,
+        retrieval_limit=8,
+        openai_timeout_seconds=30,
+        openai_max_retries=2,
+        pending_confirmation_ttl_minutes=10,
+        task_reminder_interval_minutes=60,
+        task_reminder_batch_size=20,
+        timezone="Asia/Seoul",
+        log_level="INFO",
+        log_file=None,
+    )
+    fake_openai = FakeOpenAI()
+    bot = AssistantBot(config)
+    bot.openai = fake_openai  # type: ignore[assignment]
+    bot.memories = MemoryStore(bot.database.connection, fake_openai)  # type: ignore[arg-type]
+    bot.vision_ocr_usage = VisionOcrUsageStore(bot.database.connection)
+    bot.document_analysis_agent = DocumentAnalysisAgent(
+        config=config,
+        openai=fake_openai,  # type: ignore[arg-type]
+        memories=bot.memories,
+        usage=bot.vision_ocr_usage,
+        logs=bot.logs,
+    )
+    bot.response_composer = FakeResponseComposer()  # type: ignore[assignment]
+    scope = ConversationScope(
+        conversation_id="dm:123",
+        channel_id="dm",
+        user_id="123",
+        guild_id=None,
+    )
+    bot.pending_attachments.add(scope=scope, message_id="100", filenames=["IMG_7700.jpg"])
+    original_message = FakeOriginalMessage(
+        message_id=100,
+        attachments=[
+            FakeAttachment(
+                "fake image bytes",
+                filename="IMG_7700.jpg",
+                content_type="image/jpeg",
+            )
+        ],
+    )
+    interaction = FakeInteraction(user_id="123", channel=FakeChannel(original_message))
+
+    try:
+        await bot.handle_confirmation_button(
+            interaction,  # type: ignore[arg-type]
+            scope=scope,
+            action="save_attachment",
+            approved=True,
+        )
+
+        assert bot.pending_attachments.unresolved_count(scope=scope) == 0
+        assert bot.memories.stats(scope=scope)["documents"] == 1
+        assert fake_openai.vision_requests
+        assert fake_openai.vision_requests[-1]["model"] == "gpt-5.4-mini"
+        assert fake_openai.vision_requests[-1]["detail"] == "auto"
+        assert "이미지에는 책상" in bot.memories.get_document_detail(scope=scope, document_id=1).text
+        assert interaction.message.edits
+        assert "이미지 파일이라서 비전 OCR이 필요" not in str(interaction.message.edits[-1]["content"])
     finally:
         await bot.close()
 

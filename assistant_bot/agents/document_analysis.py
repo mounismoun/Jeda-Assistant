@@ -272,10 +272,14 @@ class DocumentAnalysisAgent:
         return await self.openai.vision_text_response(
             model=self.config.vision_ocr_model,
             instructions=(
-                "이미지 안의 모든 읽을 수 있는 텍스트를 한국어로 정확히 전사한다. "
+                "이미지를 한국어로 분석한다. 먼저 이미지에 무엇이 보이는지 핵심 장면과 대상을 설명하고, "
+                "읽을 수 있는 텍스트가 있으면 정확히 전사한다. "
                 "표는 행 단위로 보존하고, 불확실한 글자는 [불확실]로 표시한다."
             ),
-            prompt=f"파일명: {target.filename}\n이미지 또는 스캔 문서의 텍스트를 OCR로 추출해줘.",
+            prompt=(
+                f"파일명: {target.filename}\n"
+                "이미지의 시각적 내용과 읽을 수 있는 텍스트를 함께 분석해줘."
+            ),
             images=list(target.images),
             detail="auto",
             temperature=0.0,
