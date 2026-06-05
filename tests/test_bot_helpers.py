@@ -347,3 +347,108 @@ async def test_assistant_bot_auto_saves_and_answers_attached_document_request(tm
         assert "이 문서 요약해봐" not in bot.memories.get_document_detail(scope=scope, document_id=1).text
     finally:
         await bot.close()
+
+
+@pytest.mark.anyio
+async def test_assistant_bot_attaches_buttons_to_pending_attachment_confirmation(tmp_path) -> None:
+    config = Config(
+        discord_token="discord-token",
+        discord_client_id="client-id",
+        openai_api_key="openai-key",
+        router_model="gpt-5.4-mini",
+        easy_model="gpt-5.4-mini",
+        medium_model="gpt-5.4",
+        hard_model="gpt-5.5",
+        embedding_model="text-embedding-3-small",
+        database_path=str(tmp_path / "assistant.sqlite"),
+        max_attachment_bytes=1024,
+        context_compression_chars=20000,
+        retrieval_limit=8,
+        openai_timeout_seconds=30,
+        openai_max_retries=2,
+        pending_confirmation_ttl_minutes=10,
+        task_reminder_interval_minutes=60,
+        task_reminder_batch_size=20,
+        timezone="Asia/Seoul",
+        log_level="INFO",
+        log_file=None,
+    )
+    bot = AssistantBot(config)
+    scope = ConversationScope(
+        conversation_id="dm:123",
+        channel_id="dm",
+        user_id="123",
+        guild_id=None,
+    )
+    bot.pending_attachments.add(scope=scope, message_id="100", filenames=["note.pdf"])
+    result = OperationResult(
+        agent="bot",
+        intent="remember",
+        status="confirm_required",
+        summary="첨부 파일 기억 저장 확인 대기",
+        fallback_text="저장할까요?",
+    )
+
+    try:
+        view = bot.confirmation_view_for(result, scope)
+
+        assert view is not None
+        assert bot.confirmation_action_for(result, scope) == "save_attachment"
+        assert [child.label for child in view.children] == ["승인", "거부"]
+    finally:
+        await bot.close()
+
+
+@pytest.mark.anyio
+async def test_assistant_bot_attaches_buttons_to_memory_delete_confirmation(tmp_path) -> None:
+    config = Config(
+        discord_token="discord-token",
+        discord_client_id="client-id",
+        openai_api_key="openai-key",
+        router_model="gpt-5.4-mini",
+        easy_model="gpt-5.4-mini",
+        medium_model="gpt-5.4",
+        hard_model="gpt-5.5",
+        embedding_model="text-embedding-3-small",
+        database_path=str(tmp_path / "assistant.sqlite"),
+        max_attachment_bytes=1024,
+        context_compression_chars=20000,
+        retrieval_limit=8,
+        openai_timeout_seconds=30,
+        openai_max_retries=2,
+        pending_confirmation_ttl_minutes=10,
+        task_reminder_interval_minutes=60,
+        task_reminder_batch_size=20,
+        timezone="Asia/Seoul",
+        log_level="INFO",
+        log_file=None,
+    )
+    bot = AssistantBot(config)
+    scope = ConversationScope(
+        conversation_id="dm:123",
+        channel_id="dm",
+        user_id="123",
+        guild_id=None,
+    )
+    bot.pending_memory_deletions.add(
+        scope=scope,
+        message_id="100",
+        memory_count=1,
+        document_count=0,
+    )
+    result = OperationResult(
+        agent="memory",
+        intent="delete_memory",
+        status="confirm_required",
+        summary="사용자 기준 저장 기억 전체 삭제 확인 필요",
+        fallback_text="삭제할까요?",
+    )
+
+    try:
+        view = bot.confirmation_view_for(result, scope)
+
+        assert view is not None
+        assert bot.confirmation_action_for(result, scope) == "delete_all_memories"
+        assert [child.label for child in view.children] == ["승인", "거부"]
+    finally:
+        await bot.close()

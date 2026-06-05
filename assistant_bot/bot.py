@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from types import SimpleNamespace
 
 import discord
 
@@ -254,8 +255,147 @@ class AssistantBot(discord.Client):
             content=answer,
         )
 
+        confirmation_view = self.confirmation_view_for(raw_answer, scope)
+        first_part = True
         for part in split_discord_message(answer):
-            await message.reply(part, mention_author=False)
+            await message.reply(
+                part,
+                mention_author=False,
+                view=confirmation_view if first_part else None,
+            )
+            first_part = False
+
+    def confirmation_view_for(
+        self,
+        raw_answer: AgentOutput,
+        scope: ConversationScope,
+    ) -> discord.ui.View | None:
+        if not isinstance(raw_answer, OperationResult):
+            return None
+        if raw_answer.status != "confirm_required":
+            return None
+        action = self.confirmation_action_for(raw_answer, scope)
+        if action is None:
+            return None
+        return ConfirmationView(
+            bot=self,
+            scope=scope,
+            action=action,
+            timeout=max(60, self.config.pending_confirmation_ttl_minutes * 60),
+        )
+
+    def confirmation_action_for(self, result: OperationResult, scope: ConversationScope) -> str | None:
+        if result.intent == "delete_memory" and self.pending_memory_deletions.latest(
+            scope=scope,
+            ttl_minutes=self.config.pending_confirmation_ttl_minutes,
+        ):
+            return "delete_all_memories"
+        if result.intent == "remember" and self.pending_attachments.latest(
+            scope=scope,
+            ttl_minutes=self.config.pending_confirmation_ttl_minutes,
+        ):
+            return "save_attachment"
+        return None
+
+    async def handle_confirmation_button(
+        self,
+        interaction: discord.Interaction,
+        *,
+        scope: ConversationScope,
+        action: str,
+        approved: bool,
+    ) -> None:
+        if str(interaction.user.id) != scope.user_id:
+            await interaction.response.send_message("이 확인 버튼은 요청한 사용자만 누를 수 있어요.", ephemeral=True)
+            return
+
+        if action == "delete_all_memories":
+            text = "응, 전부 삭제해" if approved else "취소해"
+            result = self.handle_pending_memory_deletion_confirmation(text=text, scope=scope)
+            if result is None:
+                result = OperationResult(
+                    agent="memory",
+                    intent="delete_memory",
+                    status="not_found",
+                    summary="처리할 삭제 확인 대기 작업 없음",
+                    fallback_text="처리할 삭제 확인 대기 작업이 없어요.",
+                )
+        elif action == "save_attachment":
+            if approved:
+                channel = interaction.channel
+                if channel is None:
+                    result = OperationResult(
+                        agent="memory",
+                        intent="remember",
+                        status="not_found",
+                        summary="첨부 원본 채널 확인 불가",
+                        fallback_text="첨부 원본 메시지를 확인하지 못했어요.",
+                    )
+                else:
+                    proxy_message = SimpleNamespace(
+                        id=interaction.message.id if interaction.message else 0,
+                        channel=channel,
+                    )
+                    result = await self.handle_remember(
+                        message=proxy_message,  # type: ignore[arg-type]
+                        text="",
+                        attachments=[],
+                        scope=scope,
+                    )
+            else:
+                pending = self.pending_attachments.resolve_latest(
+                    scope=scope,
+                    ttl_minutes=self.config.pending_confirmation_ttl_minutes,
+                )
+                if pending is None:
+                    result = OperationResult(
+                        agent="registry",
+                        intent="cancel_pending",
+                        status="not_found",
+                        summary="취소할 첨부 저장 대기 작업 없음",
+                        fallback_text="취소할 첨부 저장 대기 작업이 없어요.",
+                    )
+                else:
+                    filenames = ", ".join(pending.filenames)
+                    result = OperationResult(
+                        agent="registry",
+                        intent="cancel_pending",
+                        status="success",
+                        summary="첨부 저장 대기 작업 취소",
+                        facts={"filenames": list(pending.filenames)},
+                        preserve_values=tuple(pending.filenames),
+                        fallback_text=f"`{filenames}` 첨부 저장을 취소했어요.",
+                    )
+        else:
+            result = OperationResult(
+                agent="bot",
+                intent="unsupported",
+                status="unsupported",
+                summary="알 수 없는 버튼 확인 작업",
+                fallback_text="이 버튼으로 처리할 수 있는 작업을 찾지 못했어요.",
+            )
+
+        answer = await self.response_composer.compose(
+            user_text="버튼 승인" if approved else "버튼 거부",
+            raw_response=result,
+            scope=scope,
+            location_label="Discord 버튼",
+            conversation_context="",
+        )
+        await interaction.response.edit_message(content=answer, view=None)
+        if self.user:
+            self.conversations.add_message(
+                conversation_id=scope.conversation_id,
+                role="user",
+                user_id=scope.user_id,
+                content="버튼 승인" if approved else "버튼 거부",
+            )
+            self.conversations.add_message(
+                conversation_id=scope.conversation_id,
+                role="assistant",
+                user_id=str(self.user.id),
+                content=answer,
+            )
 
     async def should_respond(self, message: discord.Message) -> bool:
         if isinstance(message.channel, discord.DMChannel):
@@ -855,6 +995,39 @@ class AssistantBot(discord.Client):
             ),
             preserve_values=tuple(str(document_id) for document_id in document_ids),
             fallback_text=answer.strip(),
+        )
+
+
+class ConfirmationView(discord.ui.View):
+    def __init__(
+        self,
+        *,
+        bot: AssistantBot,
+        scope: ConversationScope,
+        action: str,
+        timeout: float,
+    ) -> None:
+        super().__init__(timeout=timeout)
+        self.bot = bot
+        self.scope = scope
+        self.action = action
+
+    @discord.ui.button(label="승인", style=discord.ButtonStyle.success)
+    async def approve(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self.bot.handle_confirmation_button(
+            interaction,
+            scope=self.scope,
+            action=self.action,
+            approved=True,
+        )
+
+    @discord.ui.button(label="거부", style=discord.ButtonStyle.secondary)
+    async def reject(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self.bot.handle_confirmation_button(
+            interaction,
+            scope=self.scope,
+            action=self.action,
+            approved=False,
         )
 
 
