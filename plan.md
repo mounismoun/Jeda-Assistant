@@ -6,7 +6,7 @@
 - 슬래시 명령어가 아니라 멘션, 답글, DM을 통해 자연스럽게 대화한다.
 - 첫 전문 기능은 사용자가 명시적으로 저장한 메모와 파일을 기억하고 회상하는 것이다.
 - 이후 전문 에이전트를 쉽게 추가할 수 있도록 처음부터 얇은 멀티 에이전트 구조로 시작한다.
-- 에이전트 목록의 목적, 설명, 예시는 `agent_catalog.json` 설정 파일로 관리한다.
+- 에이전트 목록의 목적, 설명, 예시, 사용 가능 도구, 후속 맥락 상태 단서는 `agent_catalog.json` 설정 파일로 관리한다.
 - 라우팅 모델은 `gpt-5.4-mini`로 고정한다.
 - 각 전문 에이전트는 작업 난이도를 판단한 뒤 답변 모델을 선택한다.
 
@@ -57,7 +57,162 @@ PDF는 먼저 로컬 텍스트 추출을 시도한다. 텍스트를 읽을 수 �
 ## 에이전트 구조
 
 에이전트 실행 코드는 `assistant_bot/agents/` 패키지로 분리한다.
-라우터가 참고하는 에이전트 목적, 설명, 예시는 `agent_catalog.json`에서 관리하고, 실제 실행 핸들러는 `assistant_bot/agent_registry.py`에서 연결한다.
+라우터가 참고하는 에이전트 목적, 설명, 예시, 사용 가능 도구, 후속 맥락 상태 단서는 `agent_catalog.json`에서 관리하고, 실제 실행 핸들러는 `assistant_bot/agent_registry.py`에서 연결한다.
+새 intent를 추가할 때는 `agent_catalog.json`, `models.RouteIntent`, `route_validation.INTENT_GROUPS`, 실제 registry handler가 모두 같은 intent 집합을 가져야 한다. 어느 한쪽에만 추가되면 라우터는 선택하지만 검증이나 실행이 실패하거나, 반대로 실행 코드는 있어도 라우터가 절대 선택하지 못하는 상태가 되므로 테스트로 계약을 고정한다.
+`build_agent_registry()`의 실제 handler dict도 카탈로그 intent 집합과 반드시 일치해야 한다. 카탈로그에 intent를 추가했지만 handler를 연결하지 않은 경우는 등록 단계에서 실패해야 하고, handler만 추가했지만 카탈로그에 없는 경우는 라우터가 선택할 수 없으므로 테스트에서 잡는다.
+라우터의 `DEFAULT_ALLOWED_INTENTS`와 기본 라우팅 프롬프트(`DEFAULT_ROUTING_PROMPT_BLOCK`)도 같은 intent 계약에 포함한다. 운영 중에는 registry 기반 prompt와 allowed intents를 쓰더라도, 모델 실패 fallback과 context fallback 일부는 기본 목록을 참조하므로 새 intent가 기본 목록에서 빠지면 후속 맥락 연결이 조용히 실패할 수 있다.
+OpenAI 라우터 JSON 파싱뿐 아니라 모델 실패 fallback, context fallback, 모델 모호 응답 보정도 `allowed_intents` 제한을 끝까지 지켜야 한다. 허용되지 않은 intent가 최근 작업 상태 후보에서 선택되더라도 최종 route는 안전한 fallback intent로 정리하고, linked state와 resolved slots를 제거한다.
+context fallback이 후보 intent를 직접 사용하는 경우뿐 아니라, 현재 사용자 문장으로 추론한 base intent를 보존하는 경로와 pending 확인 승인 경로도 같은 `allowed_intents` 제한을 따른다. 실험용 라우터나 부분 카탈로그에서 특정 intent를 제외했으면, 최근 작업 상태 후보나 직전 확인 질문이 있어도 제외된 intent를 되살리거나 linked state와 resolved slots를 유지하지 않는다.
+
+각 에이전트 카탈로그 항목은 `state_outputs`를 반드시 선언한다.
+`state_outputs`에는 해당 에이전트가 성공, 실패, 확인 대기, 재시도 가능 상태에서 다음 턴에 남길 수 있는 핵심 단서를 적는다.
+`state_outputs`에 `slots.*`, `artifacts.*`, `available_actions.*`, `retryable`처럼 `subject` 외 후속 맥락 단서를 선언한 에이전트는 반드시 `OperationResult`를 반환한다. 문자열만 반환하면 카탈로그에는 맥락 단서가 있다고 적혀 있는데 실제 turn state와 내부 행동 로그에는 아무 단서도 남지 않으므로 registry dispatch 단계에서 실패시킨다.
+에이전트가 반환한 `OperationResult.intent`는 registry에 등록된 intent 중 하나여야 한다. 날씨 에이전트가 대기질 요청을 웹검색으로 위임하는 것처럼 등록된 다른 intent로 위임하는 것은 허용하지만, 카탈로그와 검증 계층이 모르는 새 intent나 오타 intent는 turn state에 저장되기 전에 실패시킨다.
+예를 들어 날씨 에이전트는 `slots.location`, `available_actions.retry`, `retryable`을 남기고, 문서 분석 에이전트는 `slots.document_ids`, `artifacts.document_ids`, `available_actions.reanalyze`를 남긴다.
+웹검색처럼 실행은 됐지만 결과가 없거나 외부 API 실패가 난 경우에도, 사용자가 `다시 검색해봐`라고 이어갈 수 있도록 대표 검색어를 `subject`, `slots.query`, `slots.queries`에 남기고 `available_actions.retry`, `retryable`을 채운다.
+URL 직접 읽기처럼 대상이 URL인 작업도 성공뿐 아니라 실패 상태에서 `subject`, `slots.url`, `slots.urls`, `artifacts.url`, `available_actions.retry`, `retryable`을 남긴다. 실패 직후 사용자가 `다시해봐`, `그 링크 다시 요약해줘`라고 말해도 이전 URL을 잃지 않아야 한다.
+미세먼지/대기질처럼 내부 도구만으로는 처리할 수 없어 `unsupported`가 되는 경우에도, 사용자의 요청이 후속으로 이어질 수 있으면 `subject`, `slots.query`, 필요 시 `slots.location`, `available_actions.retry`, `retryable`을 남긴다. 그래야 사용자가 `그럼 검색으로 해봐`, `다시 확인해봐`라고 이어갈 때 이전 지역과 검색 대상을 잃지 않는다.
+반대로 음성 통화, Discord 서버 관리처럼 현재 코드로 제공되지 않고 실행 대상도 없는 순수 `unsupported` 결과는 `retryable`이나 subject가 붙어 있어도 작업 상태 후보로 저장하지 않는다. 이런 상태가 후보로 남으면 다음 턴의 `그거`, `다시해봐`가 지원 불가능한 작업에 끌려 라우터 품질을 떨어뜨릴 수 있다.
+공통 작업 상태 추론은 `facts.query/url` 같은 단수 값뿐 아니라 `facts.queries/urls` 같은 복수 대상도 슬롯과 subject 후보로 읽는다. 새 에이전트가 직접 slots를 채우지 못한 경우에도 다음 턴 라우터 후보가 최소한의 대상 단서를 잃지 않게 하기 위함이다.
+라우터 후보 종류 판정도 `slots.query`, `slots.queries`, `slots.url`, `slots.urls`를 모두 웹 대상 신호로 본다. 예를 들어 대기질 unsupported 결과가 `weather` intent에서 나왔더라도 `query` 슬롯이 있으면 사용자의 `그거 검색해줘` 후속 요청은 웹검색으로 이어질 수 있어야 한다.
+Web Search Agent 실행 계층도 `query` 단수 슬롯뿐 아니라 `queries` 복수 슬롯을 읽는다. 라우터나 공통 상태 추론이 복수 query만 넘겨도 `다시해봐` 같은 후속 검색이 원래 검색어를 잃지 않아야 한다.
+`state_outputs`는 라우터와 검증 계층이 해석할 수 있는 `subject`, `retryable`, `slots.*`, `artifacts.*`, `available_actions.*` 형식만 사용한다. 지원하지 않는 임의 키가 들어가면 등록 단계와 테스트에서 실패해야 한다.
+`build_agent_definition()`은 카탈로그 등록 시점에 중복 예시, 중복 도구, 중복 `state_outputs`, private route/debug 슬롯, 보존 불가능한 `slots.*`, 지원하지 않는 `artifacts.*`, route validation이 처리할 수 없는 `available_actions.*`를 즉시 거부한다. 새 에이전트가 라우터 프롬프트에는 보이지만 실제 turn state나 내부 행동 로그에는 남지 않는 반쪽짜리 맥락 단서를 만들지 않기 위한 장치다.
+실제 에이전트가 반환하는 `OperationResult.slots`, `OperationResult.artifacts`, `OperationResult.available_actions`, `OperationResult.retryable`도 런타임 dispatch 단계에서 카탈로그 선언 범위를 벗어나면 실패시킨다. 정적 테스트가 잡지 못하는 동적 슬롯명 오타, 중복 별칭, 링크 가능한 ID/URL 없는 artifact, 선언되지 않은 재시도 가능 상태도 이 단계에서 막아, 새 에이전트가 후속 맥락 후보에 해석 불가능한 단서를 남기지 않게 한다.
+`OperationResult.facts`도 예외가 아니다. `facts`에 `location`, `query`, `task_ids`, `current_time`처럼 `infer_turn_slots()`가 후속 맥락 슬롯으로 승격할 수 있는 키가 들어가면, 해당 intent의 `state_outputs`에 같은 `slots.*` 선언이 있어야 한다. 표시용 통계, 점검 시각, 삭제 개수처럼 라우터가 다음 행동 대상으로 쓰면 안 되는 값은 `status_checked_at`, `deleted_message_count`처럼 후속 슬롯 계약에 없는 명확한 표시용 이름으로 남긴다.
+단순 상태 조회(`status`)나 일반 대화(`chat`)가 현재 대화 위치를 알려야 할 때는 날씨 지역 슬롯인 `location`이 아니라 `location_label`을 사용한다. `location`은 날씨나 위치 대상 작업의 실행 슬롯으로 취급되므로 표시용 위치 라벨에 쓰면 다음 턴 라우터가 지역 요청으로 오해할 수 있다.
+에이전트 registry를 거치지 않고 봇 본체나 버튼 처리 경로가 직접 만든 `OperationResult`도 같은 카탈로그 계약을 따라야 한다. Discord 응답 자체는 사용자에게 보내되, 계약을 위반한 결과는 turn state, 내부 행동 로그, 확인 버튼 후보로 저장하지 않는다. 운영 CLI는 검증 도구 성격이 강하므로 같은 위반을 즉시 실패시켜 개발 중 발견되게 한다.
+`pending_*`, `context_link`, `linked_state_id`, 후보 선택 정보처럼 라우터와 오케스트레이션이 붙이는 내부 메타데이터는 intent별 기능 슬롯이 아니라 공통 내부 슬롯으로 취급한다. 이 값들은 카탈로그의 `slots.*` 선언을 요구하지 않지만, 응답 작성 컨텍스트에서는 사용자에게 노출되지 않도록 private route slot 규칙을 따른다.
+`agent_catalog.json`의 `state_outputs`에는 `slots.context_link`, `slots.linked_state_id`, `slots.resolved_slots`, `slots.pending_*`, `artifacts.context_link` 같은 private route/debug metadata를 선언하지 않는다. 새 에이전트가 후속 맥락 단서로 선언할 수 있는 값은 실제 사용자 작업 대상인 ID, 제목, 파일명, URL, 지역, query, 시간, available action이어야 한다.
+카탈로그의 `available_actions.*`는 실제 에이전트가 반환하는 `OperationResult.available_actions`와 맞아야 한다. 라우팅 모델은 카탈로그를 보고 후속 action 가능 여부를 판단하므로, 실제 구현에 없는 action을 적거나 실제 구현 action을 누락하면 맥락 연결 품질이 떨어진다.
+카탈로그의 `tools`는 라우터가 각 에이전트의 사용 가능 도구를 판단하는 공개 계약이다. 새 도구명을 추가할 때는 먼저 알려진 도구 어휘와 실제 실행 경로를 추가하고, 그 다음 `agent_catalog.json`에 선언한다. 오타나 구현되지 않은 도구명을 카탈로그에 넣으면 라우터가 존재하지 않는 능력을 가진 것처럼 판단할 수 있으므로 테스트로 막는다.
+OpenAI tool calling을 실제 사용하는 에이전트는 카탈로그 `tools`와 toolkit builder의 `ToolSpec.name` 집합이 일치해야 한다. 예를 들어 `chat`은 `build_conversation_read_tools()`, `recall`은 `build_memory_read_tools()`가 만드는 read-only 도구 이름과 카탈로그 선언이 같아야 하며, 이 계약이 깨지면 라우터가 보는 도구 설명과 실제 모델 호출 도구가 달라진다.
+tool calling으로 답변을 생성하는 에이전트도 최종 반환은 `OperationResult`여야 한다. 모델이 만든 자연어 답변 문자열만 반환하면 카탈로그의 `state_outputs` 계약, 내부 행동 기록, turn state 저장, 후속 라우팅 단서가 끊길 수 있다. 예를 들어 일반 기억 회상(`recall`)은 read-only 도구로 답변을 만들더라도 `fallback_text`, `facts.answer`, `subject`, `available_actions`를 포함한 구조화 결과로 반환한다.
+도구 호출 결과 요약의 후보 항목도 후속 맥락 단서로 승격한다. `tool_context`나 `tool_call_trace`에 `kind=memory/document/task/reminder`, `id`, `title`이 남아 있으면 라우터 컨텍스트의 `target_hints`에는 `메모 7`, `문서 9` 같은 타입별 ID 힌트와 제목을 함께 노출하고, linked state가 있는 내부 기록이면 안전한 `memory_id/document_id/task_id/reminder_id` 슬롯 후보로도 복원한다. 그래야 모델이 내부 도구로 찾은 후보를 사용자가 다음 턴에 “그 메모 보여줘”, “그 문서 다시 요약해줘”처럼 이어갈 때 제목뿐 아니라 정확한 ID까지 참고할 수 있다.
+단, 실행 가능한 ID/URL/슬롯 없이 `target_hints`만 있는 내부 기록은 후보에 병합하지 않는다. 제목 힌트만으로 과거 내부 기록을 현재 요청에 붙이면 새 요청을 이전 작업으로 오염시킬 수 있으므로, 후보 보강은 실제 실행 대상 슬롯이나 action/retry 근거가 있을 때만 허용한다.
+`build_agent_registry()`의 handler wrapper도 구조화 계약을 타입 표기로 드러내야 한다. 카탈로그상 `state_outputs`가 있는 intent의 handler가 실제로는 `OperationResult`를 반환하면서 `-> str`로 표시되면, 새 에이전트 추가자가 문자열 반환이 허용된다고 오해할 수 있으므로 source-level 테스트로 막는다.
+또한 registry dispatch 단계는 카탈로그 전체를 기준으로 구조화 필수 intent의 문자열 반환을 거부해야 한다. 새 에이전트가 `state_outputs`에 `slots.*`, `artifacts.*`, `available_actions.*`, `retryable`을 선언했다면 handler가 문자열만 반환하는 경우 테스트에서 실패해야 한다.
+실행 전 route validation의 `INTENT_ACTIONS`도 카탈로그와 같은 action 어휘를 유지한다. 카탈로그에는 있는데 검증 계층에 없는 action은 버튼 승인이나 후속 링크 검증에서 불필요하게 막힐 수 있으므로 테스트로 계약을 고정한다.
+`confirm`, `cancel`처럼 버튼 확인에 쓰는 action도 예외가 아니라 `INTENT_ACTIONS`에 정식 등록한다. 테스트에서 임시로 허용 action을 덧붙이지 않고, `agent_catalog.json`의 모든 `available_actions.*`가 route validation의 공통 action 어휘 안에 들어 있는지 확인한다.
+에이전트가 `OperationResult.available_actions`를 명시하지 않아 fallback 추론을 사용할 때도 카탈로그와 route validation이 아는 action 어휘만 남겨야 한다. 추론 결과에 검증 계층이 모르는 action이 생기면 후속 맥락 후보 품질이 떨어지므로 테스트로 막는다.
+실제 코드에 직접 쓰는 `OperationResult.available_actions` literal도 같은 계약을 따른다. 예를 들어 `show_tasks`처럼 특정 에이전트 내부 의미만 있는 action을 만들지 않고, 가능한 한 `show`, `recall`, `update`, `delete`, `retry`, `confirm`, `cancel` 같은 공통 action으로 표현한다. 공통 action으로 표현할 수 없는 새 action이 필요하면 먼저 `INTENT_ACTIONS`, `agent_catalog.json`, route validation 테스트를 함께 갱신한다.
+라우터는 이 단서를 최근 작업 상태 후보와 함께 보고 이전 작업을 이어갈지, 새 요청으로 볼지, 사용자에게 확인할지 판단한다.
+라우터가 `linked_state_id`를 반환하더라도 실행 전 검증 계층이 intent, action, retry 가능 여부, 대명사 기반 후속 요청 여부를 다시 확인한다.
+또한 `resolved_slots`의 `task_id`, `memory_id`, `document_id`, `reminder_id` 계열 값이 연결된 작업 상태의 slots/artifacts와 일치하는지 확인한다.
+실행 전 검증은 작업 호환성을 위치 확인보다 먼저 본다. 예를 들어 다른 위치에 있는 최근 메모 상태에 `그거 완료했어`처럼 할 일 action이 들어오면 “다른 위치에서 하던 메모를 여기서 이어갈까요?”라고 묻지 않고, 먼저 intent와 linked state가 호환되지 않는다고 판단해 일반 확인 질문으로 멈춘다.
+같은 intent나 같은 작업 종류로 보이더라도 사용자 문장에 명확한 action이 있으면 linked state의 `available_actions`와 다시 대조한다. 예를 들어 linked task가 `show`, `complete`, `delete`만 지원하는데 사용자가 `그거 미뤄줘`라고 하면 `manage_task` intent 자체는 맞더라도 자동 실행하지 않고 확인 질문으로 멈춘다. 브리핑처럼 task/document artifact를 제공하는 복합 상태는 artifact가 제공하는 대상 종류의 기본 action을 허용하되, 일반 단일 상태는 자신이 선언한 action만 신뢰한다.
+최근 작업 상태 후보 문자열은 `state_id`, `location`, `conversation_id`, `location_note`, `subject`, `actions`, `slots`, `artifacts` 같은 필드 구분자를 라우터가 정규식으로 읽는다. 따라서 사용자 입력에서 온 subject, slot, artifact 값에 ` | `, 줄바꿈, `actions=`, `artifacts=` 같은 토큰이 들어와도 후보 포맷을 깨지 않도록 출력 단계에서 안전하게 정리한다. 이 계약은 `build_turn_state_context()`와 라우터 후보 파서 회귀 테스트로 고정한다.
+작업 상태 후보의 subject, artifact title, slot 문자열처럼 사용자 입력에서 온 값이 지나치게 길면 라우터 프롬프트를 오염시키지 않도록 후보 출력 단계에서 앞뒤 일부만 남기고 압축한다. 단, `task_id`, `document_ids`, `url`, `location`처럼 실행 대상 판단에 필요한 구조화 슬롯은 별도로 유지해 긴 제목 때문에 대상 ID를 잃지 않게 한다.
+`location_note`는 현재 위치 후보인지, 다른 대화 위치에서 온 후보인지 라우터 모델이 바로 읽을 수 있는 힌트다. 다른 위치 후보에는 “모호한 후속 요청은 실행 전 사용자 확인 필요”를 명시해, 같은 사용자의 장기 맥락을 보존하되 현재 위치의 새 요청과 무리하게 섞지 않는다.
+`같은 사용자 다른 위치 최근 맥락` 섹션은 배경 참고용으로만 사용한다. 이 섹션에 나온 주제는 사용자의 장기 대화 연속성을 돕지만, 현재 위치에서 이전 작업을 자동 실행해도 된다는 근거가 아니다. 현재 메시지가 `그거`, `다시해봐`, `위에거`처럼 다른 위치 작업 대상에 의존할 수 있으면 사용자에게 이어갈지 확인하고, `서울 날씨`, `새 메모`, `OpenAI 검색`처럼 새 대상이 명확하면 새 요청으로 처리한다.
+`context_link=none`인 라우팅 결과의 `resolved_slots`는 실행값으로 사용하지 않고 검증 계층에서 제거한다. 실행 슬롯은 기존 작업 상태와 명시적으로 연결된 경우에만 에이전트로 전달한다.
+OpenAI 라우터가 정상 JSON을 반환한 경우에도 `chat + clarify`처럼 대상 없는 모호한 확인 질문으로 멈추고, 현재 메시지와 작업 상태 후보로 단일 대상이 명확하면 deterministic context fallback으로 한 번 보정한다. 이 보정은 모델이 명확한 intent/link를 이미 선택한 경우에는 적용하지 않는다.
+모델 모호 응답 보정도 fallback과 같은 우선순위를 따른다. 대명사 후속 요청은 현재 위치의 단일 후보를 우선하고, `할 일 8`, `문서 7`, 파일명처럼 다른 위치 대상을 명시한 경우에는 명시 대상을 고르되 실행 전 검증에서 다시 확인 질문으로 전환한다.
+라우터 프롬프트와 deterministic fallback 모두 이 규칙을 공유한다. 즉, 다른 채팅 위치에서 생성된 작업 상태는 대상이 명확하더라도 현재 위치에서 바로 실행하지 않고, “채팅 위치가 바뀐 것 같아요…” 확인을 거친 뒤 승인된 경우에만 이어간다.
+`context_link=continue`, `retry`, `modify`처럼 자동 실행 가능한 링크는 반드시 `linked_state_id`가 있어야 한다. `linked_state_id`가 없으면 자동 실행하지 않고, 애매한 후속 요청은 확인 질문으로 전환하며 명시적 새 요청은 링크를 제거한다.
+`retry`는 실패 재시도나 문서 재분석처럼 이전 실행 자체를 다시 수행하는 경우에만 사용한다. `방금 저장한 문서 보여줘`, `방금 저장한 문서 삭제해줘`, `메모 8 수정해줘`처럼 이전 상태의 대상을 조회/수정/삭제/복구하는 요청은 후보가 retryable이어도 `continue`를 사용한다.
+검증 계층은 `retry` 링크에 대해서도 사용자 문장의 action을 본다. `다시 분석`, `요약`, `비교`, `사이트 열기`, `특보 다시 확인`처럼 retryable 결과를 다시 활용하는 비파괴 후속 action은 허용하지만, `삭제`, `수정`, `완료`, `복구`처럼 별도 실행 intent가 필요한 action이 `retry`로 들어오면 링크를 제거하거나 확인 질문으로 바꾼다.
+연결된 작업 상태의 `user_id`가 현재 사용자와 다르면 절대 실행하지 않는다. 이 경우 모호한 후속 요청은 state id와 slots를 제거한 일반 확인 질문으로 바꾸고, 명시적 새 요청은 링크를 제거한다.
+연결된 작업 상태가 같은 사용자이지만 다른 대화 위치에서 생성된 경우, 버튼 승인처럼 사용자가 이미 명시적으로 이어가기를 승인한 흐름이 아니라면 실행 전 검증 계층이 자동 실행을 막고 “여기서 이어서 처리할까요?” 확인 질문으로 전환한다.
+즉, 채팅 위치가 바뀐 상황에서는 라우터 모델이 `continue`, `retry`, `modify`를 바로 반환하더라도 봇 본체가 마지막 검증에서 자동 실행을 보류한다. 사용자가 `응`, `네`, 버튼 승인처럼 확인한 뒤에만 원래 위치의 작업 상태를 현재 위치에서 이어서 실행한다.
+다른 위치의 실패/성공 작업이 있더라도 현재 메시지가 `서울 날씨`, `OpenAI 검색`처럼 새 지역, 새 검색어, 새 파일, 새 주제를 명시하면 이어가기 확인을 묻지 않고 새 요청으로 처리한다. 반대로 `다시해봐`, `그거 다시`, `위에거 처리해줘`처럼 대상이 이전 작업에 의존하는 표현이면 현재 위치에서 이어갈지 먼저 확인한다.
+실행 전 검증에서는 `task_id`, `document_id` 같은 ID뿐 아니라 `location`, `query`, `url`, `urls` 같은 대상 슬롯도 비교한다. 이 값은 `slots`뿐 아니라 `artifacts`에 저장된 값까지 함께 본다. 새 요청의 대상 슬롯이 연결된 작업 상태와 다르면, 다른 위치 확인 질문으로 보내기 전에 링크를 제거해 새 요청으로 처리한다.
+사용자 문장에 `이거`, `그거` 같은 대명사가 있더라도 명시 URL이 함께 있으면 URL을 새 대상 신호로 우선한다. 예를 들어 `https://new.example.com 이거 요약해줘`는 이전 URL 분석을 이어갈지 묻지 않고 새 URL 요청으로 처리한다.
+URL 대상 비교는 스킴/호스트 대소문자와 끝 슬래시 차이로 같은 링크를 다른 대상으로 보지 않도록 정규화한다. 단, query string이 다르면 검색 조건이나 페이지 상태가 다를 수 있으므로 다른 URL 대상으로 본다.
+채팅 위치가 바뀐 뒤 `다시해봐`, `사이트 열어줘`, `방금 것 요약해줘`처럼 이전 작업의 대상이 필요한 요청이 오면, 봇은 다른 위치에서 하던 작업을 여기서 이어갈지 먼저 묻는다. 이 질문에는 후보 subject를 포함해 사용자가 어떤 이전 작업을 승인하는지 알 수 있게 한다.
+확인 질문은 내부 용어처럼 “다른 위치”만 말하지 않고, “채팅 위치가 바뀐 것 같아요”처럼 사용자가 왜 확인을 받는지 이해할 수 있는 문장으로 구성한다.
+`여기서 이어서 요약해줘`, `여기서 이어서 다시 분석해줘`처럼 위치 이동 후 계속 진행하려는 표현과 실행 동작이 함께 있으면 후속 요청 신호로 본다. 단, 이 표현만으로 다른 위치 작업을 바로 실행하지 않고, 해당 후보가 하나로 좁혀진 경우에도 먼저 이어갈지 확인한다.
+`여기서 이어서 해줘`처럼 실행 동작이 비어 있는 표현은 다른 위치 작업과 관련 있어 보여도 바로 실행하지 않고, 무엇을 이어서 할지 또는 해당 작업을 여기서 이어갈지 확인하는 흐름으로 남긴다.
+반대로 같은 사용자가 위치를 옮겼더라도 `서울 날씨`, `OpenAI 최신 모델 검색해줘`, `새 메모 남겨줘`처럼 새 대상이 분명한 요청은 다른 위치 맥락과 연결하지 않고 새 작업으로 처리한다.
+다른 위치 또는 현재 위치 후보가 여러 개이고 현재 메시지만으로 대상이 하나로 좁혀지지 않으면, 가장 최근 후보를 임의로 선택하지 않고 후보 subject를 보여주며 어느 작업을 이어갈지 묻는다.
+같은 현재 위치 안에서도 할 일, 알림, 문서 같은 후보가 여러 개이고 `그거`, `이거`, `위에거` 같은 대명사만 있으면 자동 실행하지 않는다. `할 일 8`, `문서 7`처럼 ID나 제목이 명시된 경우에만 해당 후보를 선택한다.
+목록 조회 결과처럼 하나의 작업 상태 후보 안에 `task_ids`, `reminder_ids`, `memory_ids`, `document_ids`가 여러 개 들어 있는 경우, 사용자가 제목/ID/시간으로 그중 하나를 명확히 가리키면 실행 슬롯을 단일 ID로 좁힌다. 예를 들어 할 일 목록 뒤에 `병원 예약 완료했어`는 `task_ids=[3,8]` 전체가 아니라 `task_id=3`만 전달해야 하고, 알림 목록 뒤에 `물 마시기 알림 삭제해줘`는 `reminder_id=5`만 전달해야 한다. 할 일과 알림 artifact는 `due_at`, `remind_at` 같은 원본 시간뿐 아니라 `오늘 오전 9시`, `오늘 오전 7시 4분` 같은 사람이 읽는 시간 표현도 함께 남겨, 사용자가 `오전 9시 작업 완료했어`, `오전 7시 4분 알림 삭제해줘`처럼 시간으로 대상을 가리켜도 단일 항목을 고를 수 있어야 한다.
+반대로 사용자가 말한 action을 후보가 지원하지 않으면 제목이 일부 맞아도 연결하지 않는다. 예를 들어 알림 목록 후보에 `병원 예약 확인`이 있더라도 `병원 예약 완료했어`는 알림이 지원하지 않는 완료 action이므로 알림 후보로 연결하지 않는다.
+명시 ID 매칭은 숫자 부분 문자열 포함으로 처리하지 않는다. 예를 들어 `메모 10 삭제해줘`는 `메모 1` 후보와 일치하지 않아야 하며, `할 일 12`도 `할 일 1`이나 `할 일 2` 후보에 연결되면 안 된다.
+현재 위치 후보와 다른 위치 후보가 동시에 같은 후속 표현에 걸리지만 현재 위치 후보가 정확히 하나라면, 현재 대화에서 이어진 작업을 우선한다.
+단, 사용자가 `할 일 8`, `문서 7`, 파일명, 제목처럼 다른 위치 후보를 명시적으로 가리키면 현재 위치 후보보다 명시 대상을 우선하되, 실행 전에는 다른 위치 작업을 여기서 이어갈지 확인한다.
+이 확인 질문에는 연결 후보의 subject를 포함해 사용자가 어느 작업을 이어갈지 명확히 알 수 있게 한다.
+확인 질문으로 전환하더라도 원래 실행 intent와 resolved_slots는 보존해, 사용자가 승인 버튼을 누르면 `chat`으로 흐르지 않고 원래 요청한 작업을 이어서 실행할 수 있게 한다.
+전문 에이전트는 라우터가 검증해 전달한 `ExecutionContext.resolved_slots`와 `linked_state`를 원문 재파싱보다 우선해야 한다. 예를 들어 Task Agent의 상세 조회는 `방금 추가한 할 일 보여줘`라는 원문만 보고 현재 위치의 최신 할 일을 다시 고르지 않고, 승인된 linked state의 `task_id`가 있으면 그 할 일을 먼저 보여줘야 한다.
+실행 대상 ID나 URL을 읽는 새 에이전트는 `ExecutionContext.resolved_slots`를 최종 실행값으로 보고, `linked_state`의 slots/artifacts는 resolved 값이 없을 때만 fallback으로 사용한다. 이 규칙은 `agents/common.py`의 `resolved_or_linked_artifact_ids()`와 `resolved_or_linked_urls()` 공통 helper를 통해 재사용한다. 에이전트별 로컬 helper가 `resolved_slots`와 오래된 linked state 값을 합쳐 실행하면, 라우터가 현재 메시지에서 확정한 대상과 과거 대상이 동시에 실행될 수 있으므로 금지한다.
+ID helper는 `task_id/task_ids`, `memory_id/memory_ids`, `document_id/document_ids`, `reminder_id/reminder_ids`처럼 단수와 복수 슬롯을 같은 대상 계열로 읽되, boolean이나 잘못된 값은 실행 ID로 변환하지 않는다. 새 artifact 종류를 추가하면 `ARTIFACT_ID_SLOT_KEYS_BY_KIND`, `agent_catalog.json`의 `state_outputs`, route validation의 대상 슬롯 계약, 실행 에이전트 테스트를 함께 갱신한다.
+ID 기반 후속 요청은 단수 슬롯과 복수 슬롯을 모두 같은 실행 계약으로 본다. 즉 `task_id`와 `task_ids`, `memory_id`와 `memory_ids`, `document_id`와 `document_ids`, `reminder_id`와 `reminder_ids`를 전문 에이전트가 모두 읽어야 한다. 라우터가 복수 ID를 넘긴 경우 실행 단계에서 단수 ID만 보고 놓치면 최신 항목 fallback으로 새어 갈 수 있으므로, 각 에이전트 helper와 회귀 테스트로 고정한다.
+URL 기반 후속 요청도 같은 원칙을 따른다. `url` 단수 슬롯, `urls` 복수 슬롯, URL artifacts를 모두 실행 대상으로 읽어야 하며, `그 링크 다시 요약해줘`처럼 현재 메시지에 URL이 없어도 검증된 linked state가 있으면 이전 URL을 직접 읽어야 한다.
+Reminder Agent도 같은 원칙을 따른다. `내가 아까 몇시에 알림 보내달라고 했지?`처럼 최신 알림 조회로도 해석되는 문장이라도, 라우터가 검증한 `reminder_id`가 있으면 현재 위치의 최신 알림 대신 linked reminder를 먼저 보여준다. `reminder_ids`가 복수로 연결된 경우에는 첫 번째 알림만 보여주지 않고 연결된 알림들을 함께 조회해야 한다.
+Memory Agent의 저장 항목 조회도 같은 원칙을 따른다. `방금 저장한 문서 보여줘`, `마지막 저장한 거 보여줘`처럼 최신 저장 항목 조회 문장이라도, 라우터가 검증한 `memory_id`나 `document_ids`가 있으면 최신 항목을 다시 고르지 않고 linked item을 먼저 조회한다.
+사용자가 확인 질문에 답하지 않고 명시적 새 요청을 보내면 기존 후속 작업 확인 대기는 자동으로 만료한다. 이렇게 해서 나중에 짧게 `응`이라고 답했을 때 오래된 확인 질문을 승인한 것으로 오해하지 않게 한다.
+`응 서울 날씨 확인해줘`, `응 OpenAI 검색해줘`처럼 긍정 표현과 명시적 새 요청이 섞이면 pending 승인이 아니라 새 요청을 우선한다. `아니 그거 말고 OpenAI 검색해줘`, `아니 취소 말고 서울 날씨 알려줘`처럼 거부 표현과 명시적 새 요청이 섞인 경우도 pending 취소가 아니라 새 요청을 우선한다. pending 승인/취소는 `응 처리해줘`, `아니 취소해`처럼 별도 실행 intent가 잡히지 않는 확인 응답 중심으로만 소비한다.
+`context_link=clarify`도 pending으로 저장되기 전에 linked state 존재 여부, 사용자 일치 여부, resolved_slots와 linked state slots/artifacts 일치 여부를 검증한다. 다른 사용자 상태나 맞지 않는 ID 슬롯은 확인 질문에도 보존하지 않는다.
+또한 `context_link=clarify`가 linked state를 포함하는 경우에도, 사용자가 승인했을 때 실행될 `continue` 또는 `retry` 흐름이 실제로 호환되는지 미리 검증한다. 호환되지 않는 intent/action이면 `pending_linked_state_id`를 저장하지 않고 일반 확인 질문으로 바꿔, 다음 턴의 짧은 `응`이 잘못된 작업을 승인하지 않게 한다.
+검증 결과가 호환되지 않고 사용자가 새 대상을 명시한 요청이면 잘못된 링크만 제거하고 원래 intent를 실행한다.
+검증 결과가 호환되지 않으며 `그거`, `방금`, `다시해봐`처럼 대상이 생략된 후속 요청이면 자동 실행하지 않고 확인 질문으로 전환한다.
+검증에서 ID/slot 불일치가 발견되어 확인 질문으로 전환되는 경우에도 불일치한 `resolved_slots`는 pending에 저장하지 않는다. linked state는 확인 대상 힌트로 남길 수 있지만, 실행값은 다시 신뢰하지 않는다.
+이렇게 slot이 비워진 pending을 사용자가 버튼이나 채팅 답변으로 승인하면, 실행 컨텍스트는 linked state를 기준으로 이어가되 검증 실패로 제거된 slot 값을 되살리지 않는다.
+직전 확인 질문에 대한 긍정/거부 응답은 짧고 명확한 승인/취소 표현으로 제한하며, 라우터 후속 확인뿐 아니라 웹검색/삭제 같은 공통 pending 확인에도 같은 원칙을 적용한다. `네이버 검색`, `아니메 추천`처럼 우연히 `네` 또는 `아니`가 포함된 새 요청은 승인/취소로 오인하지 않는다.
+웹검색 pending은 사용자가 안내 문구 그대로 `응, 검색해줘`, `검색해줘`라고 답할 수 있으므로 웹검색 확인 전용 승인 판정에서만 짧은 검색 승인 문구를 허용한다. 이 문구를 공통 긍정 판정에 넣으면 삭제/메모/첨부 pending까지 오염될 수 있으므로, `응 OpenAI 검색해줘`처럼 새 검색어가 섞인 문장은 pending 승인으로 소비하지 않는다.
+Discord 메시지 경로뿐 아니라 로컬 운영 명령 `assistant-admin ask`도 같은 `PendingWebSearchConfirmationStore`와 웹검색 전용 승인 판정을 사용한다. 운영자가 CLI에서 확인 흐름을 테스트할 때 Discord와 다른 답을 보지 않도록, `응, 검색해줘`는 원래 pending query를 실행하고 `네이버에서 OpenAI 검색해줘`는 새 요청으로 남겨둔다.
+`할 일 추가`, `새 알림`, `새 메모`처럼 새 항목 생성이 명확한 요청은 최근 작업 상태의 `update`, `rename`, `postpone` 같은 action 단어와 겹쳐도 기존 상태에 연결하지 않고 새 요청으로 처리한다. 단, `할 일 3에 ... 추가`처럼 ID나 제목으로 기존 대상이 명시된 경우에는 연결을 허용한다.
+명시적 웹검색, 새 날씨 지역, 새 파일/문서 요청처럼 기본 intent가 이미 명확한 경우에는 최근 상태의 subject 일부가 메시지와 겹쳐도 다른 에이전트 후보가 빼앗지 못하게 한다.
+단, `문서 7 다시 분석해봐`처럼 기억/문서 계열 안에서 휴리스틱 intent가 낮게 잡힌 경우에는 ID와 action이 명확하면 저장 문서 분석 후보로 보정할 수 있다.
+최근 후보가 저장 당시 `remember` intent였더라도 현재 요청이 `방금 저장한 메모 뒤에 ... 덧붙여줘`, `메모 8 수정해줘`, `방금 저장한 거 지워줘`처럼 수정/삭제/복구 action이면 새 메모 저장으로 되돌리지 않고 현재 요청의 조작 intent를 유지한다.
+후보가 여러 종류로 섞여 있을 때 사용자가 `메모`, `문서`, `파일`, `할 일`, `알림`, `날씨`, `링크`처럼 대상 종류를 말하면 먼저 그 종류의 후보로 좁힌다. 예를 들어 메모와 문서 후보가 함께 있어도 `방금 저장한 메모 보여줘`는 메모 후보를 우선하고, 문서 후보 때문에 불필요한 대상 확인 질문으로 빠지지 않는다.
+브리핑처럼 여러 종류의 artifact를 담는 상태는 상태 자체의 intent보다 현재 사용자 요청 intent를 우선한다. 예를 들어 오늘 브리핑 상태에 할 일 artifact가 들어 있고 사용자가 `방금 작업 완료했어`라고 말하면 `daily_briefing`을 다시 실행하지 않고 `manage_task`로 이어가며, 실행 전 검증도 linked state의 task slot/artifact를 근거로 연결을 허용한다.
+웹 결과 후보는 `링크`, `사이트`, `페이지`, `웹페이지`, `검색 결과` 표현으로도 좁힌다. 예를 들어 최근 웹검색 결과와 할 일 후보가 함께 있어도 `검색 결과 열어줘`, `사이트 열어줘`, `페이지 요약해줘`는 웹 결과 후보를 우선한다. 단, 그 웹 결과 후보가 다른 위치에만 있으면 실행 전 “여기서 이어서 처리할까요?” 확인을 거친다.
+`작업`은 사용자가 할 일을 가리키는 표현으로도 자주 쓰므로 `할 일`, `태스크`, `todo`와 같은 task 계열 marker로 취급한다. 예를 들어 할 일 후보와 알림 후보가 함께 있어도 `방금 작업 삭제해줘`는 할 일 후보를 우선한다.
+`알림`, `리마인드`, `리마인더`, `reminder`는 같은 알림 계열 표현으로 취급한다. `알림 5 삭제해줘`, `리마인더 5 삭제해줘`, `방금 리마인더 삭제해줘`는 기억 삭제가 아니라 알림 관리로 라우팅하고, ID나 linked state가 있으면 해당 예약 알림을 삭제한다.
+문서/파일 후보를 고른 뒤에도 현재 동사가 `요약`, `분석`, `비교`, `재분석`이면 문서 분석으로 이어가고, `보여줘`, `상세`, `확인`처럼 단순 조회이면 저장 문서 조회(`recall`)로 이어간다.
+`문서 요약해줘`, `파일 분석해줘`, `문서 보여줘`, `파일 확인해줘`처럼 대명사는 없지만 대상 종류와 조회/분석 동작이 명확하고 최근 현재 위치 문서 후보가 정확히 하나이면 그 문서로 이어간다. 후보가 여러 개이면 자동 선택하지 않고 어떤 문서를 처리할지 확인한다. 단, `document_ids`나 문서 artifact처럼 실행 가능한 문서 대상이 없는 내부 로그/상태 후보는 이 자동 연결 대상에서 제외하고, `문서 삭제해줘`, `파일 수정해줘`처럼 위험하거나 변경성 있는 동작은 일반 조회 규칙으로 자동 연결하지 않는다.
+날씨 marker는 `한파`, `특보`처럼 짧은 단어가 다른 단어 경계를 넘어 우연히 생기는 경우를 피한다. 예를 들어 `저장한 파일`을 공백 제거했을 때 생기는 `한파` 때문에 파일 조회를 날씨로 오판하지 않는다.
+`그거 말고`, `그거 대신`, `이어가지마`처럼 앞 맥락을 거부하거나 새 요청으로 전환하는 표현이 있으면 대명사가 포함되어도 최근 작업 상태에 자동 연결하지 않는다.
+`병원 예약 말고 장보기 할 일 추가해줘`, `메모 8 말고 메모 10 삭제해줘`처럼 대명사가 아니라 명시 제목/ID가 `말고`, `대신` 앞에 나온 경우도 동일하게 처리한다. 이때 앞부분의 제목/ID는 이어갈 대상이 아니라 제외 대상이므로, 해당 후보와 연결하지 않고 뒤쪽의 새 요청을 우선한다.
+`그거 검색해줘`, `그거 기억해줘`처럼 대명사 대상과 명시적 실행 동사가 함께 있는 경우에는 최근 상태를 “대상”으로만 사용하고, 실행 intent는 현재 동사에 맞춘다. 예를 들어 최근 할 일 `병원 예약` 뒤에 `그거 검색해줘`라고 하면 할 일 에이전트가 아니라 웹검색 에이전트를 호출하고, 검색어는 최근 상태의 title/subject에서 가져온다. `그거 기억해줘`라고 하면 기억 에이전트를 호출하고, 저장 본문은 최근 상태의 title/subject에서 가져온다.
+직전 확인 질문의 후보 선택 답변도 같은 원칙을 따른다. 사용자가 `두번째`처럼 후보만 고르면 원래 pending 요청을 복원하지만, `두번째 문서 보여줘`, `invoice.pdf 보여줘`, `두번째 메모 보여줘`처럼 후보 선택과 새 실행 동작을 함께 말하면 원래 pending 요청의 동작보다 현재 문장의 동작을 우선한다. 메모 후보 선택에서 조회 동작이 명시되면 새 저장(`remember`)이 아니라 저장 항목 조회(`recall`)로 처리한다. `장보기 메모로 저장해줘`, `장보기 기억해줘`, `장보기 기억으로 바꿔줘`, `장보기 알림으로 등록해줘`처럼 후보 제목 자체가 출처인 변환 요청도 대명사 변환 요청과 동일하게 linked state를 재료로 사용한다. 반대로 `장보기 메모 보여줘`처럼 조회 대상 종류가 메모로 명시됐는데 선택 후보가 할 일뿐이면, 제목이 같더라도 할 일 후보를 메모 조회 대상으로 자동 연결하지 않는다. 같은 제목의 할 일과 메모가 동시에 후보에 있으면 `메모`, `할 일`, `알림` 같은 명시 대상 종류로 먼저 좁힌 뒤 해당 종류의 후보를 실행 대상으로 삼는다.
+`그 메모 할 일로 추가해줘`, `그 작업 메모로 저장해줘`, `그 메모 30분 뒤 알림으로 등록해줘`처럼 이전 대상을 재료로 다른 종류의 새 항목을 만드는 요청은 기존 상태의 `update`가 아니라 현재 문장의 대상 에이전트 생성 작업으로 처리한다. 이때 linked state는 재료의 출처로만 사용하고, 실행 슬롯에는 `task_title`, `memory_text`, `reminder_text`처럼 새 항목 생성에 필요한 본문 후보를 담는다. 따라서 “기존 메모를 할 일로 만들기”, “기존 할 일을 메모로 저장하기”, “기존 메모/작업을 특정 시간의 알림으로 예약하기”는 모두 이전 상태를 수정하지 않고 새 항목 생성으로 이어져야 한다.
+`그거 요약해줘`처럼 대명사 후속 요청이 있어도 최근 후보가 해당 action을 지원하지 않으면 자동 실행하지 않는다. 예를 들어 최근 후보가 할 일이고 actions에 summarize/reanalyze가 없으면 확인 질문으로 멈추며, 최근 후보가 문서이고 actions에 summarize가 있으면 문서 분석으로 이어간다.
+`그 링크 열어줘`, `방금 것 열어줘`처럼 URL을 여는 요청은 `open_url` action을 지원하는 웹검색/URL 후보에만 연결한다. 이때 검색 결과 후보에 URL artifact가 있으면 `web_search` 재시도가 아니라 `web_url` 직접 읽기 intent로 라우팅하고, `resolved_slots.url/urls`에 실제 URL을 넘긴다. 최근 후보가 할 일처럼 `open_url`을 지원하지 않으면 대명사가 있어도 자동 실행하지 않고 확인 질문으로 멈춘다.
+영어 `open`은 독립된 동사일 때만 URL 열기 신호로 본다. `OpenAI`처럼 단어 내부에 `open`이 들어간 고유명사를 링크 열기 요청으로 오인하면 검색 재시도와 URL 읽기를 잘못 가를 수 있으므로 정규식 경계로 판정한다.
+`그거 비교해줘`, `그거 검토해줘`처럼 비교/검토 요청은 `compare` action을 지원하는 문서 분석 후보에만 연결한다. 최근 후보가 할 일처럼 `compare`를 지원하지 않으면 자동 실행하지 않고 확인 질문으로 멈춘다.
+최근 작업 상태 후보는 단순 최신순이 아니라 확인 대기 상태, 후속 action/retry 가능한 실행 상태, 그 밖의 전문 에이전트 상태, 일반 대화 상태 순으로 우선순위를 둬서 잡담이나 단순 유틸리티 조회가 중요한 후속 작업 후보를 밀어내지 않도록 한다.
+`help`, `status`, `current_time`, `reset_context`, `unsupported`처럼 후속 맥락에 쓸 실행 대상이 없는 단순 상태는 확인 대기, 실패/재시도, artifacts, ID 슬롯, 후속 action이 없는 한 작업 상태 후보로 저장하지 않는다.
+일반 `chat` 성공 결과도 기본적으로 작업 상태 후보로 저장하지 않고, 대화 연속성은 `conversation_messages`와 압축 요약이 담당한다. 단, `chat`이라도 후속 확인 대기처럼 `needs_input`/`clarify` 상태이면 작업 상태로 저장한다.
+실행 전 route validation이 라우터 결과를 변경하면 `agent_logs`에 `route_validation` 로그를 남겨 운영 중 어떤 링크/슬롯이 제거되거나 확인으로 전환됐는지 추적한다.
+로그에는 intent, context_link, linked_state_id, link_confidence, resolved_slots뿐 아니라 clarification_question 변경도 포함해 확인 질문이 왜 바뀌었는지 추적할 수 있게 한다.
+라우터, fallback, route validation을 바꾸거나 새 에이전트를 추가할 때는 `tests/test_context_routing_matrix.py`에 고위험 실제 대화 시나리오를 추가해 새 요청, 후속 요청, 다른 위치 확인, pending 확인이 서로를 침범하지 않는지 함께 검증한다.
+라우터의 후속 표현 marker와 `route_validation`의 후속 표현 marker는 같은 의미권을 유지한다. 라우터가 `사이트`, `페이지`, `검색 결과`, `작업`, `리마인더` 같은 표현을 이전 작업 참조나 새 요청 marker로 해석한다면, 실행 전 검증 계층도 같은 표현을 알아야 모델 출력이 흔들렸을 때 마지막 안전망이 다르게 판단하지 않는다.
+사용자가 공백 없이 쓰는 `이링크`, `저링크`, `최근것`, `최근항목` 같은 표현도 같은 후속 표현으로 취급한다. 라우터 fallback과 route validation 중 한쪽만 이 표현을 알면, 모델이 state id 없는 자동 링크를 반환했을 때 어떤 경로는 확인 질문으로 멈추고 어떤 경로는 새 요청처럼 정리하는 차이가 생길 수 있으므로 회귀 테스트로 함께 고정한다.
+긍정 표현과 새 요청 marker가 섞인 문장도 공통 검증 계층에서 승인 답변으로 소비하지 않는다. 예를 들어 `응 사이트 열어줘`, `응 작업 추가해줘`, `응 리마인더 등록해줘`, `응 확인 지금 몇시야`, `응 확인 상태 알려줘`, `응 확인 목록 보여줘`, `응 확인 다시 정리해줘`는 오래된 pending 승인이 아니라 현재 문장의 새 요청으로 다시 라우팅되어야 한다.
+부정/취소 표현도 같은 원칙을 따른다. `아니 취소해`, `아니 여기서는 하지마`는 pending 취소로 처리하지만, `아니 취소 말고 목록 보여줘`, `아니 그거 말고 이거 분석해줘`처럼 새 요청 marker가 섞이면 pending 취소로 소비하지 않는다.
+`음 아니 취소 말고 서울 날씨 알려줘`처럼 짧은 filler 뒤에 거부 표현과 새 요청이 함께 붙어도 같은 원칙을 따른다. filler 제거 뒤 거부로 시작하더라도 `말고/대신` 뒤에 새 대상이나 새 작업이 있으면 오래된 pending 취소가 아니라 현재 새 요청으로 처리한다.
+문장이 `아니`나 `취소`로 시작하지 않더라도 `메모 취소 말고 목록 보여줘`, `저장 취소 대신 상태 알려줘`처럼 취소 표현 뒤에 `말고/대신`과 새 요청 marker가 이어지면 `cancel_pending`으로 라우팅하지 않는다.
+이 원칙은 context 이어가기 확인뿐 아니라 웹검색 확인, 전체 기억 삭제 확인 같은 일반 pending 확인에도 적용한다. 사용자가 pending 확인 질문 뒤에 새 요청을 말하면 기존 pending을 유지하거나 만료 정책에 맡기고, 현재 메시지를 새 요청으로 다시 라우팅해야 한다.
+일반 pending의 긍정 승인도 같은 새 요청 marker를 공유한다. `응`, `네`, `응 전부 삭제해`처럼 짧고 명확한 승인은 유지하지만, `응 확인 목록 보여줘`, `응 확인 상태 알려줘`처럼 새 요청이 섞인 문장은 승인으로 소비하지 않는다.
+`확인` 단독 또는 `응 확인해줘`는 자연스러운 승인 표현으로 유지한다. 새 요청 여부는 `목록`, `상태`, `날씨`, `검색`, `분석`처럼 실제 대상이나 작업을 가리키는 marker가 함께 있을 때만 판단한다.
+context pending과 일반 pending은 `응`, `네`, `확인`, `승인`, `진행`, `처리` 같은 짧은 승인 표현을 동일하게 받아들인다. 경로에 따라 같은 사용자 답변이 승인/무시로 갈라지지 않게 한다.
+웹검색 확인, 전체 기억 삭제 확인 같은 일반 pending이 열린 상태에서 사용자가 명시적 새 요청을 보내면, pending handler는 그 문장을 승인/거부로 소비하지 않는다. 이후 라우터가 `context_link=none`인 새 요청으로 확정하면 열린 일반 pending을 만료해, 다음 턴의 짧은 `응`, `승인`이 오래된 확인을 실행하지 않게 한다.
+새 확인 요청을 만들 때도 같은 종류의 기존 pending을 먼저 닫는다. 웹검색 확인은 기존 웹검색 확인을, 기억 삭제 확인은 기존 기억 삭제 확인을 대체해, `승인`이 가장 최근 확인 하나에만 적용되도록 한다.
+context 이어가기 확인도 새 확인 질문이 생성되면 기존 context pending을 닫아 최신 확인 하나만 남긴다. 이 규칙은 `linked_state_id`가 있는 “여기서 이어갈까요?” 질문뿐 아니라, 대상이 불명확해 다시 묻는 일반 `clarify`에도 적용한다. 여러 확인 질문이 쌓여 라우터 컨텍스트가 복잡해지거나 짧은 승인 답변이 오래된 후보에 걸리는 일을 줄인다.
+다른 대화 위치의 작업을 현재 위치에서 이어갈지 묻는 경우에는 확인 질문 생성뿐 아니라 버튼 승인 후 원래 intent, 원문, resolved slots, linked state가 보존되는지 Bot helper 테스트로 함께 검증한다.
+버튼 대신 `응`, `네`, `응 처리해줘`처럼 채팅으로 승인한 경우에도 현재 위치의 pending 확인 상태와 정확히 일치할 때만 다른 위치 작업 실행을 허용한다. 새 요청 표현이 섞인 긍정 문장은 승인으로 소비하지 않는다.
+`confirm_required` 또는 `needs_input` 상태가 사용자에게 “할까요?” 형태의 선택을 요구하고, 대응 가능한 승인/거부 action이 명확하면 Discord 버튼을 함께 제공한다. 웹검색 진행 여부 확인도 `available_actions.confirm/cancel`을 남기고 같은 pending 확인 저장소를 사용해 버튼 승인과 채팅 승인 경로가 같은 결과로 이어져야 한다.
+에이전트 카탈로그에 `available_actions.confirm`, `available_actions.cancel`처럼 확인 action을 선언한 intent는 실제 `OperationResult.available_actions`에도 같은 action을 채운다. 카탈로그와 실제 결과가 어긋나면 라우터는 버튼 가능성을 알고 있지만 봇 본체는 버튼을 띄우지 못하는 상태가 되므로 테스트로 고정한다.
+확인 질문이 여러 개 쌓인 경우 `응` 같은 짧은 승인은 현재 라우터 후보 목록에서 가장 최신 pending context 하나에만 적용한다. 오래된 pending에 맞는 route가 들어오더라도 최신 pending과 일치하지 않으면 승인으로 처리하지 않는다.
+`아니`, `취소해`, `하지마` 같은 짧은 취소 답변도 같은 기준을 사용한다. pending context가 여러 개 있으면 최신 pending 하나만 취소하고, 오래된 pending을 임의로 지우지 않는다.
+사용자가 확인 질문에 답하지 않고 `서울 날씨`, `OpenAI 검색`처럼 명시적 새 요청을 보내면 현재 대화 위치의 pending context는 모두 만료한다. 이렇게 해서 오래된 확인 질문이 나중의 짧은 `응`이나 `아니`를 다시 소비하지 않게 한다.
+이때 만료 대상은 라우터 후보 제한값 안의 최근 몇 개가 아니라, 현재 대화 위치에 남아 있는 살아있는 pending context 전체다.
+Discord 메시지 경로와 로컬 CLI `assistant-admin ask` 경로는 같은 pending context 승인 기준을 사용해야 하며, 한쪽만 다른 위치 작업을 자동 실행하거나 재확인하는 차이가 생기지 않도록 테스트한다.
+`assistant-admin route` 미리보기 역시 같은 기준을 사용해, 운영자가 `응` 같은 승인 답변을 미리 확인할 때 실제 `ask` 실행과 다른 context_link 결과를 보지 않도록 한다.
+pending context 승인 판정처럼 Discord, CLI ask, route preview가 공유해야 하는 맥락 판단 로직은 각 경로에 복사하지 않고 `route_validation` 공통 helper로 관리해 경로별 동작이 갈라지지 않게 한다.
+라우터 모델 실패 시 사용하는 fallback 라우터도 pending 승인 판정은 `route_validation`의 공통 helper를 사용한다. 새 요청 marker를 추가할 때 Discord 실행 경로만 바뀌고 fallback 라우터가 예전 기준으로 pending을 승인하는 일이 없어야 한다.
+라우터 모델이 pending 확인 승인에서 대상과 slots는 맞게 반환했지만 `pending_original_text`를 빠뜨린 경우에는, pending 상태에 저장된 원래 사용자 문장을 공통 helper가 보강해 에이전트가 `응` 같은 승인 답변 자체를 실행 원문으로 받지 않게 한다.
+라우터 모델이 pending 확인 승인에서 `resolved_slots` 일부 또는 전체를 빠뜨린 경우에도, 순수 승인 답변이고 pending target state, intent, context_link가 일치하며 route slots가 pending slots와 충돌하지 않으면 pending 상태의 실행 슬롯을 복구한다. 단, route가 pending slots와 다른 값을 명시하면 승인으로 처리하지 않는다.
+라우터 모델이 pending 확인 승인에서 `linked_state_id`를 빠뜨렸더라도, 순수 승인 답변이고 pending state의 intent/context_link/slots와 충돌하지 않으면 pending state의 `pending_linked_state_id`를 복구한다.
+pending 승인 route를 검증할 때는 사용자의 승인 답변(`응`, `네`)이 아니라 pending에 저장된 원래 사용자 요청 문장을 `user_text`로 사용한다. 그래야 `그거 완료했어`, `그거 삭제해`, `그거 미뤄줘` 같은 action 검증이 승인 단어 기준으로 느슨해지지 않는다.
+pending 값으로 route를 보강한 뒤에는 `linked_state_id`가 달라질 수 있으므로, Discord 메시지 경로, CLI ask, route preview 모두 보강된 route 기준으로 linked state를 다시 조회한 뒤 실행 전 검증과 실행 컨텍스트를 만든다.
+순수 승인 답변은 새 실행 슬롯을 만들 수 없다. 따라서 route가 pending slots에 없는 추가 실행값을 반환하면 모델 hallucination 가능성으로 보고 pending 승인으로 처리하지 않는다.
+후속 요청 대명사는 `그거`뿐 아니라 `이거`, `저거`, `위에거`, `위의 것`, `방금 것`, `아까 것`처럼 실제 대화에서 쓰는 표현까지 포함한다. `그 메모`, `그 작업`, `그 알림`, `이 문서`, `저 파일`, `방금 저장한 거`, `아까 등록한 것`처럼 지시어와 대상 종류가 결합된 표현도 후속 지시 표현으로 본다. 같은 위치에서는 적절한 후보에 연결하고, 다른 위치 후보를 대명사로 가리키면 확인 질문으로 전환한다.
+파일/문서 후속 요청은 `이 문서`, `이 파일`, `저 문서`, `위 문서`, `위 파일`처럼 명사를 포함한 지시 표현도 대명사 후속 요청처럼 처리한다.
+라우터뿐 아니라 Web Search, Memory 같은 전문 에이전트 내부 helper도 같은 후속 지시 표현을 인식해야 한다. 그래야 라우팅은 맞았지만 실행 단계에서 `이거 검색해줘`, `저거 저장해줘`, `위에거 기억해줘`를 새 본문이나 새 검색어로 오해하지 않는다.
+Task Agent의 최근 메시지 기반 할 일 생성도 `그거`뿐 아니라 `이거`, `저거`, `위에거`, `위 내용` 계열을 같은 후속 지시 표현으로 처리한다.
 
 ### Router Agent
 
@@ -100,6 +255,11 @@ PDF는 먼저 로컬 텍스트 추출을 시도한다. 텍스트를 읽을 수 �
 - 라우터는 압축 요약과 최근 대화를 보고 intent를 판단하고, 전문 에이전트는 비용 절감을 위해 focused context를 우선 사용한다.
 - 같은 사용자가 다른 DM, 채널, 스레드에서 나눈 최근 맥락은 별도 제한값 안에서 짧게 포함해 위치 이동을 인지한다.
 - focused context는 직전 대화, 후속 질문 대상, 최근 작업 결과를 중심으로 짧게 구성한다.
+- 사용자에게 보이지 않는 내부 행동 기록도 실행 컨텍스트에 포함한다.
+- 내부 행동 기록은 라우팅, 실행 전 검증, 최종 실행 결과를 짧게 요약한 운영 로그이며 사용자 메시지나 저장 본문으로 취급하지 않는다.
+- 같은 사용자 기준의 현재 위치와 다른 대화 위치 내부 행동 기록을 함께 참고하되, 다른 위치 기록은 자동 실행 근거가 아니라 “여기서 이어서 처리할까요?” 확인이 필요한 후보 단서로만 사용한다.
+- 현재 사용자 요청에 새 대상이 명확하면 내부 행동 기록의 이전 작업과 연결하지 않고 새 요청으로 처리한다.
+- 내부 행동 기록과 구조화된 실행 결과가 충돌하면 실제 실행에 사용된 `ExecutionContext`, `OperationResult`, `resolved_slots`, `linked_state`를 우선한다.
 
 ### Memory Agent
 
@@ -216,6 +376,8 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - `RESPONSE_CONTEXT_MAX_CHARS=1200`
 - `USER_CONTEXT_CONVERSATIONS=3`
 - `USER_CONTEXT_MAX_CHARS=1000`
+- `TURN_STATE_CURRENT_LIMIT=3`
+- `TURN_STATE_CROSS_LOCATION_LIMIT=3`
 - `PENDING_CONFIRMATION_TTL_MINUTES=10`
 - `TASK_REMINDER_INTERVAL_MINUTES=1`
 - `TASK_REMINDER_BATCH_SIZE=20`
@@ -265,6 +427,7 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - 문서 분석 에이전트도 focused context를 받아 직전 대화의 기준, 비교 대상, 분석 관점을 문서 분석 프롬프트에 반영하도록 구현했다.
 - 대화 압축은 대화 에이전트 응답에만 의존하지 않고 전체 메시지 처리 후 마지막 요약 이후 누적 문자 수를 기준으로 갱신하도록 구현했다.
 - 실행 컨텍스트에 같은 사용자의 다른 대화 위치 최근 맥락을 포함해 DM에서 하던 이야기를 서버/스레드에서 이어갈 때도 위치 이동을 인지하도록 구현했다.
+- 각 에이전트 카탈로그 항목에 `state_outputs`를 추가하고 라우터 프롬프트에 후속 맥락 단서로 노출해, 새 에이전트도 어떤 상태를 남겨야 하는지 명시하도록 구현했다.
 - `방금 말한 거 기억해줘`, `그거 기억해줘`처럼 직전 사용자 발화를 장기 기억으로 저장하도록 구현했다.
 - 자연어 기반 도움말과 봇 상태 확인을 구현했다.
 - `오늘 브리핑 해줘`로 오늘까지 할 일, 열린/완료 작업 수, 최근 기억, 최근 대화 위치를 한 번에 보여주도록 구현했다.
@@ -313,7 +476,7 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - `.pptx`, `.hwpx`, `.json`, `.jsonl`, `.yaml`, `.yml`, `.xml`, `.html`, `.htm`, `.tsv`, `.odt`, `.ods` 등 안정 포맷 텍스트 추출을 추가했다.
 - 비전 OCR detail은 `auto`로 고정하고, 1회 10MB와 사용자별 하루 50MB 제한을 `vision_ocr_usage` 테이블로 추적하도록 구현했다.
 - 텍스트와 이미지가 함께 있는 PDF는 이미지 리소스가 있을 때 페이지 단위 비전 선별을 수행하고, 중요한 시각 자료가 있는 페이지만 이미지 분석을 추가하도록 구현했다.
-- `assistant-admin route`로 OpenAI 호출 없이 휴리스틱 fallback intent를 미리 확인하도록 구현했다.
+- `assistant-admin route`로 OpenAI 호출 없이 휴리스틱 fallback intent, 최근 작업 상태 후보, 연결된 작업 상태, 후속 맥락 연결, 실행 전 검증 결과를 미리 확인하도록 구현했다.
 - `assistant-admin ask`로 Discord를 켜기 전 로컬에서 실제 에이전트, OpenAI, SQLite 흐름을 실행하도록 구현했다.
 - `assistant-admin briefing`으로 사용자별 오늘 브리핑을 SQLite 기준으로 출력하도록 구현했다.
 - `assistant-admin snapshot`으로 사용자별 기억, 할 일, 대기 작업, 최근 대화 위치를 한 번에 점검하도록 구현했다.
@@ -322,6 +485,8 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - `assistant-admin tasks`로 사용자별 할 일을 조회, 추가, 완료, 삭제하고 삭제한 할 일을 다시 복구하도록 구현했다.
 - `assistant-admin reminders`로 예약 시각이 지난 사용자 알림 발송 대상을 미리 확인하도록 구현했다.
 - `assistant-admin logs`로 최근 에이전트 라우팅, intent, 난이도, 모델 선택 로그를 조회하도록 구현했다.
+- `assistant-admin turn-states`로 라우터가 후속 요청 판단에 참고하는 최근 작업 상태 후보와 slots/artifacts/actions를 조회하도록 구현했다.
+- `assistant-admin turn-states` 출력 순서는 실제 라우터 후보 우선순위와 맞추고 priority 값을 함께 보여주도록 구현했다.
 - `assistant-admin cleanup`으로 오래된 대화 기록, 에이전트 로그, 해결된 첨부 대기 요청, 삭제된 기억/문서/할 일을 보존 기간 기준으로 정리하도록 구현했다.
 - `assistant-admin backup`으로 embedding과 로그를 포함한 SQLite 저장소 전체를 백업하도록 구현했다.
 - `assistant-admin restore`로 SQLite 백업 파일을 복구하되, 현재 저장소를 먼저 안전 백업하도록 구현했다.
@@ -439,6 +604,189 @@ v1은 Python 표준 `sqlite3` 기반 SQLite를 사용한다.
 - 컨텍스트 압축은 내부 대화 연속성을 위한 것이며 명시적 사용자 기억과 분리한다.
 - v1은 기억, 파일 회상, 개인 할 일 관리에 집중한다.
 - 일정, 코딩, 리서치 같은 향후 전문 에이전트도 같은 라우팅 및 모델 선택 인터페이스를 구현한다.
+- 새 전문 에이전트를 추가할 때는 `agent_catalog.json`에 목적, 설명, 예시, tool 목록, `state_outputs`를 함께 등록하고, 실행 결과는 가능한 한 `OperationResult.subject`, `slots`, `artifacts`, `available_actions`, `retryable`을 채우도록 한다.
+- 새 전문 에이전트는 최종 결과를 반드시 구조화된 `OperationResult`로 반환한다. 봇 본체는 이 결과를 `agent:result` 형태의 내부 행동 기록으로 남겨 다음 턴 라우터, 전문 에이전트, 응답 작성자가 참고할 수 있게 한다.
+- 내부 행동 기록에는 전체 사용자 발화나 최종 답변 원문을 길게 저장하지 않는다. `status`, `summary`, 주요 `slots`, `warnings`, `next_actions`처럼 다음 행동 선택에 필요한 짧은 구조화 단서만 남긴다.
+- 내부 행동 기록은 `ConversationStore.recent_conversations_for_user()`로 확인한 같은 사용자 대화 위치에서만 가져온다. `agent_logs`에 user_id가 직접 없더라도 다른 사용자의 로그가 라우터 컨텍스트에 섞이면 안 된다.
+- 내부 행동 기록 저장소(`agent_logs`)는 `user_id`를 함께 저장한다. 서버 채널처럼 여러 사용자가 같은 `conversation_id`를 공유하는 위치에서는 현재 사용자와 일치하는 로그만 라우터/응답 컨텍스트에 포함하고, user_id가 없는 과거 로그는 사용자 ID가 conversation_id에 포함된 사용자 전용 위치에서만 레거시 참고자료로 허용한다.
+- user_id가 없는 과거 내부 로그를 레거시 참고자료로 허용할 때도 `user-1`이 `user-10`에 부분 매칭되는 식의 오염을 막는다. conversation_id 안의 사용자 ID는 영숫자/하이픈/언더스코어 경계 기준의 정확한 토큰으로만 일치해야 한다.
+- 최근 작업 상태 저장소(`conversation_turn_states`)도 현재 사용자 `user_id`를 기준으로 조회한다. 서버 채널처럼 여러 사용자가 같은 `conversation_id`를 공유해도 다른 사용자의 실패/대기/확인 상태를 라우터 컨텍스트, pending 후보, get/expire 작업에 섞으면 안 된다.
+- `conversation_turn_states`의 다른 위치 후보(`include_cross_locations=True`)는 같은 사용자 작업을 이어가기 위한 자료일 뿐이다. 채팅 위치가 달라도 `user_id`가 다른 상태는 절대 cross-location 후보가 될 수 없다.
+- 라우터, 검증 계층, 봇/CLI 오케스트레이션뿐 아니라 Memory, Task, Reminder, Weather, Web, Document Analysis, Utility, Conversation 같은 전문 에이전트가 남기는 운영 로그도 가능한 한 `scope.user_id`를 함께 저장한다. 그래야 공유 채널에서도 유용한 내부 행동 기록이 사용자 격리 필터를 통과해 다음 턴 컨텍스트에 남는다.
+- 새 에이전트나 오케스트레이션 경로가 `logs.add()`로 내부 행동 기록을 남길 때는 반드시 `user_id`를 함께 전달한다. 이 계약은 source-level 회귀 테스트로 고정해, 에이전트가 추가될수록 사용자별 맥락 격리가 약해지지 않게 한다.
+- `logs.add()` 호출은 `user_id` 없이 작성하지 않는다. 새 에이전트가 내부 행동 기록을 추가할 때 사용자 ID가 빠지면 공유 채널에서 다른 사용자의 실행 결과가 라우터 컨텍스트에 섞일 수 있으므로, 모든 런타임 로그 호출은 소스 레벨 테스트로 강제한다.
+- 내부 행동 기록은 사용자에게 보이지 않는 라우팅/검증/실행 참고자료다. 사용자가 직접 묻지 않는 한 agent명, model명, `route_validation`, `*:result`, 내부 slot, 내부 reason을 최종 답변에 노출하지 않는다.
+- 라우터는 원본 내부 행동 기록의 `route_context`, `validation_context`, `linked_state_id`, `resolved_slots`, `pending_*` 같은 진단값을 볼 수 있다. 하지만 전문 에이전트 실행 컨텍스트에는 원본 진단 JSON을 그대로 넘기지 않고, 위치, 의도, 상태, 대상 단서, 가능한 행동, 재시도 가능 여부, 연결 주의사항처럼 실제 행동 선택에 필요한 정보로 정리해서 전달한다.
+- 전문 에이전트의 `라우터 복원 슬롯`도 최종 응답과 같은 private route key 필터를 통과한다. `memory_id`, `document_id`, `task_id`, `reminder_id`, `location`, `query`, `filename`처럼 실행에 필요한 대상 단서는 남기되, `pending_original_text`, `pending_resolved_slots`, `linked_state_id`, 중첩 `resolved_slots` 같은 라우터 내부 제어값은 숨긴다.
+- 전문 에이전트 코드가 `ExecutionContext.resolved_slots`를 직접 읽을 때도 safe route slot만 읽는다. 새 에이전트가 `pending_original_text`, `pending_resolved_slots`, `context_link`, `linked_state_id` 같은 내부 제어 슬롯을 실행 대상처럼 직접 참조하면 테스트에서 실패해야 한다.
+- 이 private route key 필터는 top-level만 보지 않고 dict/list/tuple 내부까지 재귀적으로 적용한다. 새 에이전트가 후보 목록이나 target 객체 안에 `context_link`, `linked_state_id`, `resolved_slots`, `pending_*`를 중첩해서 넣어도 에이전트/응답 컨텍스트에는 남지 않아야 한다.
+- 내부 행동 기록의 `slots=...`, `artifacts=...`, `target_hints=...` 같은 문자열 세그먼트도 가능한 경우 literal로 파싱해 같은 재귀 필터를 적용한다. 파싱할 수 없는 문자열도 private route key 패턴을 제거한 뒤 에이전트/응답용 참고 정보로 전달한다.
+- 내부 행동 기록에 사용자 입력이나 실행 결과 값을 넣을 때는 값 안의 ` | `, `route_context=`, `validation_context=`, `slots=`, `artifacts=` 같은 포맷 토큰을 일반 텍스트로 치환한다. 실제 로그 세그먼트 구분자는 유지하되, 값 안의 토큰이 라우터 파서를 속여 가짜 구조화 필드처럼 보이면 안 된다.
+- 내부 행동 기록 값의 포맷 토큰 치환은 길이 축약보다 먼저 수행한다. 값이 길어서 말줄임 처리되더라도 `route_context=`, `slots=`, `artifacts=` 같은 토큰이 축약 결과에 살아남아 다음 턴 라우터 컨텍스트를 오염시키면 안 된다.
+- 에이전트 실행 컨텍스트에 들어가는 내부 행동 기록의 중첩 문자열 값도 private route metadata를 제거한다. 예를 들어 `note="context_link=continue; linked_state_id=12; 할 일 제목 유지"`처럼 문자열 값 안에 내부 metadata가 섞여도 에이전트는 `할 일 제목 유지` 같은 안전한 단서만 본다. 단, private metadata가 없는 일반 문자열의 ` | `, 줄바꿈 정리 계약은 기존 후보 포맷 테스트를 유지한다.
+- 연결된 이전 작업 상태를 에이전트에 전달할 때도 전체 raw state를 그대로 보여주지 않는다. state id, 위치 id, intent, status, subject, summary, 안전한 slots/artifacts, available actions, retryable 정도만 남기고 pending/route 검증용 내부 키는 제거한다.
+- 일반 완료/실패 turn state에 저장되는 slots와 artifacts도 private route key를 재귀적으로 제거한다. `context_link`, `linked_state_id`, `resolved_slots`, `pending_*`는 내부 로그와 실행 컨텍스트에 남길 수 있지만, 다음 턴 작업 후보의 대상 단서에는 `memory_id`, `document_id`, `task_id`, 제목, 파일명, URL처럼 실제 작업 대상만 남긴다.
+- URL 후보 선택에 쓰는 `pending_candidate_urls`, `pending_candidate_url_titles`도 완료 상태 turn state에는 남기지 않는다. 선택 완료 후에는 실제 선택된 `url`/`urls`만 다음 턴 대상 단서로 남아야 하며, 후보 목록 전체가 후속 라우팅 대상처럼 보이면 안 된다.
+- `needs_input`, `confirm_required`, `clarify`처럼 사용자의 승인/선택을 기다리는 pending turn state는 라우터가 확인 대상을 복원해야 하므로 pending key를 유지할 수 있다. 단, 일반 완료 상태로 넘어간 뒤에는 pending key를 후보 slots에 계속 남기지 않는다.
+- Discord 일반 메시지, 버튼 실행, 후보 선택, CLI 실행처럼 turn state를 저장할 수 있는 런타임 경로는 모두 `sanitized_turn_state_slots()`와 `turn_state_artifacts_from_result()`를 통해 저장한다. 새 우회 저장 경로가 생겨 raw `OperationResult.slots`나 raw `OperationResult.artifacts`를 직접 저장하면 테스트에서 실패해야 한다.
+- 과거 버전에서 이미 저장된 legacy turn state에 raw private route key가 남아 있을 수 있으므로, `build_turn_state_context()` 출력 단계에서도 turn state의 slots/artifacts에 한해 private route key를 재귀 제거한다. 내부 행동 로그의 `route_context`와 `validation_context`는 라우터 판단 자료이므로 이 출력 필터 대상이 아니며, 라우터가 파싱 가능한 구조를 유지한다.
+- 실행 결과 metadata가 풍부해져도 `context_link`, `linked_state_id`, `resolved_slots`, `pending_*` 같은 route 내부 키는 최종 답변 작성 모델 입력의 공개 실행 결과에서 제거한다. 다만 `filenames`, `attachment_names`, `memory_id`, `document_id`처럼 사용자가 자연스럽게 확인해야 하는 대상 단서는 보존한다.
+- 묶음 실행 결과의 `items` 안에 들어간 중첩 `facts`/`slots`도 같은 공개/비공개 필터를 통과해야 한다. 새 에이전트가 여러 하위 결과를 묶어 반환하더라도 nested `context_link`, `linked_state_id`, `resolved_slots`, `pending_*`가 최종 답변 작성 모델 입력으로 새면 안 된다.
+- 공개 실행 결과 필터는 dict key만 제거하지 않고 문자열 값 내부의 `context_link=...`, `linked_state_id=...`, `resolved_slots=...`, `pending_*` 패턴도 제거한다. 새 에이전트가 `facts.note`, `items[].note`, `slots.note` 같은 문자열 필드에 내부 route metadata를 실수로 넣어도 최종 응답 작성 모델이 그 값을 보지 않아야 한다.
+- 최종 답변 작성 모델 입력에 들어가는 공개 `OperationResult`는 `facts`, `slots`, `items`뿐 아니라 `artifacts`, `warnings`, `next_actions`, `preserve_values`, `subject`, `summary`, `fallback_text`까지 private route key 정리를 거친다. 새 에이전트가 어느 구조화 필드에 내부 metadata를 넣어도 최종 응답 작성 모델이 raw route/debug 값을 보지 않게 한다.
+- 최종 답변 작성 모델 호출이 실패해 fallback 문장을 그대로 반환해야 할 때도 private route key를 정리한다. 새 에이전트가 실수로 fallback_text에 `context_link`, `linked_state_id`, `resolved_slots`, `pending_*`를 넣어도 그대로 사용자에게 노출되면 안 된다.
+- fallback 문장이 private route metadata만으로 구성되어 정리 후 빈 값이 되면 원문을 되돌리지 않고 안전한 일반 문구로 대체한다. 내부 키를 숨기려다 다시 원문을 반환하는 경로가 있으면 안 된다.
+- 내부 행동 기록에서 보존하는 route/debug 성격 키와 최종 응답에서 숨기는 private key 목록은 함께 관리한다. `validation_reason`처럼 라우팅 검증용 내부 사유는 내부 컨텍스트에는 남기되 공개 실행 결과와 fallback에서는 숨긴다.
+- `route_context`, `validation_context`, `current_message_context`는 내부 행동 기록과 라우터 진단에는 필요하지만 사용자-facing 응답 모델 입력에는 직접 노출하지 않는다. 새 에이전트가 실수로 이 키를 `facts`, `slots`, `items`, `artifacts`, 텍스트 필드에 넣어도 공개 응답 필터에서 제거되어야 한다.
+- 이 세 진단 키는 전문 에이전트가 직접 실행 대상으로 읽는 safe execution slot, catalog target slot, turn state target hint, internal action target hint에도 포함하지 않는다. 라우터는 원본 진단을 참고할 수 있지만, 전문 에이전트가 받는 `resolved_slots`에는 `task_id`, `memory_text`, `location`처럼 실제 행동에 필요한 안전 슬롯만 남아야 한다.
+- 라우터와 전문 에이전트는 내부 행동 기록을 보조 신호로만 사용한다. 현재 사용자 메시지, 명시 대상, `linked_state`, `resolved_slots`, 실제 `OperationResult`가 내부 로그보다 우선한다.
+- 같은 state_id에 대해 오래된 route validation 경고와 최신 정상 `route_context` 실행 기록이 함께 있으면 최신 정상 실행 기록이 우선한다. 이 recency 해제는 내부 로그 파서뿐 아니라 deterministic fallback 라우팅의 후보 차단/확인 전환 판단에도 적용되어야 한다.
+- 채팅 위치가 바뀐 뒤 내부 행동 기록이나 최근 작업 상태가 이전 위치 작업을 가리키더라도, 현재 메시지가 대명사/이어가기 표현처럼 이전 대상에 의존할 때만 확인 질문으로 연결한다. 새 지역, 새 파일, 새 검색어, 새 ID가 명확하면 이전 위치 기록을 무시하고 새 요청으로 처리한다.
+- 현재 위치 내부 로그가 많아도 같은 사용자의 다른 위치 최신 실행 결과(`*:result`)는 최소 1개 보존한다. 채팅 위치가 바뀐 뒤 사용자가 “그거 다시해봐”, “아까 하던 거 이어서”처럼 말하면, 이전 위치 실행 결과의 subject/slots/actions/retryable이 확인 질문과 승인 후 복원에 필요한 근거가 되기 때문이다.
+- 새 에이전트나 tool calling 기능을 추가할 때는 내부 행동 기록이 다음 턴 컨텍스트에 포함되는지, 다른 사용자 기록이 제외되는지, 내부 로그가 최종 답변에 노출되지 않는지 테스트를 함께 추가한다.
+- 라우터와 에이전트 실행 컨텍스트의 최근 대화는 현재 사용자 메시지와 그 직후 봇 답변 중심으로 구성한다. 공유 채널에서 같은 `conversation_id`를 쓰는 구조가 생겨도 다른 사용자의 메시지와 그에 대한 봇 답변이 현재 사용자의 “최근 대화”로 들어가면 안 된다.
+- conversation 단위 요약은 사용자 ID가 conversation_id에 정확히 포함된 사용자 전용 위치에서만 라우터/실행 컨텍스트에 사용한다. 공유 채널처럼 사용자 범위가 불명확한 요약은 다른 사용자 대화가 섞였을 수 있으므로 후속 행동 판단 자료로 쓰지 않는다.
+- 같은 사용자 다른 위치 최근 맥락도 현재 사용자 중심 미리보기만 사용한다. 현재 사용자가 참여한 다른 위치라 해도, 그 위치의 마지막 메시지가 다른 사용자 메시지라면 라우터가 그 메시지를 현재 사용자의 배경 맥락으로 읽으면 안 된다.
+- 다른 위치가 사용자 전용 conversation_id가 아니라 공유 채널이면 conversation 요약 대신 현재 사용자 메시지와 그 직후 봇 답변에서 만든 짧은 미리보기를 사용한다.
+- 대화 압축으로 생성되는 conversation summary도 가능하면 `user_id`를 함께 저장한다. 공유 conversation_id에서는 사용자별 요약만 후속 맥락으로 사용하고, user_id가 없는 레거시 요약은 conversation_id가 사용자 전용임이 확인될 때만 호환 자료로 읽는다.
+- `최근 대화에서 할 일 뽑아줘`, `네가 예로 든 내용 그대로 수정해줘`처럼 최근 대화를 재료로 삼는 에이전트 기능도 현재 사용자 중심 최근 대화만 사용한다. 다른 사용자의 발화나 그에 대한 봇 답변을 작업 추출/수정 근거로 삼으면 안 된다.
+- 새 에이전트나 오케스트레이션 코드가 `ConversationStore.recent_messages()`를 직접 호출할 때는 반드시 `user_id=scope.user_id`처럼 현재 사용자 범위를 넘긴다. 이 계약은 소스 레벨 회귀 테스트로 고정해, 에이전트가 추가될수록 공유 채널 맥락 격리가 약해지지 않게 한다.
+- 사용자가 “대화 맥락 초기화”를 요청하면 현재 사용자의 대화 맥락만 지운다. 공유 conversation_id에서 다른 사용자의 메시지나 사용자별 요약까지 지우면 안 되며, 장기 기억과 다른 사용자 맥락은 유지한다.
+- 확인 버튼, URL 후보 선택 버튼, 후속 작업 후보 선택 버튼은 요청한 사용자만 누를 수 있다. 다른 사용자가 누르면 ephemeral 안내만 보내고, pending 상태를 만료하거나 에이전트를 실행하거나 응답 작성 컨텍스트를 기록하지 않는다.
+- 첨부 저장 대기, 기억 삭제 확인, 다음 메시지 메모 캡처, 웹검색 확인 같은 pending 저장소도 현재 사용자 `user_id`를 기준으로 조회하고 해결한다. 같은 공유 채널의 다른 사용자 pending 작업을 latest, resolve, expire 대상으로 삼으면 안 된다.
+- 실행 전 route validation에서 linked state를 찾지 못했거나 현재 사용자와 일치하지 않으면, 자동 실행뿐 아니라 새 pending 확인 슬롯에서도 `linked_state_id`와 `resolved_slots`를 제거한다. 찾을 수 없는 state id가 확인 대기로 남아 다음 승인에서 다시 실행 후보가 되면 안 된다.
+- 라우터가 `ExecutionContext`로 연결한 대상 ID는 에이전트 내부에서도 최우선 대상이다.
+- `방금 저장한 것`, `방금 추가한 할 일`, `최근 알림` 같은 최신 항목 fallback은 명시 ID 또는 linked slot이 없을 때만 사용한다.
+- 조회뿐 아니라 수정, 삭제, 미루기, 다시 열기 같은 조작 작업도 같은 우선순위를 지킨다.
+- 삭제 결과는 `restore`, 완료 결과는 `reopen`처럼 사용자가 자연스럽게 요청할 다음 행동을 `available_actions`에 남긴다.
+- 결과 facts에 들어간 복수 ID도 `slots.*_ids`로 보존해 다음 턴 라우터가 대상 후보를 잃지 않게 한다.
+- 모든 에이전트 결과의 `intent`는 실제 라우터 intent와 일치해야 한다. 예를 들어 Memory Agent도 `memory` 같은 포괄 intent가 아니라 `remember`, `recall`, `update_memory`, `delete_memory`, `restore_memory`처럼 구체적으로 기록한다.
+- `OperationResult.intent`에 직접 쓰는 문자열은 반드시 `models.RouteIntent`와 `agent_catalog.json`의 intent 계약 안에 있어야 한다.
+- linked context를 해석할 수 있는 에이전트 handler는 Agent Registry에서 반드시 `context.execution`을 전달해야 한다.
+- 라우터가 linked state와 resolved slots를 반환할 수 있는 intent는 실행 에이전트에서도 같은 `ExecutionContext`를 소비해야 한다. 특히 `recall`뿐 아니라 `list_memory`처럼 이름상 목록 intent여도 linked ID가 있으면 정확한 대상 상세 조회로 전환한다.
+- 채팅 위치가 바뀐 상태에서 이전 위치 작업을 명확히 이어가려는 요청이면 먼저 확인하고, 불명확하거나 새 대상이 있으면 자동 연결하지 않는다. 이어가기로 확정된 뒤에는 현재 위치의 최신 항목으로 대상을 다시 고르지 않는다.
+- 라우터 컨텍스트의 다른 위치 작업 후보는 `confirm_policy=ask_before_execute_when_follow_up; ignore_when_new_request`로 표시한다.
+- 다른 위치 후보는 `그거`, `다시해봐`, `이어서`처럼 후속 요청 신호가 있을 때만 “여기서 이어서 처리할까요?”라고 확인하고, 새 지역·새 파일·새 주제·새 ID가 명확한 요청에는 연결하지 않는다.
+- 다른 위치 후보에는 `suggested_question`을 함께 제공해 모델 라우팅과 fallback 라우팅이 같은 사용자 확인 문구를 사용하도록 한다.
+- 에이전트 실행 뒤 최종 답변을 작성할 때도 라우팅 전 일반 컨텍스트가 아니라 실제 실행에 사용된 `ExecutionContext`를 전달한다.
+- 특히 linked state와 resolved slot이 있는 요청은 실행 단계뿐 아니라 최종 응답 작성 단계에서도 같은 대상을 기준으로 말해야 한다.
+- 최종 답변 작성용 컨텍스트에는 linked state뿐 아니라 `resolved_slots`와 라우팅 근거도 포함한다. 그래야 “그거 보여줘”처럼 대명사 요청이 어떤 ID로 실행됐는지 응답 작성 모델이 명확히 보고, 최근 대화의 다른 ID나 후보를 답변에 섞지 않는다.
+- 응답 작성 컨텍스트를 길이 제한으로 자를 때는 `resolved_slots`와 라우팅 근거를 가장 앞에 둔다. 긴 요약이나 linked state 본문 때문에 실제 실행 대상 ID가 잘리면 안 된다.
+- 메시지 처리 중 pending 확인 상태가 만료되거나 새 상태가 생성될 수 있으므로, 최종 답변 작성용 `conversation_context`는 `handle_message()` 실행 후 다시 생성한다.
+- 공통 `ResponseComposer`는 처리 전 라우터 컨텍스트가 아니라 처리 후 최신 컨텍스트와 실제 실행 컨텍스트를 함께 받아야 한다. 그래야 이미 만료된 “이어갈까요?” 후보를 답변 말투나 제안에 다시 끌어오지 않는다.
+- 봇/CLI 오케스트레이션에서 `ResponseComposer.compose()`를 호출할 때는 반드시 `conversation_context`와 `execution_context`를 함께 전달한다. 실행 대상과 resolved slots가 최종 답변 작성 단계에서 사라지면, 라우팅은 맞았는데 사용자에게 다른 ID나 맥락을 말하는 문제가 다시 생길 수 있다.
+- 봇/CLI 오케스트레이션에서 `AgentContext(...)`를 만들어 전문 에이전트에 dispatch할 때도 반드시 같은 `ExecutionContext`를 넣는다. 에이전트 실행 단계에서 실행 컨텍스트가 빠지면 라우터는 맞게 골랐지만 전문 에이전트가 원문 재파싱이나 최신 항목 fallback으로 다른 대상을 처리할 수 있다.
+- 봇/CLI 오케스트레이션에서 에이전트 실행 결과를 반환하거나 기록하기 전에는 `OperationResult` 자체에도 `ExecutionContext` metadata를 붙인다. 응답 작성자에게만 실행 컨텍스트를 넘기고 결과 객체에는 남기지 않으면, 버튼 실행, 내부 행동 기록, 후속 상태 저장이 서로 다른 기준을 보게 될 수 있다.
+- 봇/CLI 오케스트레이션에서 내부 행동 결과를 `record_internal_action_result()`로 기록할 때도 반드시 실제 실행 `ExecutionContext`를 함께 넘긴다. 그래야 내부 로그의 `route_context`, `linked_state_id`, `resolved_slots`가 다음 턴 라우터의 보조 단서로 남는다.
+- Discord 봇 본체의 `record_internal_action_result()` 래퍼도 받은 `execution_context`를 모듈 공통 기록 함수에 그대로 전달해야 한다. 호출부가 올바른 컨텍스트를 만들었더라도 래퍼에서 떨어뜨리면 내부 행동 로그가 실행 대상 단서를 잃으므로, 이 경계는 source-level 회귀 테스트로 고정한다.
+- 완료된 turn state에는 raw `resolved_slots`를 그대로 남기지 않지만, 그 안의 안전한 실행 대상 슬롯은 `task_id`, `document_id`, `url`, `query` 같은 일반 후보 슬롯으로 펼쳐 저장한다. 에이전트 결과가 대상 ID를 직접 채우지 못했더라도 실제 실행 컨텍스트가 가진 대상 단서가 다음 턴 라우터 후보에서 사라지면 안 된다.
+- turn state에 펼쳐 저장된 실행 대상 슬롯은 라우터 컨텍스트의 `slots=...`, `target_hints=...`에 들어가고, 라우터 fallback의 `StateCandidate.slots`로 다시 파싱 가능해야 한다. 저장된 대상 단서가 컨텍스트 문자열이나 파서 단계에서 사라지면 다음 턴의 `방금 문서 다시 요약해줘` 같은 후속 요청이 원래 대상에 연결되지 못한다.
+- 새 에이전트가 후속 대상 슬롯을 추가할 때는 카탈로그 target slot, 라우터 안전 merge slot, turn state target hint slot, 내부 action target hint slot이 같은 계약을 공유해야 한다. 한 목록에만 추가되면 라우터가 보거나 복원하거나 내부 로그로 남기는 단계 중 하나에서 대상 단서가 사라질 수 있다.
+- 새 일반 메시지 경로, 첨부 분석 경로, 버튼 후보 실행 경로, CLI 재현 경로가 에이전트 dispatch/analyze 결과를 바로 반환하면 안 된다. 결과는 반드시 `attach_execution_context_metadata()`를 거쳐 `context_link`, `linked_state_id`, `linked_subject`, `resolved_slots` 같은 후속 행동 단서를 보존한다.
+- 웹검색 승인 대기처럼 라우터 전에 처리되는 확인 경로도 실제 실행 대상 기준의 `ExecutionContext`를 사용한다. 사용자가 `응, 검색해줘`처럼 짧게 승인해도 응답 작성, 내부 행동 기록, 후속 상태 저장은 승인 문장 자체가 아니라 대기 중이던 원래 검색어를 `resolved_slots.query`로 보고 처리해야 한다.
+- 기억 삭제 확인과 다음 메시지 메모 캡처처럼 라우터 전에 처리되는 pending 경로도 실제 처리 대상 기준의 `ExecutionContext`를 사용한다. `응`, `메모 그만해` 같은 짧은 확인/취소 문장이 아니라 삭제 대상 `memory_ids`/`document_ids`, 저장할 `memory_text`, 취소 대상 `canceled_target`이 `resolved_slots`에 남아야 한다.
+- 첨부 저장 승인/거부 pending 경로도 실제 파일명 기준의 `ExecutionContext`를 사용한다. 사용자가 버튼을 누르거나 `응, 기억해줘`처럼 짧게 답해도 `filenames`, `attachment_names`, `canceled_target`이 결과 metadata와 응답 작성 컨텍스트에 남아야 한다.
+- 첨부 저장 승인 중 원본 메시지를 찾지 못했거나 지원 가능한 첨부가 없어 실패하는 경로도 파일명 기준 metadata를 남긴다. 실패 결과라도 `filenames`와 `attachment_names`가 보존되어야 사용자가 “아까 그 파일 왜 안 됐어?”라고 물었을 때 후속 설명이 가능하다.
+- 승인/거부 버튼, URL 후보 선택 버튼, 작업 상태 후보 선택 버튼도 일반 메시지와 동일하게 최신 라우터 컨텍스트와 실제 실행 컨텍스트를 `ResponseComposer`에 전달한다. 버튼은 채팅 입력이 아니더라도 사용자의 후속 의사 표현이므로, 최종 답변 작성자는 최근 대화, 작업 상태 후보, 내부 행동 기록을 함께 참고해야 한다.
+- Discord 일반 메시지 경로의 `handle_message()`는 라우팅과 실행 전 검증 뒤 생성된 `ExecutionContext`를 response sink에 게시해야 한다. 그래야 `on_message()`의 최종 응답 작성, turn state 저장, 내부 행동 기록이 라우팅 전 기본 컨텍스트가 아니라 실제 실행 컨텍스트를 기준으로 동작한다.
+- 로컬 CLI `ask` 경로도 라우팅/검증/실행 이후 최신 라우터 컨텍스트를 다시 빌드해 `ResponseComposer`에 전달한다. 운영자가 CLI로 재현할 때도 Discord 일반 메시지 경로와 같은 맥락 조건에서 답변 품질을 점검할 수 있어야 한다.
+- context clarify 상태는 두 종류로 나눈다. `pending_linked_state_id`가 있는 상태는 사용자의 승인/거부를 받을 수 있는 실행 대기 상태이고, linked ID가 없는 clarify는 라우터 후보 정리를 위해 만료해야 하는 비실행 확인 상태다.
+- 새 요청(`context_link=none`)이나 새 확인 질문(`context_link=clarify`)이 들어오면 linked ID가 없는 clarify 상태도 함께 만료해, 오래된 “어느 작업을 말하나요?” 후보가 다음 라우팅 입력을 흐리지 않게 한다.
+- 제목, 파일명, 할 일 제목 같은 텍스트 대상은 의미 있는 토큰 하나만 겹친다고 같은 대상으로 보지 않는다. 전체 문자열이 직접 포함되거나 최소 2개 이상의 의미 토큰이 맞을 때만 명시 대상 매칭으로 본다.
+- `완료했어`, `다시해봐`, `삭제해줘`처럼 대상 없이 action만 있는 짧은 문장은 최근 단일 후보에 붙일 수 있지만, `병원 완료했어`처럼 새 대상 단어가 섞였고 후보 제목과 충분히 일치하지 않으면 자동 연결하지 않는다.
+- 지역명, 파일명 일부, 제목 일부처럼 단서 하나만 겹쳐도 현재 문장의 주제가 바뀌었으면 후속 요청으로 연결하지 않는다. 예를 들어 최근 후보가 `원주 날씨`라도 `원주 맛집 알려줘`는 지역명만 겹치는 새 주제이므로 weather 후보에 연결하지 않는다.
+- 이 주제 전환 규칙은 다른 위치 후보에도 똑같이 적용한다. 다른 채널에 `원주 날씨` 후보가 있어도 현재 위치에서 `원주 맛집 알려줘`라고 하면 “다른 위치 작업을 이어갈까요?”라고 묻지 않고 새 일반 요청으로 처리한다.
+- 저장된 메모/할 일/알림 제목과 현재 문장이 일치하더라도 `방법`, `어떻게`, `가이드`, `설명`, `추천`, `절차`, `효과`, `장점`, `단점`, `원리`, `이유` 같은 일반 정보 질문이면 저장 항목 후속 요청으로 연결하지 않는다. 예를 들어 최근 할 일이 `병원 예약`이어도 `병원 예약 방법 알려줘`는 새 일반 질문이고, 최근 알림이 `물 마시기`여도 `물 마시기 효과 알려줘`는 새 설명 질문이다.
+- 반대로 `병원 예약 알려줘`, `병원 예약 내용 알려줘`, `병원 예약 상세 보여줘`처럼 저장 항목 제목과 조회 표현이 함께 있는 경우에는 저장 항목 후속 조회로 연결한다. `내용`, `상세`, `정보` 같은 단어는 새 대상명이 아니라 조회 보조어로 본다.
+- 현재 메시지 진단도 같은 경계를 공유한다. `병원 예약 알려줘`처럼 이름 있는 대상 조회일 수 있는 문장은 `possible_named_target_lookup_check_candidate_match`로 표시해 라우터가 후보 제목/ID와 대조하게 하고, `병원 예약 방법 알려줘`, `물 마시기 효과 알려줘`처럼 일반 정보 질문은 `likely_new_request_do_not_link_previous_state`로 유지한다.
+- 저장된 웹검색 결과나 문서 제목과 현재 문장이 일치하더라도 `방법`, `설명`, `가이드`, `차이`, `의미` 같은 일반 정보 질문이면 과거 검색/문서 작업에 연결하지 않는다. 단, `요약`, `다시 검색`, `문서 7`, `파일명.pdf`처럼 자료 자체를 가리키는 표현이 있으면 후속 요청으로 처리할 수 있다.
+- `아 다시해봐`, `음 다시 확인해줘`처럼 짧은 감탄사/머뭇거림이 붙은 재시도 표현도 action-only 후속 요청으로 본다. 단, 삭제/수정/복구처럼 위험한 action-only 요청은 기존처럼 대상 확인 없이 자동 실행하지 않는다.
+- 반대로 `아`, `음...`, `잠깐만`처럼 새 대상도 action도 없는 순수 비작업 반응은 pending 확인 대기를 만료하지 않는다. 사용자가 생각을 정리하는 짧은 반응 때문에 이전 “여기서 이어갈까요?” 확인 상태가 사라지면, 다음 `응 진행해줘`가 원래 작업을 잃게 된다.
+- 라우터 fallback이 `아 삭제해줘`, `음 수정해줘`, `어 복구해줘`처럼 filler가 붙은 위험 action-only 문장을 보더라도 최근 단일 후보에 자동 연결하지 않는다. 모델 라우팅이 실수로 연결하더라도 실행 전 route validation이 `linked_state_id`와 `resolved_slots`를 제거해야 한다.
+- 같은 filler 포함 재시도 표현이라도 후보가 다른 채팅 위치의 작업이면 바로 실행하지 않는다. `아 다시해봐`가 다른 위치의 실패한 날씨/문서/검색 후보를 가리키는 경우에는 `context_link=clarify`로 “여기서 이어갈까요?” 확인을 먼저 만든다.
+- 다른 위치 작업 확인 질문에 사용자가 `응`, `그걸로 해`, `계속`처럼 승인하면, pending 상태의 `pending_intent`, `pending_context_link`, `pending_resolved_slots`, `pending_original_text`를 그대로 복원한다. 승인 후 실행 전 검증은 같은 사용자임을 확인하되, 이미 확인된 cross-location linked state를 다시 `clarify`로 되돌리지 않는다.
+- 같은 확인 질문에 `아 맞아 진행해줘`, `음 그래 해줘`처럼 짧은 filler 뒤 승인 표현이 붙어도 같은 승인으로 처리한다. 이 경우에도 Discord 메시지 전체 처리 경로에서 원래 pending 문장, linked state, resolved slots가 복원되어야 한다.
+- 반대로 `음 그건 하지마`, `잠깐만 됐어`처럼 짧은 filler 뒤 거부 표현이 붙으면 pending 확인 취소로 처리한다. 이 경우에도 취소 대상 pending의 원래 intent, context_link, resolved slots, 원문을 구조화 결과에 남겨 다음 응답 작성과 내부 행동 기록이 무엇을 취소했는지 알 수 있어야 한다.
+- Discord 일반 메시지 경로, CLI 로컬 실행 경로, CLI route preview 경로는 모두 pending context 승인 상태가 확인된 경우에만 `allow_cross_location=True`로 실행 전 검증을 호출한다. 버튼 승인처럼 별도 확인 UI에서 이미 승인된 경로 외에는 cross-location 자동 실행 허용을 넓히면 안 된다.
+- pending 승인으로 복원된 route가 실행되면 내부 행동 기록과 route validation 요약에도 `context_link`, `linked_state_id`, `linked_intent`, `linked_subject`, 안전한 `resolved_slots`, 원래 사용자 문장 단서가 남아야 한다. 다음 턴 라우터는 이 기록을 보조 신호로 참고할 수 있어야 한다. 단, 내부 로그를 다시 파싱할 때는 실제 실행 슬롯만 복원하고 pending/debug 값은 전문 에이전트 실행 대상이나 최종 응답에 그대로 전달하지 않는다.
+- 승인처럼 시작하는 문장이라도 `응 서울 날씨 알려줘`처럼 새 지역/새 대상/새 주제가 명확하면 pending 승인이 아니라 새 요청으로 처리한다. 이때 기존 pending weather retry가 있더라도 `원주` 재시도로 연결하지 않고 `context_link=none`인 새 weather 요청으로 남겨야 한다.
+- `응 할 일 3 완료해줘`, `응 문서 7 다시 분석해줘`처럼 승인 표현과 명시 ID/대상/행동이 함께 있는 문장은 pending 승인 답변으로 소비하지 않는다. 대상이 현재 위치의 실제 후보와 맞으면 현재 문장 자체를 명시 요청으로 실행하고, 대상이 다르면 기존 pending을 억지로 이어가지 않는 새 요청으로 처리한다.
+- 반대로 pending 확인 질문에 대한 답변이 `응 검색해줘`, `응 요약해줘`처럼 승인 표현 뒤에 새 대상 없이 원래 pending intent의 일반 실행 동사만 있는 경우에는 승인으로 복원한다. `응 OpenAI 검색해줘`, `응 문서 9 요약해줘`처럼 새 query/ID/파일명/지역이 붙으면 계속 새 요청으로 본다.
+- 라우터 모델이 `응 검색해줘`, `응 요약해줘`, `응 완료해줘` 같은 답변을 이미 `context_link=retry/continue/modify`로 판단한 경우에도 같은 generic 승인 규칙을 적용한다. 승인 suffix가 원래 pending intent와 맞고 새 대상 슬롯이 없으면 pending의 원문, linked state, resolved slots를 복원한다.
+- 명시 ID/대상 요청이 현재 위치의 같은 linked state를 실제로 처리했다면, 같은 linked state를 가리키던 기존 pending 확인 상태는 만료한다. 그렇지 않으면 처리 후에도 오래된 “이어갈까요?” 상태가 남아 다음 턴의 짧은 `응`이 과거 확인에 잘못 붙을 수 있다. 단, route의 실행 슬롯이 pending 슬롯과 충돌하면 만료하지 않는다.
+- 반대로 승인처럼 시작하면서 pending 대상과 같은 대상을 다시 말한 경우에는 같은 확인 흐름을 이어갈 수 있다. 예를 들어 pending `원주 날씨` 재시도 확인 상태에서 `응 원주 날씨 다시 알려줘`는 `응`을 지역명 일부로 오해하지 않고 `원주`를 추출한 뒤, pending의 `weather/retry`, `linked_state_id`, `pending_original_text`를 복원해 실행한다.
+- pending 승인으로 `none->retry`, `none->continue`처럼 정상 복원된 route validation 로그는 자동 연결 제거/확인 전환 경고가 아니므로 `validation_guidance`를 만들지 않는다. 라우터 컨텍스트는 이 로그를 정상 승인 실행 기록으로만 참고해야 한다.
+- 내부 행동 기록에 같은 state_id에 대한 오래된 route validation 경고와 최신 정상 실행 route가 함께 있으면 최신 정상 실행 기록이 우선한다. 과거의 “자동 연결 제거”나 “자동 실행 대신 확인” 경고는 같은 state의 이후 `continue/retry/modify` 실행 기록이 나오면 해제되어야 하며, 반대로 경고가 최신이면 계속 보존한다.
+- 내부 행동 기록은 우선순위 정렬 때문에 최신 정상 실행 줄이 오래된 validation 경고 줄보다 앞에 나올 수 있다. 따라서 validation 경고 해제 판단은 단순 줄 순서가 아니라 `recency`와 state_id별 최신 이벤트를 기준으로 해야 한다.
+- 내부 행동 기록의 `recency=latest/older` 라벨은 현재 위치와 다른 위치 후보를 서로 섞지 않고 위치 우선순위별로 독립 계산한다. 현재 채널의 최신 작업과 다른 채널의 최신 작업이 모두 있을 때 둘 다 각 그룹 안에서는 `latest`가 되어야 하며, 그래야 라우터가 “현재 위치에서 이어갈 후보”와 “다른 위치에서 이어갈지 물어볼 후보”를 동시에 구분할 수 있다.
+- 에이전트가 tool calling으로 저장된 기억, 문서, 할 일 같은 내부 자료를 조회했다면 호출한 도구 이름과 핵심 인자를 `tool_call_trace`로 남긴다. 이 값은 사용자-facing 응답 작성 컨텍스트에서는 제거하되, 내부 행동 로그에는 요약해 남겨 다음 턴 라우터가 “어떤 자료를 근거로 답했는지”를 보조 단서로 참고하게 한다.
+- `tool_call_trace`에는 도구 출력 전체나 비밀값을 저장하지 않는다. query, id, filename처럼 후속 맥락 판단에 필요한 작은 인자만 보존하고, token, api_key, password, secret 계열 값은 제거한다.
+- 도구 출력은 원문 그대로 저장하지 않고 `result_summary`로 축약한다. 결과 개수, kind, id, title, url, status, due/remind 시각, 저장 위치처럼 후속 대상을 식별하는 값만 남기고, 본문 preview/text/detail은 내부 trace에서도 제외한다.
+- 라우터 컨텍스트의 최근 내부 행동 기록에는 `tool_call_trace` 원문 대신 `tool_context` 요약을 노출한다. `tool_context`는 도구 이름, 핵심 인자, 성공 여부만 담아 모델이 내부 도구 사용 흐름을 이해하게 하고, `target_hints`에는 query/id/file 같은 후속 대상 단서가 별도로 추출되게 한다.
+- 내부 행동 로그를 저장할 때도 긴 `tool_call_trace` 원문을 `slots` 안에 그대로 압축하지 않고, parse 가능한 `tool_context` segment로 별도 기록한다. 이렇게 해야 result_summary가 길어도 다음 턴 라우터가 도구명, query, 결과 제목을 안정적으로 읽을 수 있다.
+- `tool_context` 안의 query/title/url 같은 사용자 제어 문자열도 ` | `, `route_context=`, `slots=` 같은 내부 로그 구분자 패턴을 안전한 일반 텍스트로 바꾼다. 내부 도구 결과 제목이 우연히 로그 필드명처럼 보여도 다음 턴 파서의 segment 경계를 오염시키면 안 된다.
+- 라우터는 `tool_context`를 이전 답변의 근거를 이해하는 보조 단서로만 사용한다. `tool_context`가 있다는 이유만으로 현재 메시지를 이전 작업에 자동 연결하지 않고, 사용자가 명확한 후속 표현이나 `target_hints`와 일치하는 대상을 말한 경우에만 연결 후보로 참고한다.
+- `tool_call_trace`는 내부 행동 로그 전용 메타데이터로 취급한다. 도구 호출 흐름은 `tool_context`와 `target_hints`로 라우터에 참고시킬 수 있지만, `turn state slots`나 에이전트 카탈로그의 후속 슬롯으로 승격하지 않는다.
+- `result_summary`의 안전한 ID/제목/URL 후보는 `turn state artifacts`로만 추론한다. 이렇게 하면 “방금 찾은 메모 보여줘” 같은 후속 요청은 대상 후보를 얻을 수 있지만, 도구 trace 자체가 실행 슬롯처럼 오해되어 자동 조작에 쓰이지 않는다.
+- `tool_call_trace`가 `facts`, `slots`, 기존 `artifacts` 중 어디에 실려 있더라도 결과 요약의 안전한 후보는 동일하게 artifact로 추론한다. 단, trace 원문은 여전히 turn state slot으로 저장하지 않고 최종 artifact 저장 시 private key로 제거한다.
+- private key 제거 뒤 빈 dict만 남은 중첩 값은 라우터/응답 컨텍스트에 남기지 않는다. 새 에이전트가 내부 trace나 debug metadata만 담은 nested payload를 반환해도 다음 턴 후보에는 의미 있는 대상 정보만 남아야 한다.
+- 단일 artifact 후보를 fallback 라우터가 이어받을 때는 `memory_id`와 `memory_ids=[...]`처럼 단일 슬롯과 후보 목록 슬롯을 함께 복원한다. 실행 에이전트는 명확한 단일 대상도 보고, 후속 후보/검증 경로는 복수 후보 형태도 잃지 않는다.
+- 이 복원 규칙은 조회형 후속뿐 아니라 조작형 후속에도 적용한다. 예를 들어 도구로 조회된 단일 task artifact 뒤에 “방금 조회한 할 일 완료해줘”라고 하면 `manage_task`로 연결하고 `task_id`와 `task_ids`를 함께 전달한다.
+- 이전 실행 intent가 `chat`이나 `recall`이어도 artifact kind가 `document`이고 현재 문장이 문서 요약/분석/정리 요청이면 `analyze_document`로 끌어올린다. 이는 “방금 찾은 문서 다시 요약해줘”처럼 도구 조회 결과를 곧바로 전문 문서 에이전트 작업으로 이어가기 위한 공통 규칙이다.
+- 새 에이전트가 내부 추적값을 추가할 때는 “다음 요청의 실제 대상 슬롯인지”와 “라우터 참고용 내부 실행 흔적인지”를 분리한다. 후자라면 response private key 및 내부 로그 전용 key로만 등록하고, `infer_turn_slots()` 대상에는 넣지 않는다.
+- 버튼 후보 선택 실패의 `selected_index`, `candidate_count`처럼 사용자가 누른 선택을 설명하는 debug 값은 실행 가능한 대상 슬롯이 아니다. 이런 값은 내부 로그/응답 컨텍스트에서 private metadata로만 다루고, 내부 행동 로그의 `route.resolved_slots`에는 넣지 않는다. 다음 턴 라우터가 복원할 수 있는 `route_context`에는 `task_id`, `document_id`, `url`, `query`, `pending_candidate_urls`처럼 실제 확인/실행에 필요한 값만 남긴다.
+- 운영 점검에서 `assistant-admin route` 기본값은 빠른 휴리스틱/맥락 검증 미리보기로 사용하고, 실제 라우터 모델 판단을 재현해야 할 때는 `assistant-admin route --model`을 사용한다.
+- 모델 라우팅 미리보기와 휴리스틱 미리보기 모두 동일한 실행 전 링크 검증을 거쳐, 다른 위치 작업 자동 실행 방지 규칙을 공유한다.
+- 라우터가 참고하는 최근 작업 상태 후보의 우선순위는 JSON 문자열 비교가 아니라 파싱된 `status`, `retryable`, `available_actions`, `intent` 기준으로 계산한다.
+- `available_actions` 순서나 JSON 공백이 달라도 pending/확인대기, 재시도 가능, 실질 action 보유, 일반 작업, 낮은 가치 chat 순서가 유지되어야 한다.
+- 라우터 작업 상태 후보에는 `created_at`을 포함해 `방금`, `아까`, `최근` 같은 시간 의존 후속 표현을 현재 시간과 비교해 판단할 수 있게 한다.
+- 모델 라우팅 fallback도 `created_at`을 파싱하고, `방금`, `아까`, `최근`, `마지막` 같은 시간 표현이 있으면서 현재 위치 후보가 여러 개면 최신 생성 시각의 후보를 우선 선택한다.
+- 단순 대명사 `그거`, `이거`만 있는 경우에는 시간 기준으로 억지 선택하지 않고 기존처럼 모호하면 확인한다.
+- 다른 위치 작업 확인 대기 상태를 저장할 때 `retry`는 실제 재시도 성격의 weather/web/document 분석 요청에만 사용한다.
+- 이전 상태가 `retryable=True`여도 사용자가 삭제, 조회, 수정, 완료 같은 후속 조작을 요청했다면 pending `context_link`는 `continue`로 저장한다.
+- 채팅 위치가 바뀐 상태에서 묻는 확인 질문은 “이 작업을 여기서 이어서 처리할지”에 대한 승인이다. 따라서 승인 후 실행할 동작은 라우터가 고른 원래 intent와 resolved slots를 그대로 따라야 하며, 후보 상태의 `retryable` 값만 보고 재시도로 바꾸지 않는다.
+
+## 목표 완료 수동 검증 기준
+
+자동 테스트가 모두 통과해도, “거의 완벽에 가까운 맥락 파악” 목표 완료는 실제 Discord 환경에서 아래 시나리오를 통과해야 인정한다.
+실제 검증은 `discord_manual_verification.md`의 순서형 검증 시트를 기준으로 진행한다.
+
+- 같은 위치 후속 요청:
+  - `병원 예약 할 일 추가해줘` 뒤에 `방금 할 일 보여줘`를 보내면 방금 만든 할 일만 보여준다.
+  - `그거 완료했어`는 최근 할 일 후보가 하나일 때만 완료 처리하고, 후보가 여러 개이면 어느 항목인지 묻는다.
+  - `병원 예약 방법 알려줘`는 저장된 할 일 `병원 예약` 조회가 아니라 일반 정보 질문으로 답한다.
+
+- 새 요청 분리:
+  - 원주 날씨 실패 뒤 `서울 날씨 알려줘`는 원주 재시도가 아니라 서울 날씨 새 요청으로 처리한다.
+  - 확인 대기 상태에서 `응 서울 날씨 알려줘`, `응 확인 목록 보여줘`, `아니 취소 말고 상태 알려줘`는 오래된 승인/취소로 소비하지 않고 현재 문장의 새 요청으로 처리한다.
+  - `그거 말고 오늘 저녁 뭐 먹지`는 이전 작업을 이어가지 않고 새 대화로 처리한다.
+
+- 다른 위치 맥락:
+  - DM에서 만든 작업을 서버 채널에서 `그거 보여줘`라고 하면 바로 실행하지 않고, 다른 위치 작업을 여기서 이어갈지 묻는다.
+  - 같은 상황에서 `응` 또는 승인 버튼을 누르면 원래 작업의 intent, 원문, resolved slots로 실행한다.
+  - 다른 위치 후보가 있어도 현재 위치에서 `새 할 일 병원 예약 추가해줘`, `서울 날씨 알려줘`, `OpenAI 검색해줘`처럼 새 대상이 명확하면 이어갈지 묻지 않는다.
+
+- 내부 행동 기록 재사용:
+  - 도구 기반 기억/문서/할 일 조회 뒤 `방금 찾은 문서 다시 요약해줘`, `방금 조회한 할 일 완료해줘`, `그 링크 열어줘`가 내부 행동 기록의 ID, 제목, URL 단서를 참고해 올바른 대상에 연결된다.
+  - 내부 로그의 `linked_state_id`, `validation_context`, `pending_original_text`, `tool_call_trace` 같은 비공개 키는 사용자 답변에 그대로 노출되지 않는다.
+  - 공유 채널에서 다른 사용자의 작업 상태나 내부 행동 로그가 현재 사용자의 후속 요청 후보로 섞이지 않는다.
+
+- pending/버튼 확인:
+  - 삭제 요청(`메모 8 삭제해`, `문서 5 삭제해`, `할 일 삭제해`, `알림 삭제해`)은 즉시 삭제하지 않고 확인을 요구한다.
+  - 확인 질문에는 가능한 경우 승인/거부 버튼이 붙고, 버튼 승인/거부와 채팅 승인/거부가 같은 결과로 이어진다.
+  - 새 요청이 들어오면 오래된 pending 확인은 만료되어 다음 `응`이 과거 확인을 실행하지 않는다.
+
+- 메모 대기:
+  - `다음 내용 메모로 남겨줘` 자체는 저장하지 않고 다음 메시지 1개만 메모로 저장한다.
+  - `메모 그만해`, `저장하지 마`는 메모 대기만 취소한다.
+  - 이미 같은 내용이 있으면 새로 저장하지 않고 기존 메모 또는 병합/새 저장 선택지를 안내한다.
+
+- 파일/이미지:
+  - 파일과 함께 `이 문서 요약해봐`를 보내면 저장 여부를 먼저 묻지 않고 요청을 바로 처리한다.
+  - `파일 목록 보여줘`와 `메모 목록 보여줘`는 서로 섞이지 않고 별도 목록을 보여준다.
+  - 이미지 분석 가능 여부를 물으면 텍스트 OCR뿐 아니라 이미지 자체 설명도 가능하다고 자연스럽게 안내한다.
+
+위 항목 중 하나라도 실제 Discord 환경에서 실패하면 목표는 완료가 아니라 추가 수정 대상으로 본다. 수동 검증 결과는 `process.md`에 시나리오, 실제 응답, 판정, 후속 수정 여부를 함께 기록한다.
 
 ## 대화형 비서 말투 통일 원칙
 

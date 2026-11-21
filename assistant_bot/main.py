@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
-from assistant_bot.bot import AssistantBot
-from assistant_bot.config import load_config
+from assistant_bot.bot import JedaDiscord
+from assistant_bot.openai_service import Models, Settings
+from assistant_bot.runtime import Engine
+from assistant_bot.stores import JedaStore
 
 
 def main() -> None:
-    config = load_config()
-    configure_logging(level_name=config.log_level, log_file=config.log_file)
-    bot = AssistantBot(config)
-    bot.run(config.discord_token)
+    config = Settings.load()
+    token = os.getenv("DISCORD_TOKEN")
+    if not token:
+        raise ValueError("Discord에서 실행하려면 DISCORD_TOKEN을 설정하세요.")
+    configure_logging()
+    bot = JedaDiscord(Engine(config, JedaStore(config.database), Models(config)))
+    bot.run(token)
 
 
 def configure_logging(*, level_name: str = "INFO", log_file: str | None = None) -> None:

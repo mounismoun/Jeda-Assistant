@@ -1,12 +1,17 @@
+# 프로젝트 문서, Python 소스 및 테스트, 필수 설정만 추적한다.
+*
+!*/
+!*.md
+!*.py
+!/.gitignore
+!/.env.example
+!/pyproject.toml
+
+# 실행·빌드 산출물 안의 문서와 소스 사본도 제외한다.
+/data/
+.*/
 __pycache__/
-*.py[cod]
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.venv/
+venv/
 dist/
 build/
 *.egg-info/
-data/
-.env
-.DS_Store

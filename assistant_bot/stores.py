@@ -1,2368 +1,316 @@
+"""개편판 전용 SQLite. Discord 원문과 수정 가능한 작업 상태는 별도로 보관한다."""
+
 from __future__ import annotations
 
-import hashlib
 import json
+import re
 import sqlite3
-from datetime import UTC, datetime, timedelta
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from uuid import uuid4
 
-from assistant_bot.models import (
-    ConversationScope,
-    MemoryDetail,
-    MemoryListItem,
-    MemorySearchResult,
-    PendingAttachmentRequest,
-    PendingMemoryCapture,
-    PendingMemoryDeletion,
-    PendingWebSearchConfirmation,
-    ReminderItem,
-    TaskItem,
-)
-from assistant_bot.openai_service import OpenAIService
-from assistant_bot.search_provider import SearchResult
-from assistant_bot.text_utils import chunk_text, cosine_similarity
-from assistant_bot.web_page_reader import PageContent, normalize_naver_blog_url
 
-TASK_COLUMNS = """
-id, user_id, guild_id, conversation_id, channel_id, title, status, priority,
-due_at, source_message_id, created_at, completed_at, reminder_sent_at, deleted_at
+# Match only a whole, affirmative command. Quoted, qualified or negative requests go through the router.
+def requests_all_memories(text):
+    return bool(
+        re.fullmatch(
+            r"(?:(?:이 채널(?:에(?:서)?|의)?|여기서)\s*(?:보이는|있는|조회할 수 있는)?\s*)?"
+            r"(?:(?:내가 저장한|내|제)\s*)?(?:(?:기억|메모리)(?:을|를)?\s*(?:모두|전부|다|전체)|"
+            r"(?:모든|전체)\s*(?:기억|메모리)(?:을|를)?)\s*"
+            r"(?:지워|삭제해)(?:\s*(?:줘|주세요))?[.!]*"
+            r"|(?:please\s+)?(?:clear|delete|remove) all (?:of )?my (?:saved )?memories(?: in this channel)?[.!]*",
+            text.strip(),
+            re.I,
+        )
+    )
+
+
+@dataclass(frozen=True)
+class Scope:
+    guild: str
+    channel: str
+    user: str
+
+    @property
+    def key(self) -> str:
+        return json.dumps([self.guild, self.channel, self.user], separators=(",", ":"))
+
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS jeda_schema(version INTEGER PRIMARY KEY CHECK(version=1));
+INSERT OR IGNORE INTO jeda_schema VALUES(1);
+CREATE TABLE IF NOT EXISTS sessions(
+    scope TEXT PRIMARY KEY, epoch INTEGER NOT NULL DEFAULT 1, touched REAL NOT NULL,
+    summary TEXT NOT NULL DEFAULT '', summarized INTEGER NOT NULL DEFAULT 0, instruction TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS raw_messages(
+    seq INTEGER PRIMARY KEY, scope TEXT NOT NULL, epoch INTEGER NOT NULL, msg TEXT NOT NULL,
+    role TEXT NOT NULL, content TEXT NOT NULL, created REAL NOT NULL, UNIQUE(scope, msg));
+CREATE TRIGGER IF NOT EXISTS raw_no_edit BEFORE UPDATE ON raw_messages BEGIN
+    SELECT RAISE(ABORT,'immutable original'); END;
+CREATE TRIGGER IF NOT EXISTS raw_no_delete BEFORE DELETE ON raw_messages BEGIN
+    SELECT RAISE(ABORT,'immutable original'); END;
+CREATE TABLE IF NOT EXISTS memory(
+    id INTEGER PRIMARY KEY, scope TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL,
+    value TEXT NOT NULL, source TEXT NOT NULL, version INTEGER NOT NULL, active INTEGER NOT NULL,
+    UNIQUE(scope,kind,name));
+CREATE TABLE IF NOT EXISTS memory_versions(
+    scope TEXT NOT NULL, memory_id INTEGER NOT NULL, version INTEGER NOT NULL,
+    value TEXT NOT NULL, source TEXT NOT NULL, PRIMARY KEY(memory_id,version));
+CREATE TABLE IF NOT EXISTS memory_queue(
+    source TEXT PRIMARY KEY, scope TEXT NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending',
+    result TEXT);
+CREATE TABLE IF NOT EXISTS mutations(
+    scope TEXT NOT NULL, msg TEXT NOT NULL, result TEXT NOT NULL, PRIMARY KEY(scope,msg));
+CREATE TABLE IF NOT EXISTS approvals(
+    ticket TEXT PRIMARY KEY, scope TEXT NOT NULL, source TEXT NOT NULL, snapshot TEXT NOT NULL, mode TEXT NOT NULL,
+    expires REAL NOT NULL, UNIQUE(scope,source));
+CREATE TABLE IF NOT EXISTS inbox(
+    id TEXT PRIMARY KEY, scope TEXT NOT NULL, request TEXT NOT NULL, response TEXT NOT NULL DEFAULT '',
+    done INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS by_inbox_state ON inbox(done,scope);
+CREATE TABLE IF NOT EXISTS receipts(msg TEXT PRIMARY KEY,job TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS jobs(
+    id TEXT PRIMARY KEY, scope TEXT NOT NULL, epoch INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+    state TEXT NOT NULL, generation TEXT NOT NULL DEFAULT '', request TEXT NOT NULL, updates TEXT NOT NULL DEFAULT '[]',
+    evidence TEXT NOT NULL DEFAULT '{}', answer TEXT NOT NULL DEFAULT '', sent TEXT NOT NULL DEFAULT '[]');
+CREATE TABLE IF NOT EXISTS web_reads(job TEXT NOT NULL, revision INTEGER NOT NULL, chunks TEXT NOT NULL,
+    PRIMARY KEY(job,revision));
+CREATE TABLE IF NOT EXISTS search_usage(day TEXT NOT NULL,user TEXT NOT NULL, count INTEGER NOT NULL,
+    PRIMARY KEY(day,user));
+CREATE INDEX IF NOT EXISTS by_conversation ON raw_messages(scope,epoch,seq);
+CREATE INDEX IF NOT EXISTS by_job_scope ON jobs(scope,state);
 """
 
-REMINDER_COLUMNS = """
-id, user_id, guild_id, conversation_id, channel_id, text, remind_at, source_message_id, created_at, sent_at
-"""
 
+class JedaStore:
+    def __init__(self, path: str | Path):
+        if str(path) != ":memory:":
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self.db = sqlite3.connect(path)
+        self.db.row_factory = sqlite3.Row
+        tables = {
+            row[0]
+            for row in self.db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        }
+        if tables and "jeda_schema" not in tables:
+            self.db.close()
+            raise ValueError("기존 DB입니다. JEDA_DATABASE_PATH에 개편판 전용 새 경로를 지정하세요.")
+        try:
+            self.db.execute("PRAGMA journal_mode=WAL")
+            self.db.executescript(_SCHEMA)
+        except Exception:
+            self.db.close()
+            raise
 
-class AgentLogStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
+    def close(self):
+        self.db.close()
 
-    def add(
-        self,
-        *,
-        conversation_id: str,
-        agent: str,
-        intent: str | None = None,
-        difficulty: str | None = None,
-        model: str | None = None,
-        reason: str | None = None,
-    ) -> None:
-        self.connection.execute(
-            """
-            INSERT INTO agent_logs (conversation_id, agent, intent, difficulty, model, reason)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (conversation_id, agent, intent, difficulty, model, reason),
-        )
-        self.connection.commit()
+    def session(self, scope: Scope):
+        now = time.time()
+        with self.db:
+            self.db.execute("INSERT OR IGNORE INTO sessions(scope,touched) VALUES(?,?)", (scope.key, now))
+            self.db.execute(
+                """UPDATE sessions SET epoch=epoch+1,touched=?,summary='',summarized=0,instruction=''
+                   WHERE scope=? AND touched<? AND NOT EXISTS
+                   (SELECT 1 FROM jobs WHERE scope=? AND state IN ('running','sending'))""",
+                (now, scope.key, now - 86400, scope.key),
+            )
+        return self.db.execute("SELECT * FROM sessions WHERE scope=?", (scope.key,)).fetchone()
 
+    def reset_session(self, scope: Scope, source=None):
+        self.session(scope)
+        with self.db:
+            if (
+                source
+                and not self.db.execute(
+                    "INSERT OR IGNORE INTO mutations VALUES(?,?,?)", (scope.key, source, "1")
+                ).rowcount
+            ):
+                return
+            self.db.execute(
+                "UPDATE sessions SET epoch=epoch+1,touched=?,summary='',summarized=0,instruction='' WHERE scope=?",
+                (time.time(), scope.key),
+            )
+            self.db.execute("DELETE FROM approvals WHERE scope=?", (scope.key,))
 
-class ConversationStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
+    def record(self, scope: Scope, msg: str, role: str, content: str, *, epoch: int | None = None) -> bool:
+        if epoch is None:
+            epoch = self.session(scope)["epoch"]
+        now = time.time()
+        with self.db:
+            added = self.db.execute(
+                "INSERT OR IGNORE INTO raw_messages(scope,epoch,msg,role,content,created) VALUES(?,?,?,?,?,?)",
+                (scope.key, epoch, msg, role, content, now),
+            ).rowcount
+            self.db.execute("UPDATE sessions SET touched=? WHERE scope=?", (now, scope.key))
+        return bool(added)
 
-    def add_message(
-        self,
-        *,
-        conversation_id: str,
-        role: str,
-        user_id: str | None,
-        content: str,
-    ) -> None:
-        self.connection.execute(
-            """
-            INSERT INTO conversation_messages (conversation_id, role, user_id, content)
-            VALUES (?, ?, ?, ?)
-            """,
-            (conversation_id, role, user_id, content),
-        )
-        self.connection.commit()
-
-    def recent_messages(self, conversation_id: str, limit: int = 24) -> list[sqlite3.Row]:
-        rows = self.connection.execute(
-            """
-            SELECT role, content, created_at
-            FROM conversation_messages
-            WHERE conversation_id = ?
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (conversation_id, limit),
-        ).fetchall()
+    def history(self, scope: Scope, *, current_session=False, query="", limit=100, after=0):
+        sql = "SELECT * FROM raw_messages WHERE scope=? AND seq>?"
+        args = [scope.key, after]
+        if current_session:
+            sql += " AND epoch=?"
+            args.append(self.session(scope)["epoch"])
+        if query:
+            sql += " AND instr(lower(content),lower(?))>0"
+            args.append(query)
+        rows = self.db.execute(sql + " ORDER BY seq DESC LIMIT ?", (*args, limit)).fetchall()
         return list(reversed(rows))
 
-    def latest_user_message(self, *, conversation_id: str, user_id: str) -> sqlite3.Row | None:
-        return self.connection.execute(
-            """
-            SELECT role, content, created_at
-            FROM conversation_messages
-            WHERE conversation_id = ?
-              AND role = 'user'
-              AND user_id = ?
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (conversation_id, user_id),
+    def last_clarification(self, scope, epoch, current_id):
+        row = self.db.execute(
+            "SELECT i.request,i.response FROM raw_messages m LEFT JOIN inbox i ON i.id=m.msg AND i.scope=m.scope "
+            "WHERE m.scope=? AND m.epoch=? AND m.role='user' AND m.msg!=? ORDER BY m.seq DESC LIMIT 1",
+            (scope.key, epoch, current_id),
         ).fetchone()
-
-    def latest_summary(self, conversation_id: str) -> str | None:
-        row = self.connection.execute(
-            """
-            SELECT summary
-            FROM conversation_summaries
-            WHERE conversation_id = ?
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (conversation_id,),
-        ).fetchone()
-        return str(row["summary"]) if row else None
-
-    def add_summary(self, conversation_id: str, summary: str) -> None:
-        self.connection.execute(
-            """
-            INSERT INTO conversation_summaries (conversation_id, summary)
-            VALUES (?, ?)
-            """,
-            (conversation_id, summary),
-        )
-        self.connection.commit()
-
-    def recent_char_count(self, conversation_id: str, limit: int = 80) -> int:
-        return sum(len(row["content"]) for row in self.recent_messages(conversation_id, limit))
-
-    def char_count_since_latest_summary(self, conversation_id: str, limit: int = 80) -> int:
-        summary = self.connection.execute(
-            """
-            SELECT created_at
-            FROM conversation_summaries
-            WHERE conversation_id = ?
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (conversation_id,),
-        ).fetchone()
-        if summary is None:
-            return self.recent_char_count(conversation_id, limit)
-        rows = self.connection.execute(
-            """
-            SELECT content
-            FROM conversation_messages
-            WHERE conversation_id = ?
-              AND created_at > ?
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (conversation_id, summary["created_at"], limit),
-        ).fetchall()
-        return sum(len(row["content"]) for row in rows)
-
-    def clear_conversation(self, conversation_id: str) -> dict[str, int]:
-        message_cursor = self.connection.execute(
-            """
-            DELETE FROM conversation_messages
-            WHERE conversation_id = ?
-            """,
-            (conversation_id,),
-        )
-        summary_cursor = self.connection.execute(
-            """
-            DELETE FROM conversation_summaries
-            WHERE conversation_id = ?
-            """,
-            (conversation_id,),
-        )
-        self.connection.commit()
-        return {
-            "messages": int(message_cursor.rowcount),
-            "summaries": int(summary_cursor.rowcount),
-        }
-
-    def recent_conversations_for_user(self, *, user_id: str, limit: int = 5) -> list[dict[str, object]]:
-        max_items = max(1, limit)
-        rows = self.connection.execute(
-            """
-            SELECT conversation_id, COUNT(*) AS user_message_count, MAX(created_at) AS latest_user_message_at
-            FROM conversation_messages
-            WHERE user_id = ?
-            GROUP BY conversation_id
-            ORDER BY latest_user_message_at DESC, conversation_id ASC
-            LIMIT ?
-            """,
-            (user_id, max_items),
-        ).fetchall()
-        conversations: list[dict[str, object]] = []
-        for row in rows:
-            conversation_id = str(row["conversation_id"])
-            latest = self.connection.execute(
-                """
-                SELECT role, user_id, content, created_at
-                FROM conversation_messages
-                WHERE conversation_id = ?
-                ORDER BY id DESC
-                LIMIT 1
-                """,
-                (conversation_id,),
-            ).fetchone()
-            summary_count = self.connection.execute(
-                """
-                SELECT COUNT(*) AS count
-                FROM conversation_summaries
-                WHERE conversation_id = ?
-                """,
-                (conversation_id,),
-            ).fetchone()
-            conversations.append(
-                {
-                    "conversation_id": conversation_id,
-                    "user_message_count": int(row["user_message_count"]),
-                    "latest_user_message_at": str(row["latest_user_message_at"]),
-                    "latest_role": str(latest["role"]) if latest else None,
-                    "latest_content": str(latest["content"]) if latest else "",
-                    "latest_message_at": str(latest["created_at"]) if latest else None,
-                    "summary_count": int(summary_count["count"]) if summary_count else 0,
-                }
-            )
-        return conversations
-
-
-class PendingAttachmentStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
-
-    def add(
-        self,
-        *,
-        scope: ConversationScope,
-        message_id: str,
-        filenames: list[str],
-    ) -> int:
-        cursor = self.connection.execute(
-            """
-            INSERT INTO pending_attachment_requests (
-              conversation_id, channel_id, message_id, user_id, guild_id, filenames_json
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                scope.conversation_id,
-                scope.channel_id,
-                message_id,
-                scope.user_id,
-                scope.guild_id,
-                json.dumps(filenames, ensure_ascii=False),
-            ),
-        )
-        self.connection.commit()
-        return int(cursor.lastrowid)
-
-    def latest(self, *, scope: ConversationScope, ttl_minutes: int | None = None) -> PendingAttachmentRequest | None:
-        if ttl_minutes is not None:
-            self.resolve_expired(scope=scope, ttl_minutes=ttl_minutes)
-        row = self.connection.execute(
-            """
-            SELECT id, conversation_id, channel_id, message_id, user_id, guild_id, filenames_json, created_at
-            FROM pending_attachment_requests
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id),
-        ).fetchone()
-        if not row:
+        if not row or not row["response"]:
             return None
-        return PendingAttachmentRequest(
-            id=int(row["id"]),
-            conversation_id=str(row["conversation_id"]),
-            channel_id=str(row["channel_id"]),
-            message_id=str(row["message_id"]),
-            user_id=str(row["user_id"]),
-            guild_id=str(row["guild_id"]) if row["guild_id"] else None,
-            filenames=json.loads(row["filenames_json"]),
-            created_at=str(row["created_at"]),
-        )
-
-    def unresolved_count(self, *, scope: ConversationScope, ttl_minutes: int | None = None) -> int:
-        if ttl_minutes is not None:
-            self.resolve_expired(scope=scope, ttl_minutes=ttl_minutes)
-        row = self.connection.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM pending_attachment_requests
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id),
-        ).fetchone()
-        return int(row["count"])
-
-    def resolve(self, request_id: int) -> None:
-        self.connection.execute(
-            """
-            UPDATE pending_attachment_requests
-            SET resolved_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (request_id,),
-        )
-        self.connection.commit()
-
-    def resolve_latest(
-        self,
-        *,
-        scope: ConversationScope,
-        ttl_minutes: int | None = None,
-    ) -> PendingAttachmentRequest | None:
-        request = self.latest(scope=scope, ttl_minutes=ttl_minutes)
-        if request is None:
-            return None
-        self.resolve(request.id)
-        return request
-
-    def resolve_expired(self, *, scope: ConversationScope, ttl_minutes: int) -> int:
-        cutoff = datetime.now(UTC) - timedelta(minutes=ttl_minutes)
-        cutoff_text = cutoff.strftime("%Y-%m-%d %H:%M:%S")
-        cursor = self.connection.execute(
-            """
-            UPDATE pending_attachment_requests
-            SET resolved_at = CURRENT_TIMESTAMP
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-              AND created_at < ?
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id, cutoff_text),
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-
-class PendingMemoryDeletionStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
-
-    def add(
-        self,
-        *,
-        scope: ConversationScope,
-        message_id: str,
-        memory_count: int,
-        document_count: int,
-        mode: str = "all",
-        memory_ids: list[int] | None = None,
-        document_ids: list[int] | None = None,
-    ) -> int:
-        cursor = self.connection.execute(
-            """
-            INSERT INTO pending_memory_deletions (
-              conversation_id, channel_id, message_id, user_id, guild_id,
-              memory_count, document_count, mode, memory_ids_json, document_ids_json
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                scope.conversation_id,
-                scope.channel_id,
-                message_id,
-                scope.user_id,
-                scope.guild_id,
-                memory_count,
-                document_count,
-                mode,
-                json.dumps(memory_ids or []),
-                json.dumps(document_ids or []),
-            ),
-        )
-        self.connection.commit()
-        return int(cursor.lastrowid)
-
-    def latest(self, *, scope: ConversationScope, ttl_minutes: int | None = None) -> PendingMemoryDeletion | None:
-        if ttl_minutes is not None:
-            self.resolve_expired(scope=scope, ttl_minutes=ttl_minutes)
-        row = self.connection.execute(
-            """
-            SELECT
-              id, conversation_id, channel_id, message_id, user_id, guild_id,
-              memory_count, document_count, mode, memory_ids_json, document_ids_json, created_at
-            FROM pending_memory_deletions
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id),
-        ).fetchone()
-        if not row:
-            return None
-        return PendingMemoryDeletion(
-            id=int(row["id"]),
-            conversation_id=str(row["conversation_id"]),
-            channel_id=str(row["channel_id"]),
-            message_id=str(row["message_id"]),
-            user_id=str(row["user_id"]),
-            guild_id=str(row["guild_id"]) if row["guild_id"] else None,
-            memory_count=int(row["memory_count"]),
-            document_count=int(row["document_count"]),
-            mode=str(row["mode"]),
-            memory_ids=[int(value) for value in json.loads(row["memory_ids_json"] or "[]")],
-            document_ids=[int(value) for value in json.loads(row["document_ids_json"] or "[]")],
-            created_at=str(row["created_at"]),
-        )
-
-    def unresolved_count(self, *, scope: ConversationScope, ttl_minutes: int | None = None) -> int:
-        if ttl_minutes is not None:
-            self.resolve_expired(scope=scope, ttl_minutes=ttl_minutes)
-        row = self.connection.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM pending_memory_deletions
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id),
-        ).fetchone()
-        return int(row["count"])
-
-    def resolve(self, request_id: int) -> None:
-        self.connection.execute(
-            """
-            UPDATE pending_memory_deletions
-            SET resolved_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (request_id,),
-        )
-        self.connection.commit()
-
-    def resolve_latest(
-        self,
-        *,
-        scope: ConversationScope,
-        ttl_minutes: int | None = None,
-    ) -> PendingMemoryDeletion | None:
-        request = self.latest(scope=scope, ttl_minutes=ttl_minutes)
-        if request is None:
-            return None
-        self.resolve(request.id)
-        return request
-
-    def resolve_expired(self, *, scope: ConversationScope, ttl_minutes: int) -> int:
-        cutoff = datetime.now(UTC) - timedelta(minutes=ttl_minutes)
-        cutoff_text = cutoff.strftime("%Y-%m-%d %H:%M:%S")
-        cursor = self.connection.execute(
-            """
-            UPDATE pending_memory_deletions
-            SET resolved_at = CURRENT_TIMESTAMP
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-              AND created_at < ?
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id, cutoff_text),
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-
-class PendingMemoryCaptureStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
-
-    def add(self, *, scope: ConversationScope, message_id: str, mode: str = "next_message") -> int:
-        self.resolve_open(scope=scope)
-        cursor = self.connection.execute(
-            """
-            INSERT INTO pending_memory_captures (
-              conversation_id, channel_id, message_id, user_id, guild_id, mode
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                scope.conversation_id,
-                scope.channel_id,
-                message_id,
-                scope.user_id,
-                scope.guild_id,
-                mode,
-            ),
-        )
-        self.connection.commit()
-        return int(cursor.lastrowid)
-
-    def latest(self, *, scope: ConversationScope, ttl_minutes: int | None = None) -> PendingMemoryCapture | None:
-        if ttl_minutes is not None:
-            self.resolve_expired(scope=scope, ttl_minutes=ttl_minutes)
-        row = self.connection.execute(
-            """
-            SELECT id, conversation_id, channel_id, message_id, user_id, guild_id, mode, created_at
-            FROM pending_memory_captures
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id),
-        ).fetchone()
-        if not row:
-            return None
-        return PendingMemoryCapture(
-            id=int(row["id"]),
-            conversation_id=str(row["conversation_id"]),
-            channel_id=str(row["channel_id"]),
-            message_id=str(row["message_id"]),
-            user_id=str(row["user_id"]),
-            guild_id=str(row["guild_id"]) if row["guild_id"] else None,
-            mode=str(row["mode"]),
-            created_at=str(row["created_at"]),
-        )
-
-    def unresolved_count(self, *, scope: ConversationScope, ttl_minutes: int | None = None) -> int:
-        if ttl_minutes is not None:
-            self.resolve_expired(scope=scope, ttl_minutes=ttl_minutes)
-        row = self.connection.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM pending_memory_captures
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id),
-        ).fetchone()
-        return int(row["count"])
-
-    def resolve(self, request_id: int) -> None:
-        self.connection.execute(
-            """
-            UPDATE pending_memory_captures
-            SET resolved_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (request_id,),
-        )
-        self.connection.commit()
-
-    def resolve_latest(
-        self,
-        *,
-        scope: ConversationScope,
-        ttl_minutes: int | None = None,
-    ) -> PendingMemoryCapture | None:
-        request = self.latest(scope=scope, ttl_minutes=ttl_minutes)
-        if request is None:
-            return None
-        self.resolve(request.id)
-        return request
-
-    def resolve_open(self, *, scope: ConversationScope) -> int:
-        cursor = self.connection.execute(
-            """
-            UPDATE pending_memory_captures
-            SET resolved_at = CURRENT_TIMESTAMP
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id),
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-    def resolve_expired(self, *, scope: ConversationScope, ttl_minutes: int) -> int:
-        cutoff = datetime.now(UTC) - timedelta(minutes=ttl_minutes)
-        cutoff_text = cutoff.strftime("%Y-%m-%d %H:%M:%S")
-        cursor = self.connection.execute(
-            """
-            UPDATE pending_memory_captures
-            SET resolved_at = CURRENT_TIMESTAMP
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-              AND created_at < ?
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id, cutoff_text),
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-
-class PendingWebSearchConfirmationStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
-
-    def add(
-        self,
-        *,
-        scope: ConversationScope,
-        message_id: str,
-        query_text: str,
-        search_need_score: int,
-        search_reason: str,
-    ) -> int:
-        self.resolve_open(scope=scope)
-        cursor = self.connection.execute(
-            """
-            INSERT INTO pending_web_search_confirmations (
-              conversation_id, channel_id, message_id, user_id, guild_id,
-              query_text, search_need_score, search_reason
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                scope.conversation_id,
-                scope.channel_id,
-                message_id,
-                scope.user_id,
-                scope.guild_id,
-                query_text,
-                search_need_score,
-                search_reason,
-            ),
-        )
-        self.connection.commit()
-        return int(cursor.lastrowid)
-
-    def latest(
-        self,
-        *,
-        scope: ConversationScope,
-        ttl_minutes: int | None = None,
-    ) -> PendingWebSearchConfirmation | None:
-        if ttl_minutes is not None:
-            self.resolve_expired(scope=scope, ttl_minutes=ttl_minutes)
-        row = self.connection.execute(
-            """
-            SELECT
-              id, conversation_id, channel_id, message_id, user_id, guild_id,
-              query_text, search_need_score, search_reason, created_at
-            FROM pending_web_search_confirmations
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id),
-        ).fetchone()
-        if not row:
-            return None
-        return PendingWebSearchConfirmation(
-            id=int(row["id"]),
-            conversation_id=str(row["conversation_id"]),
-            channel_id=str(row["channel_id"]),
-            message_id=str(row["message_id"]),
-            user_id=str(row["user_id"]),
-            guild_id=str(row["guild_id"]) if row["guild_id"] else None,
-            query_text=str(row["query_text"]),
-            search_need_score=int(row["search_need_score"]),
-            search_reason=str(row["search_reason"]),
-            created_at=str(row["created_at"]),
-        )
-
-    def resolve(self, request_id: int) -> None:
-        self.connection.execute(
-            """
-            UPDATE pending_web_search_confirmations
-            SET resolved_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (request_id,),
-        )
-        self.connection.commit()
-
-    def resolve_open(self, *, scope: ConversationScope) -> int:
-        cursor = self.connection.execute(
-            """
-            UPDATE pending_web_search_confirmations
-            SET resolved_at = CURRENT_TIMESTAMP
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id),
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-    def resolve_expired(self, *, scope: ConversationScope, ttl_minutes: int) -> int:
-        cutoff = datetime.now(UTC) - timedelta(minutes=ttl_minutes)
-        cutoff_text = cutoff.strftime("%Y-%m-%d %H:%M:%S")
-        cursor = self.connection.execute(
-            """
-            UPDATE pending_web_search_confirmations
-            SET resolved_at = CURRENT_TIMESTAMP
-            WHERE resolved_at IS NULL
-              AND conversation_id = ?
-              AND user_id = ?
-              AND (guild_id IS NULL OR guild_id = ?)
-              AND created_at < ?
-            """,
-            (scope.conversation_id, scope.user_id, scope.guild_id, cutoff_text),
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-class VisionOcrUsageStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
-
-    def used_today(self, *, user_id: str, usage_date: str) -> int:
-        row = self.connection.execute(
-            """
-            SELECT COALESCE(SUM(bytes_used), 0) AS total
-            FROM vision_ocr_usage
-            WHERE user_id = ?
-              AND usage_date = ?
-            """,
-            (user_id, usage_date),
-        ).fetchone()
-        return int(row["total"]) if row else 0
-
-    def remaining_today(self, *, user_id: str, usage_date: str, daily_limit_bytes: int) -> int:
-        return max(0, daily_limit_bytes - self.used_today(user_id=user_id, usage_date=usage_date))
-
-    def can_consume(
-        self,
-        *,
-        user_id: str,
-        usage_date: str,
-        bytes_to_consume: int,
-        daily_limit_bytes: int,
-    ) -> bool:
-        return self.used_today(user_id=user_id, usage_date=usage_date) + bytes_to_consume <= daily_limit_bytes
-
-    def record_usage(
-        self,
-        *,
-        user_id: str,
-        usage_date: str,
-        bytes_used: int,
-        source_message_id: str,
-    ) -> None:
-        self.connection.execute(
-            """
-            INSERT INTO vision_ocr_usage (user_id, usage_date, bytes_used, source_message_id)
-            VALUES (?, ?, ?, ?)
-            """,
-            (user_id, usage_date, bytes_used, source_message_id),
-        )
-        self.connection.commit()
-
-
-class WebCacheStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
-
-    def get_search_results(
-        self,
-        *,
-        provider: str,
-        category: str,
-        query: str,
-        enabled: bool,
-    ) -> tuple[str, list[SearchResult]]:
-        if not enabled:
-            return "disabled", []
-        normalized_query = normalize_cache_key(query)
-        row = self.connection.execute(
-            """
-            SELECT result_json, expires_at
-            FROM web_search_cache
-            WHERE provider = ? AND category = ? AND normalized_query = ?
-            """,
-            (provider, category, normalized_query),
-        ).fetchone()
-        if row is None:
-            return "not_found", []
-        if str(row["expires_at"]) <= current_timestamp():
-            return "expired", []
-        try:
-            payload = json.loads(str(row["result_json"]))
-            return "hit", [search_result_from_cache_item(item) for item in payload]
-        except Exception:
-            return "corrupt", []
-
-    def save_search_results(
-        self,
-        *,
-        provider: str,
-        category: str,
-        query: str,
-        results: list[SearchResult],
-        ttl_minutes: int,
-    ) -> None:
-        normalized_query = normalize_cache_key(query)
-        now = current_timestamp()
-        expires_at = timestamp_after_minutes(ttl_minutes)
-        payload = json.dumps([search_result_to_cache_item(result) for result in results], ensure_ascii=False)
-        self.connection.execute(
-            """
-            INSERT INTO web_search_cache (
-              provider, category, normalized_query, result_json, created_at, expires_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(provider, category, normalized_query)
-            DO UPDATE SET
-              result_json = excluded.result_json,
-              created_at = excluded.created_at,
-              expires_at = excluded.expires_at
-            """,
-            (provider, category, normalized_query, payload, now, expires_at),
-        )
-        self.connection.commit()
-
-    def get_page(
-        self,
-        *,
-        url: str,
-        enabled: bool,
-    ) -> tuple[str, PageContent | None]:
-        if not enabled:
-            return "disabled", None
-        normalized_url = normalize_url_cache_key(url)
-        row = self.connection.execute(
-            """
-            SELECT normalized_url, final_url, title, text, success, error, expires_at
-            FROM web_page_cache
-            WHERE normalized_url = ?
-            """,
-            (normalized_url,),
-        ).fetchone()
-        if row is None:
-            return "not_found", None
-        if str(row["expires_at"]) <= current_timestamp():
-            return "expired", None
-        try:
-            return (
-                "hit",
-                PageContent(
-                    url=normalized_url,
-                    final_url=str(row["final_url"]),
-                    title=str(row["title"]),
-                    text=str(row["text"]),
-                    success=bool(int(row["success"])),
-                    error=str(row["error"]),
-                ),
-            )
-        except Exception:
-            return "corrupt", None
-
-    def save_page(self, *, url: str, page: PageContent, ttl_minutes: int) -> None:
-        normalized_url = normalize_url_cache_key(url)
-        now = current_timestamp()
-        expires_at = timestamp_after_minutes(ttl_minutes)
-        self.connection.execute(
-            """
-            INSERT INTO web_page_cache (
-              normalized_url, final_url, title, text, success, error, created_at, expires_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(normalized_url)
-            DO UPDATE SET
-              final_url = excluded.final_url,
-              title = excluded.title,
-              text = excluded.text,
-              success = excluded.success,
-              error = excluded.error,
-              created_at = excluded.created_at,
-              expires_at = excluded.expires_at
-            """,
-            (
-                normalized_url,
-                page.final_url,
-                page.title,
-                page.text,
-                int(page.success),
-                page.error,
-                now,
-                expires_at,
-            ),
-        )
-        self.connection.commit()
-
-    def cleanup_expired(self) -> dict[str, int]:
-        now = current_timestamp()
-        counts: dict[str, int] = {}
-        for table in ("web_search_cache", "web_page_cache"):
-            cursor = self.connection.execute(f"DELETE FROM {table} WHERE expires_at <= ?", (now,))
-            counts[table] = int(cursor.rowcount)
-        self.connection.commit()
-        return counts
-
-
-class WeatherLocationStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
-
-    def get_latest(self, *, user_id: str) -> dict[str, object] | None:
-        row = self.connection.execute(
-            """
-            SELECT user_id, location_name, nx, ny, land_reg_id, weather_stn_id, updated_at
-            FROM user_weather_locations
-            WHERE user_id = ?
-            """,
-            (user_id,),
-        ).fetchone()
-        if row is None:
-            return None
-        return {
-            "user_id": str(row["user_id"]),
-            "location_name": str(row["location_name"]),
-            "nx": int(row["nx"]),
-            "ny": int(row["ny"]),
-            "land_reg_id": str(row["land_reg_id"]) if row["land_reg_id"] else None,
-            "weather_stn_id": str(row["weather_stn_id"]) if row["weather_stn_id"] else None,
-            "updated_at": str(row["updated_at"]),
-        }
-
-    def save_latest(
-        self,
-        *,
-        user_id: str,
-        location_name: str,
-        nx: int,
-        ny: int,
-        land_reg_id: str | None,
-        weather_stn_id: str | None,
-    ) -> None:
-        now = current_timestamp()
-        self.connection.execute(
-            """
-            INSERT INTO user_weather_locations (
-              user_id, location_name, nx, ny, land_reg_id, weather_stn_id, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(user_id)
-            DO UPDATE SET
-              location_name = excluded.location_name,
-              nx = excluded.nx,
-              ny = excluded.ny,
-              land_reg_id = excluded.land_reg_id,
-              weather_stn_id = excluded.weather_stn_id,
-              updated_at = excluded.updated_at
-            """,
-            (user_id, location_name, nx, ny, land_reg_id, weather_stn_id, now),
-        )
-        self.connection.commit()
-
-
-class WeatherCacheStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
-
-    def get(self, *, provider: str, cache_key: str, enabled: bool = True) -> tuple[str, dict[str, object] | None]:
-        if not enabled:
-            return "disabled", None
-        row = self.connection.execute(
-            """
-            SELECT response_json, expires_at
-            FROM weather_api_cache
-            WHERE provider = ? AND cache_key = ?
-            """,
-            (provider, normalize_cache_key(cache_key)),
-        ).fetchone()
-        if row is None:
-            return "not_found", None
-        if str(row["expires_at"]) <= current_timestamp():
-            return "expired", None
-        try:
-            payload = json.loads(str(row["response_json"]))
-        except Exception:
-            return "corrupt", None
-        return ("hit", payload) if isinstance(payload, dict) else ("corrupt", None)
-
-    def save(self, *, provider: str, cache_key: str, response: dict[str, object], ttl_minutes: int) -> None:
-        now = current_timestamp()
-        expires_at = timestamp_after_minutes(ttl_minutes)
-        self.connection.execute(
-            """
-            INSERT INTO weather_api_cache (provider, cache_key, response_json, created_at, expires_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(cache_key)
-            DO UPDATE SET
-              response_json = excluded.response_json,
-              created_at = excluded.created_at,
-              expires_at = excluded.expires_at
-            """,
-            (provider, normalize_cache_key(cache_key), json.dumps(response, ensure_ascii=False), now, expires_at),
-        )
-        self.connection.commit()
-
-
-class TaskStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
-
-    def add(
-        self,
-        *,
-        scope: ConversationScope,
-        title: str,
-        priority: str = "normal",
-        due_at: str | None = None,
-        source_message_id: str | None = None,
-    ) -> int:
-        created_at = current_timestamp()
-        cursor = self.connection.execute(
-            """
-            INSERT INTO tasks (
-              user_id, guild_id, conversation_id, channel_id, title, priority, due_at, source_message_id, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                scope.user_id,
-                scope.guild_id,
-                scope.conversation_id,
-                scope.channel_id,
-                title,
-                normalize_task_priority(priority),
-                due_at,
-                source_message_id,
-                created_at,
-            ),
-        )
-        self.connection.commit()
-        return int(cursor.lastrowid)
-
-    def find_open_duplicate(self, *, scope: ConversationScope, title: str) -> TaskItem | None:
-        row = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE deleted_at IS NULL
-              AND status = 'open'
-              AND user_id = ?
-              AND LOWER(TRIM(title)) = LOWER(TRIM(?))
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (scope.user_id, title),
-        ).fetchone()
-        return task_item_from_row(row) if row else None
-
-    def get(self, *, scope: ConversationScope, task_id: int, include_deleted: bool = False) -> TaskItem | None:
-        where = ["user_id = ?", "id = ?"]
-        if not include_deleted:
-            where.append("deleted_at IS NULL")
-        row = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE {" AND ".join(where)}
-            LIMIT 1
-            """,
-            (scope.user_id, task_id),
-        ).fetchone()
-        return task_item_from_row(row) if row else None
-
-    def latest(self, *, scope: ConversationScope) -> TaskItem | None:
-        row = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-            ORDER BY created_at DESC, id DESC
-            LIMIT 1
-            """,
-            (scope.user_id,),
-        ).fetchone()
-        return task_item_from_row(row) if row else None
-
-    def latest_reminded_open(self, *, scope: ConversationScope) -> TaskItem | None:
-        row = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE deleted_at IS NULL
-              AND status = 'open'
-              AND reminder_sent_at IS NOT NULL
-              AND user_id = ?
-            ORDER BY reminder_sent_at DESC, id DESC
-            LIMIT 1
-            """,
-            (scope.user_id,),
-        ).fetchone()
-        return task_item_from_row(row) if row else None
-
-    def list_open(self, *, scope: ConversationScope, limit: int = 10) -> list[TaskItem]:
-        rows = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE deleted_at IS NULL
-              AND status = 'open'
-              AND user_id = ?
-            ORDER BY
-              CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
-              CASE WHEN due_at IS NULL THEN 1 ELSE 0 END,
-              due_at ASC,
-              id DESC
-            LIMIT ?
-            """,
-            (scope.user_id, max(1, limit)),
-        ).fetchall()
-        return [task_item_from_row(row) for row in rows]
-
-    def list_due(self, *, scope: ConversationScope, due_before: str, limit: int = 10) -> list[TaskItem]:
-        due_cutoff = normalize_due_cutoff(due_before)
-        rows = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE deleted_at IS NULL
-              AND status = 'open'
-              AND user_id = ?
-              AND due_at IS NOT NULL
-              AND due_at <= ?
-            ORDER BY
-              CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
-              due_at ASC,
-              id DESC
-            LIMIT ?
-            """,
-            (scope.user_id, due_cutoff, max(1, limit)),
-        ).fetchall()
-        return [task_item_from_row(row) for row in rows]
-
-    def list_recent(
-        self,
-        *,
-        user_id: str | None = None,
-        status: str = "open",
-        due_after: str | None = None,
-        due_before: str | None = None,
-        undated: bool = False,
-        limit: int = 20,
-    ) -> list[TaskItem]:
-        where = ["deleted_at IS NULL"]
-        params: list[object] = []
-        if user_id:
-            where.append("user_id = ?")
-            params.append(user_id)
-        if status != "all":
-            where.append("status = ?")
-            params.append(status)
-        if undated:
-            where.append("due_at IS NULL")
-        elif due_after or due_before:
-            where.append("due_at IS NOT NULL")
-        if due_after:
-            where.append("due_at >= ?")
-            params.append(normalize_due_start(due_after))
-        if due_before:
-            where.append("due_at <= ?")
-            params.append(normalize_due_cutoff(due_before))
-        params.append(max(1, limit))
-        rows = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE {" AND ".join(where)}
-            ORDER BY
-              CASE WHEN status = 'open' THEN 0 ELSE 1 END,
-              CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
-              CASE WHEN due_at IS NULL THEN 1 ELSE 0 END,
-              due_at ASC,
-              id DESC
-            LIMIT ?
-            """,
-            params,
-        ).fetchall()
-        return [task_item_from_row(row) for row in rows]
-
-    def list_deleted(
-        self,
-        *,
-        scope: ConversationScope | None = None,
-        user_id: str | None = None,
-        limit: int = 20,
-    ) -> list[TaskItem]:
-        where = ["deleted_at IS NOT NULL"]
-        params: list[object] = []
-        effective_user_id = scope.user_id if scope else user_id
-        if effective_user_id:
-            where.append("user_id = ?")
-            params.append(effective_user_id)
-        params.append(max(1, limit))
-        rows = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE {" AND ".join(where)}
-            ORDER BY deleted_at DESC, id DESC
-            LIMIT ?
-            """,
-            params,
-        ).fetchall()
-        return [task_item_from_row(row) for row in rows]
-
-    def search(self, *, scope: ConversationScope, keyword: str, limit: int = 10) -> list[TaskItem]:
-        cleaned_keyword = keyword.strip()
-        if not cleaned_keyword:
-            return []
-        like = f"%{cleaned_keyword.replace('%', '').replace('_', '')}%"
-        rows = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-              AND title LIKE ?
-            ORDER BY
-              CASE WHEN status = 'open' THEN 0 ELSE 1 END,
-              CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
-              CASE WHEN due_at IS NULL THEN 1 ELSE 0 END,
-              due_at ASC,
-              id DESC
-            LIMIT ?
-            """,
-            (scope.user_id, like, max(1, limit)),
-        ).fetchall()
-        return [task_item_from_row(row) for row in rows]
-
-    def complete(self, *, scope: ConversationScope, task_ids: list[int]) -> int:
-        if not task_ids:
-            return 0
-        cursor = self.connection.execute(
-            f"""
-            UPDATE tasks
-            SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-            WHERE deleted_at IS NULL
-              AND status = 'open'
-              AND user_id = ?
-              AND id IN ({",".join("?" for _ in task_ids)})
-            """,
-            [scope.user_id, *task_ids],
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-    def reopen(self, *, scope: ConversationScope, task_ids: list[int]) -> int:
-        if not task_ids:
-            return 0
-        cursor = self.connection.execute(
-            f"""
-            UPDATE tasks
-            SET status = 'open', completed_at = NULL, reminder_sent_at = NULL
-            WHERE deleted_at IS NULL
-              AND status = 'completed'
-              AND user_id = ?
-              AND id IN ({",".join("?" for _ in task_ids)})
-            """,
-            [scope.user_id, *task_ids],
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-    def reopen_latest_completed(self, *, scope: ConversationScope) -> TaskItem | None:
-        row = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE deleted_at IS NULL
-              AND status = 'completed'
-              AND user_id = ?
-            ORDER BY completed_at DESC, id DESC
-            LIMIT 1
-            """,
-            (scope.user_id,),
-        ).fetchone()
-        if row is None:
-            return None
-        item = task_item_from_row(row)
-        self.reopen(scope=scope, task_ids=[item.id])
-        return item
-
-    def delete(self, *, scope: ConversationScope, task_ids: list[int]) -> int:
-        if not task_ids:
-            return 0
-        cursor = self.connection.execute(
-            f"""
-            UPDATE tasks
-            SET deleted_at = CURRENT_TIMESTAMP
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-              AND id IN ({",".join("?" for _ in task_ids)})
-            """,
-            [scope.user_id, *task_ids],
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-    def restore(self, *, scope: ConversationScope, task_ids: list[int]) -> int:
-        if not task_ids:
-            return 0
-        cursor = self.connection.execute(
-            f"""
-            UPDATE tasks
-            SET deleted_at = NULL
-            WHERE deleted_at IS NOT NULL
-              AND user_id = ?
-              AND id IN ({",".join("?" for _ in task_ids)})
-            """,
-            [scope.user_id, *task_ids],
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-    def restore_latest_deleted(self, *, scope: ConversationScope) -> TaskItem | None:
-        row = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE deleted_at IS NOT NULL
-              AND user_id = ?
-            ORDER BY deleted_at DESC, id DESC
-            LIMIT 1
-            """,
-            (scope.user_id,),
-        ).fetchone()
-        if row is None:
-            return None
-        task = task_item_from_row(row)
-        self.restore(scope=scope, task_ids=[task.id])
-        return task
-
-    def postpone(self, *, scope: ConversationScope, task_ids: list[int], due_at: str) -> int:
-        if not task_ids:
-            return 0
-        cursor = self.connection.execute(
-            f"""
-            UPDATE tasks
-            SET due_at = ?, reminder_sent_at = NULL
-            WHERE deleted_at IS NULL
-              AND status = 'open'
-              AND user_id = ?
-              AND id IN ({",".join("?" for _ in task_ids)})
-            """,
-            [due_at, scope.user_id, *task_ids],
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-    def clear_due(self, *, scope: ConversationScope, task_ids: list[int]) -> int:
-        if not task_ids:
-            return 0
-        cursor = self.connection.execute(
-            f"""
-            UPDATE tasks
-            SET due_at = NULL, reminder_sent_at = NULL
-            WHERE deleted_at IS NULL
-              AND status = 'open'
-              AND user_id = ?
-              AND id IN ({",".join("?" for _ in task_ids)})
-            """,
-            [scope.user_id, *task_ids],
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-    def rename(self, *, scope: ConversationScope, task_ids: list[int], title: str) -> int:
-        if not task_ids:
-            return 0
-        cursor = self.connection.execute(
-            f"""
-            UPDATE tasks
-            SET title = ?
-            WHERE deleted_at IS NULL
-              AND status = 'open'
-              AND user_id = ?
-              AND id IN ({",".join("?" for _ in task_ids)})
-            """,
-            [title, scope.user_id, *task_ids],
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-    def set_priority(self, *, scope: ConversationScope, task_ids: list[int], priority: str) -> int:
-        if not task_ids:
-            return 0
-        normalized_priority = normalize_task_priority(priority)
-        cursor = self.connection.execute(
-            f"""
-            UPDATE tasks
-            SET priority = ?
-            WHERE deleted_at IS NULL
-              AND status = 'open'
-              AND user_id = ?
-              AND id IN ({",".join("?" for _ in task_ids)})
-            """,
-            [normalized_priority, scope.user_id, *task_ids],
-        )
-        self.connection.commit()
-        return int(cursor.rowcount)
-
-    def stats(self, *, scope: ConversationScope) -> dict[str, int]:
-        open_row = self.connection.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM tasks
-            WHERE deleted_at IS NULL
-              AND status = 'open'
-              AND user_id = ?
-            """,
-            (scope.user_id,),
-        ).fetchone()
-        completed_row = self.connection.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM tasks
-            WHERE deleted_at IS NULL
-              AND status = 'completed'
-              AND user_id = ?
-            """,
-            (scope.user_id,),
-        ).fetchone()
-        return {
-            "open": int(open_row["count"]),
-            "completed": int(completed_row["count"]),
-        }
-
-    def due_for_reminder(self, *, today: str, limit: int = 50, user_id: str | None = None) -> list[TaskItem]:
-        due_cutoff = normalize_due_cutoff(today)
-        where = [
-            "deleted_at IS NULL",
-            "status = 'open'",
-            "due_at IS NOT NULL",
-            "due_at <= ?",
-            "reminder_sent_at IS NULL",
-        ]
-        params: list[object] = [due_cutoff]
-        if user_id:
-            where.append("user_id = ?")
-            params.append(user_id)
-        params.append(max(1, limit))
-        rows = self.connection.execute(
-            f"""
-            SELECT {TASK_COLUMNS}
-            FROM tasks
-            WHERE {" AND ".join(where)}
-            ORDER BY
-              CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
-              due_at ASC,
-              id ASC
-            LIMIT ?
-            """,
-            params,
-        ).fetchall()
-        return [task_item_from_row(row) for row in rows]
-
-    def mark_reminded(self, task_id: int) -> None:
-        self.connection.execute(
-            """
-            UPDATE tasks
-            SET reminder_sent_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (task_id,),
-        )
-        self.connection.commit()
-
-
-class ReminderStore:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
-
-    def add(
-        self,
-        *,
-        scope: ConversationScope,
-        text: str,
-        remind_at: str,
-        source_message_id: str | None = None,
-    ) -> int:
-        created_at = current_timestamp()
-        cursor = self.connection.execute(
-            """
-            INSERT INTO reminders (
-              user_id, guild_id, conversation_id, channel_id, text, remind_at, source_message_id, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                scope.user_id,
-                scope.guild_id,
-                scope.conversation_id,
-                scope.channel_id,
-                text,
-                remind_at,
-                source_message_id,
-                created_at,
-            ),
-        )
-        self.connection.commit()
-        return int(cursor.lastrowid)
-
-    def due_for_delivery(
-        self,
-        *,
-        as_of: str,
-        limit: int = 50,
-        user_id: str | None = None,
-    ) -> list[ReminderItem]:
-        cutoff = normalize_due_cutoff(as_of)
-        where = [
-            "sent_at IS NULL",
-            "remind_at <= ?",
-        ]
-        params: list[object] = [cutoff]
-        if user_id:
-            where.append("user_id = ?")
-            params.append(user_id)
-        params.append(max(1, limit))
-        rows = self.connection.execute(
-            f"""
-            SELECT {REMINDER_COLUMNS}
-            FROM reminders
-            WHERE {" AND ".join(where)}
-            ORDER BY remind_at ASC, id ASC
-            LIMIT ?
-            """,
-            params,
-        ).fetchall()
-        return [reminder_item_from_row(row) for row in rows]
-
-    def list_recent(
-        self,
-        *,
-        scope: ConversationScope,
-        pending_only: bool = True,
-        limit: int = 10,
-    ) -> list[ReminderItem]:
-        where = ["user_id = ?"]
-        params: list[object] = [scope.user_id]
-        if pending_only:
-            where.append("sent_at IS NULL")
-        params.append(max(1, limit))
-        rows = self.connection.execute(
-            f"""
-            SELECT {REMINDER_COLUMNS}
-            FROM reminders
-            WHERE {" AND ".join(where)}
-            ORDER BY remind_at ASC, id ASC
-            LIMIT ?
-            """,
-            params,
-        ).fetchall()
-        return [reminder_item_from_row(row) for row in rows]
-
-    def latest(self, *, scope: ConversationScope) -> ReminderItem | None:
-        row = self.connection.execute(
-            f"""
-            SELECT {REMINDER_COLUMNS}
-            FROM reminders
-            WHERE user_id = ?
-            ORDER BY created_at DESC, id DESC
-            LIMIT 1
-            """,
-            (scope.user_id,),
-        ).fetchone()
-        return reminder_item_from_row(row) if row else None
-
-    def mark_sent(self, reminder_id: int) -> None:
-        self.connection.execute(
-            """
-            UPDATE reminders
-            SET sent_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (reminder_id,),
-        )
-        self.connection.commit()
-
-
-class MemoryStore:
-    def __init__(self, connection: sqlite3.Connection, openai: OpenAIService) -> None:
-        self.connection = connection
-        self.openai = openai
-
-    def find_duplicate_text_memory(self, *, scope: ConversationScope, text: str) -> MemoryDetail | None:
-        normalized = normalize_memory_text(text)
-        if not normalized:
-            return None
-        rows = self.connection.execute(
-            """
-            SELECT id, title, text, guild_id, source_message_id, created_at
-            FROM user_memories
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-            ORDER BY id DESC
-            """,
-            (scope.user_id,),
-        ).fetchall()
-        for row in rows:
-            if normalize_memory_text(str(row["text"])) != normalized:
-                continue
-            return MemoryDetail(
-                id=int(row["id"]),
-                kind="memory",
-                title=str(row["title"]),
-                text=str(row["text"]),
-                created_at=str(row["created_at"]),
-                source_message_id=str(row["source_message_id"]) if row["source_message_id"] else None,
-                source_location=source_location(row["guild_id"]),
-            )
+        kind, question, *tags = json.loads(row["response"])
+        # Previously stored clarification replies had no explicit tag.
+        if kind == "final" and (tags == ["clarification"] or not tags and question.rstrip().endswith(("?", "？"))):
+            return {"request": json.loads(row["request"])["text"], "question": question}
         return None
 
-    async def save_text_memory(
-        self,
-        *,
-        scope: ConversationScope,
-        text: str,
-        source_message_id: str,
-    ) -> int:
-        embedding = await self.openai.embedding(text)
-        title = " ".join(text.split())[:48] or "저장된 기억"
-        created_at = current_timestamp()
-        cursor = self.connection.execute(
-            """
-            INSERT INTO user_memories (user_id, guild_id, title, text, embedding_json, source_message_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (scope.user_id, scope.guild_id, title, text, json.dumps(embedding), source_message_id, created_at),
-        )
-        self.connection.commit()
-        return int(cursor.lastrowid)
-
-    async def update_text_memory(
-        self,
-        *,
-        scope: ConversationScope,
-        memory_id: int,
-        text: str,
-    ) -> bool:
-        embedding = await self.openai.embedding(text)
-        title = " ".join(text.split())[:48] or "수정된 기억"
-        cursor = self.connection.execute(
-            """
-            UPDATE user_memories
-            SET title = ?, text = ?, embedding_json = ?
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-              AND id = ?
-            """,
-            (title, text, json.dumps(embedding), scope.user_id, memory_id),
-        )
-        self.connection.commit()
-        return int(cursor.rowcount) == 1
-
-    async def save_document(
-        self,
-        *,
-        scope: ConversationScope,
-        filename: str,
-        content_type: str | None,
-        text: str,
-        source_message_id: str,
-    ) -> tuple[int, int]:
-        content_hash = document_content_hash(text)
-        created_at = current_timestamp()
-        cursor = self.connection.execute(
-            """
-            INSERT INTO documents (
-              user_id, guild_id, filename, content_type, content_hash, source_message_id, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (scope.user_id, scope.guild_id, filename, content_type, content_hash, source_message_id, created_at),
-        )
-        document_id = int(cursor.lastrowid)
-
-        chunks = chunk_text(text)
-        for index, chunk in enumerate(chunks):
-            embedding = await self.openai.embedding(chunk)
-            self.connection.execute(
-                """
-                INSERT INTO document_chunks (document_id, chunk_index, text, embedding_json)
-                VALUES (?, ?, ?, ?)
-                """,
-                (document_id, index, chunk, json.dumps(embedding)),
-            )
-
-        self.connection.commit()
-        return document_id, len(chunks)
-
-    def find_duplicate_document(self, *, scope: ConversationScope, text: str) -> MemoryDetail | None:
-        content_hash = document_content_hash(text)
-        normalized = normalize_document_text(text)
-        if not normalized:
-            return None
-        document_rows = self.connection.execute(
-            """
-            SELECT id, filename, guild_id, content_hash, source_message_id, created_at
-            FROM documents
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-            ORDER BY id DESC
-            """,
-            (scope.user_id,),
+    def memories(self, scope: Scope, *, include_deleted=False):
+        condition = "" if include_deleted else " AND active=1"
+        return self.db.execute(
+            "SELECT * FROM memory WHERE scope IN (?,?)" + condition + " ORDER BY id DESC",
+            (scope.key, self.preference_scope(scope)),
         ).fetchall()
-        for row in document_rows:
-            row_hash = str(row["content_hash"]) if row["content_hash"] else None
-            if row_hash == content_hash:
-                return self.get_document_detail(scope=scope, document_id=int(row["id"]))
-            if row_hash is not None:
-                continue
-            if normalize_document_text(self.document_text(int(row["id"]))) == normalized:
-                return self.get_document_detail(scope=scope, document_id=int(row["id"]))
-        return None
-
-    async def search(
-        self,
-        *,
-        scope: ConversationScope,
-        query: str,
-        limit: int,
-    ) -> list[MemorySearchResult]:
-        query_embedding = await self.openai.embedding(query)
-        memory_rows = self.connection.execute(
-            """
-            SELECT id, title, text, embedding_json, source_message_id, created_at, guild_id
-            FROM user_memories
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-            """,
-            (scope.user_id,),
-        ).fetchall()
-
-        document_rows = self.connection.execute(
-            """
-            SELECT
-              documents.id AS id,
-              documents.filename AS title,
-              document_chunks.text AS text,
-              document_chunks.embedding_json AS embedding_json,
-              documents.source_message_id AS source_message_id,
-              documents.created_at AS created_at,
-              documents.guild_id AS guild_id
-            FROM document_chunks
-            JOIN documents ON documents.id = document_chunks.document_id
-            WHERE documents.deleted_at IS NULL
-              AND documents.user_id = ?
-            """,
-            (scope.user_id,),
-        ).fetchall()
-
-        results = [
-            self._to_result(row, "memory", query_embedding) for row in memory_rows
-        ] + [
-            self._to_result(row, "document", query_embedding) for row in document_rows
-        ]
-        return sorted(results, key=lambda result: result.score, reverse=True)[:limit]
-
-    def recent_items(
-        self,
-        *,
-        scope: ConversationScope,
-        limit: int = 10,
-        kind: str | None = None,
-    ) -> list[MemoryListItem]:
-        memory_rows = []
-        document_rows = []
-        if kind in (None, "memory"):
-            memory_rows = self.connection.execute(
-                """
-                SELECT id, title, text AS detail, guild_id, created_at
-                FROM user_memories
-                WHERE deleted_at IS NULL
-                  AND user_id = ?
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (scope.user_id, limit),
-            ).fetchall()
-
-        if kind in (None, "document"):
-            document_rows = self.connection.execute(
-                """
-                SELECT
-                  documents.id AS id,
-                  documents.filename AS title,
-                  COUNT(document_chunks.id) || ' chunks' AS detail,
-                  documents.guild_id AS guild_id,
-                  documents.created_at AS created_at
-                FROM documents
-                LEFT JOIN document_chunks ON document_chunks.document_id = documents.id
-                WHERE documents.deleted_at IS NULL
-                  AND documents.user_id = ?
-                GROUP BY documents.id
-                ORDER BY documents.id DESC
-                LIMIT ?
-                """,
-                (scope.user_id, limit),
-            ).fetchall()
-
-        items = [
-            MemoryListItem(
-                id=int(row["id"]),
-                kind="memory",
-                title=str(row["title"]),
-                created_at=str(row["created_at"]),
-                detail=str(row["detail"])[:80],
-                source_location=source_location(row["guild_id"]),
-            )
-            for row in memory_rows
-        ] + [
-            MemoryListItem(
-                id=int(row["id"]),
-                kind="document",
-                title=str(row["title"]),
-                created_at=str(row["created_at"]),
-                detail=str(row["detail"]),
-                source_location=source_location(row["guild_id"]),
-            )
-            for row in document_rows
-        ]
-        kind_order = {"memory": 0, "document": 1}
-        return sorted(items, key=lambda item: (item.created_at, kind_order[item.kind], item.id), reverse=True)[:limit]
-
-    def deleted_items(self, *, scope: ConversationScope, limit: int = 10) -> list[MemoryListItem]:
-        memory_rows = self.connection.execute(
-            """
-            SELECT id, title, text AS detail, guild_id, deleted_at AS created_at
-            FROM user_memories
-            WHERE deleted_at IS NOT NULL
-              AND user_id = ?
-            ORDER BY deleted_at DESC, id DESC
-            LIMIT ?
-            """,
-            (scope.user_id, limit),
-        ).fetchall()
-
-        document_rows = self.connection.execute(
-            """
-            SELECT
-              documents.id AS id,
-              documents.filename AS title,
-              COUNT(document_chunks.id) || ' chunks' AS detail,
-              documents.guild_id AS guild_id,
-              documents.deleted_at AS created_at
-            FROM documents
-            LEFT JOIN document_chunks ON document_chunks.document_id = documents.id
-            WHERE documents.deleted_at IS NOT NULL
-              AND documents.user_id = ?
-            GROUP BY documents.id
-            ORDER BY documents.deleted_at DESC, documents.id DESC
-            LIMIT ?
-            """,
-            (scope.user_id, limit),
-        ).fetchall()
-
-        items = [
-            MemoryListItem(
-                id=int(row["id"]),
-                kind="memory",
-                title=str(row["title"]),
-                created_at=str(row["created_at"]),
-                detail=str(row["detail"])[:80],
-                source_location=source_location(row["guild_id"]),
-            )
-            for row in memory_rows
-        ] + [
-            MemoryListItem(
-                id=int(row["id"]),
-                kind="document",
-                title=str(row["title"]),
-                created_at=str(row["created_at"]),
-                detail=str(row["detail"]),
-                source_location=source_location(row["guild_id"]),
-            )
-            for row in document_rows
-        ]
-        return sorted(items, key=lambda item: item.created_at, reverse=True)[:limit]
-
-    def stats(self, *, scope: ConversationScope) -> dict[str, int]:
-        memory_count = self.connection.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM user_memories
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-            """,
-            (scope.user_id,),
-        ).fetchone()["count"]
-        document_count = self.connection.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM documents
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-            """,
-            (scope.user_id,),
-        ).fetchone()["count"]
-        chunk_count = self.connection.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM document_chunks
-            JOIN documents ON documents.id = document_chunks.document_id
-            WHERE documents.deleted_at IS NULL
-              AND documents.user_id = ?
-            """,
-            (scope.user_id,),
-        ).fetchone()["count"]
-        return {
-            "memories": int(memory_count),
-            "documents": int(document_count),
-            "chunks": int(chunk_count),
-        }
-
-    def get_memory_detail(self, *, scope: ConversationScope, memory_id: int) -> MemoryDetail | None:
-        row = self.connection.execute(
-            """
-            SELECT id, title, text, guild_id, source_message_id, created_at
-            FROM user_memories
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-              AND id = ?
-            """,
-            (scope.user_id, memory_id),
-        ).fetchone()
-        if not row:
-            return None
-        return MemoryDetail(
-            id=int(row["id"]),
-            kind="memory",
-            title=str(row["title"]),
-            text=str(row["text"]),
-            created_at=str(row["created_at"]),
-            source_message_id=str(row["source_message_id"]) if row["source_message_id"] else None,
-            source_location=source_location(row["guild_id"]),
-        )
-
-    def get_document_detail(self, *, scope: ConversationScope, document_id: int) -> MemoryDetail | None:
-        row = self.connection.execute(
-            """
-            SELECT id, filename, guild_id, source_message_id, created_at
-            FROM documents
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-              AND id = ?
-            """,
-            (scope.user_id, document_id),
-        ).fetchone()
-        if not row:
-            return None
-
-        chunk_rows = self.connection.execute(
-            """
-            SELECT text
-            FROM document_chunks
-            WHERE document_id = ?
-            ORDER BY chunk_index ASC
-            """,
-            (document_id,),
-        ).fetchall()
-        return MemoryDetail(
-            id=int(row["id"]),
-            kind="document",
-            title=str(row["filename"]),
-            text="\n\n".join(str(chunk["text"]) for chunk in chunk_rows),
-            created_at=str(row["created_at"]),
-            source_message_id=str(row["source_message_id"]) if row["source_message_id"] else None,
-            chunk_count=len(chunk_rows),
-            source_location=source_location(row["guild_id"]),
-        )
-
-    def document_text(self, document_id: int) -> str:
-        chunk_rows = self.connection.execute(
-            """
-            SELECT text
-            FROM document_chunks
-            WHERE document_id = ?
-            ORDER BY chunk_index ASC
-            """,
-            (document_id,),
-        ).fetchall()
-        return "\n\n".join(str(chunk["text"]) for chunk in chunk_rows)
-
-    def delete_latest_item(self, *, scope: ConversationScope) -> MemoryListItem | None:
-        row = self.connection.execute(
-            """
-            SELECT kind, id, title, detail, guild_id, created_at
-            FROM (
-              SELECT
-                'memory' AS kind,
-                id,
-                title,
-                text AS detail,
-                guild_id,
-                created_at
-              FROM user_memories
-              WHERE deleted_at IS NULL
-                AND user_id = ?
-              UNION ALL
-              SELECT
-                'document' AS kind,
-                documents.id AS id,
-                documents.filename AS title,
-                COUNT(document_chunks.id) || ' chunks' AS detail,
-                documents.guild_id AS guild_id,
-                documents.created_at AS created_at
-              FROM documents
-              LEFT JOIN document_chunks ON document_chunks.document_id = documents.id
-              WHERE documents.deleted_at IS NULL
-                AND documents.user_id = ?
-              GROUP BY documents.id
-            )
-            ORDER BY created_at DESC, id DESC
-            LIMIT 1
-            """,
-            (scope.user_id, scope.user_id),
-        ).fetchone()
-        if row is None:
-            return None
-
-        item = MemoryListItem(
-            id=int(row["id"]),
-            kind=str(row["kind"]),  # type: ignore[arg-type]
-            title=str(row["title"]),
-            created_at=str(row["created_at"]),
-            detail=str(row["detail"])[:80],
-            source_location=source_location(row["guild_id"]),
-        )
-        if item.kind == "memory":
-            self.delete_memory_ids(scope=scope, memory_ids=[item.id])
-        else:
-            self.delete_document_ids(scope=scope, document_ids=[item.id])
-        return item
-
-    def delete_by_query(self, *, scope: ConversationScope, query: str) -> int:
-        term = f"%{query.replace('%', '').replace('_', '')}%"
-        memory_cursor = self.connection.execute(
-            """
-            UPDATE user_memories
-            SET deleted_at = CURRENT_TIMESTAMP
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-              AND (title LIKE ? OR text LIKE ?)
-            """,
-            (scope.user_id, term, term),
-        )
-        document_cursor = self.connection.execute(
-            """
-            UPDATE documents
-            SET deleted_at = CURRENT_TIMESTAMP
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-              AND filename LIKE ?
-            """,
-            (scope.user_id, term),
-        )
-        self.connection.commit()
-        return int(memory_cursor.rowcount) + int(document_cursor.rowcount)
-
-    def restore_latest_deleted_item(self, *, scope: ConversationScope) -> MemoryListItem | None:
-        row = self.connection.execute(
-            """
-            SELECT kind, id, title, detail, guild_id, created_at, deleted_at
-            FROM (
-              SELECT
-                'memory' AS kind,
-                id,
-                title,
-                text AS detail,
-                guild_id,
-                created_at,
-                deleted_at
-              FROM user_memories
-              WHERE deleted_at IS NOT NULL
-                AND user_id = ?
-              UNION ALL
-              SELECT
-                'document' AS kind,
-                documents.id AS id,
-                documents.filename AS title,
-                COUNT(document_chunks.id) || ' chunks' AS detail,
-                documents.guild_id AS guild_id,
-                documents.created_at AS created_at,
-                documents.deleted_at AS deleted_at
-              FROM documents
-              LEFT JOIN document_chunks ON document_chunks.document_id = documents.id
-              WHERE documents.deleted_at IS NOT NULL
-                AND documents.user_id = ?
-              GROUP BY documents.id
-            )
-            ORDER BY deleted_at DESC, id DESC
-            LIMIT 1
-            """,
-            (scope.user_id, scope.user_id),
-        ).fetchone()
-        if row is None:
-            return None
-
-        item = MemoryListItem(
-            id=int(row["id"]),
-            kind=str(row["kind"]),  # type: ignore[arg-type]
-            title=str(row["title"]),
-            created_at=str(row["created_at"]),
-            detail=str(row["detail"])[:80],
-            source_location=source_location(row["guild_id"]),
-        )
-        table = "user_memories" if item.kind == "memory" else "documents"
-        self.connection.execute(
-            f"""
-            UPDATE {table}
-            SET deleted_at = NULL
-            WHERE user_id = ?
-              AND id = ?
-              AND deleted_at IS NOT NULL
-            """,
-            (scope.user_id, item.id),
-        )
-        self.connection.commit()
-        return item
-
-    def restore_memory_ids(self, *, scope: ConversationScope, memory_ids: list[int]) -> int:
-        if not memory_ids:
-            return 0
-        restored = 0
-        for memory_id in memory_ids:
-            cursor = self.connection.execute(
-                """
-                UPDATE user_memories
-                SET deleted_at = NULL
-                WHERE deleted_at IS NOT NULL
-                  AND user_id = ?
-                  AND id = ?
-                """,
-                (scope.user_id, memory_id),
-            )
-            restored += int(cursor.rowcount)
-        self.connection.commit()
-        return restored
-
-    def restore_document_ids(self, *, scope: ConversationScope, document_ids: list[int]) -> int:
-        if not document_ids:
-            return 0
-        restored = 0
-        for document_id in document_ids:
-            cursor = self.connection.execute(
-                """
-                UPDATE documents
-                SET deleted_at = NULL
-                WHERE deleted_at IS NOT NULL
-                  AND user_id = ?
-                  AND id = ?
-                """,
-                (scope.user_id, document_id),
-            )
-            restored += int(cursor.rowcount)
-        self.connection.commit()
-        return restored
-
-    def delete_all_for_user(self, *, scope: ConversationScope) -> int:
-        memory_cursor = self.connection.execute(
-            """
-            UPDATE user_memories
-            SET deleted_at = CURRENT_TIMESTAMP
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-            """,
-            (scope.user_id,),
-        )
-        document_cursor = self.connection.execute(
-            """
-            UPDATE documents
-            SET deleted_at = CURRENT_TIMESTAMP
-            WHERE deleted_at IS NULL
-              AND user_id = ?
-            """,
-            (scope.user_id,),
-        )
-        self.connection.commit()
-        return int(memory_cursor.rowcount) + int(document_cursor.rowcount)
-
-    def delete_memory_ids(self, *, scope: ConversationScope, memory_ids: list[int]) -> int:
-        if not memory_ids:
-            return 0
-        deleted = 0
-        for memory_id in memory_ids:
-            cursor = self.connection.execute(
-                """
-                UPDATE user_memories
-                SET deleted_at = CURRENT_TIMESTAMP
-                WHERE deleted_at IS NULL
-                  AND user_id = ?
-                  AND id = ?
-                """,
-                (scope.user_id, memory_id),
-            )
-            deleted += int(cursor.rowcount)
-        self.connection.commit()
-        return deleted
-
-    def delete_document_ids(self, *, scope: ConversationScope, document_ids: list[int]) -> int:
-        if not document_ids:
-            return 0
-        deleted = 0
-        for document_id in document_ids:
-            cursor = self.connection.execute(
-                """
-                UPDATE documents
-                SET deleted_at = CURRENT_TIMESTAMP
-                WHERE deleted_at IS NULL
-                  AND user_id = ?
-                  AND id = ?
-                """,
-                (scope.user_id, document_id),
-            )
-            deleted += int(cursor.rowcount)
-        self.connection.commit()
-        return deleted
 
     @staticmethod
-    def _to_result(
-        row: sqlite3.Row,
-        kind: str,
-        query_embedding: list[float],
-    ) -> MemorySearchResult:
-        embedding = json.loads(row["embedding_json"])
-        return MemorySearchResult(
-            id=int(row["id"]),
-            kind=kind,  # type: ignore[arg-type]
-            title=str(row["title"]),
-            text=str(row["text"]),
-            score=cosine_similarity(query_embedding, embedding),
-            source_message_id=str(row["source_message_id"]) if row["source_message_id"] else None,
-            created_at=str(row["created_at"]),
-            source_location=source_location(row["guild_id"]),
+    def preference_scope(scope: Scope):
+        return "user:" + scope.user
+
+    def save_memory(self, scope: Scope, msg: str, kind: str, name: str, value: str):
+        owner = self.preference_scope(scope) if kind == "language" else scope.key
+        with self.db:
+            previous = self.db.execute(
+                "SELECT result FROM mutations WHERE scope=? AND msg=?", (scope.key, msg)
+            ).fetchone()
+            if previous:
+                return int(previous[0])
+            # A slow background decision cannot undo a newer explicit correction from this owner.
+            current = self.db.execute(
+                "SELECT source FROM memory WHERE scope=? AND kind=? AND name=?", (owner, kind, name)
+            ).fetchone()
+            if current:
+                incoming_id, previous_id = msg.split(":")[0], current[0].split(":")[0]
+                seqs = dict(
+                    self.db.execute(
+                        "SELECT msg,seq FROM raw_messages WHERE msg IN (?,?) AND role='user'",
+                        (incoming_id, previous_id),
+                    )
+                )
+                if seqs.get(incoming_id, 0) and seqs.get(previous_id, 0) > seqs[incoming_id]:
+                    self.db.execute("INSERT INTO mutations VALUES(?,?,?)", (scope.key, msg, "0"))
+                    return 0
+            self.db.execute(
+                """INSERT OR IGNORE INTO memory_versions SELECT scope,id,version,value,source FROM memory
+                   WHERE scope=? AND kind=? AND name=?""",
+                (owner, kind, name),
+            )
+            row = self.db.execute(
+                """INSERT INTO memory(scope,kind,name,value,source,version,active) VALUES(?,?,?,?,?,1,1)
+                   ON CONFLICT(scope,kind,name) DO UPDATE SET value=excluded.value,source=excluded.source,
+                   active=1,version=version+1 RETURNING id""",
+                (owner, kind, name, value, msg),
+            ).fetchone()
+            self.db.execute("INSERT INTO mutations VALUES(?,?,?)", (scope.key, msg, str(row[0])))
+            return row[0]
+
+    def change_active(self, scope: Scope, msg: str, memory_id: int, active: bool):
+        with self.db:
+            previous = self.db.execute(
+                "SELECT result FROM mutations WHERE scope=? AND msg=?", (scope.key, msg)
+            ).fetchone()
+            if previous:
+                return bool(int(previous[0]))
+            changed = self.db.execute(
+                "UPDATE memory SET active=?,source=?,version=version+1 WHERE id=? AND scope IN (?,?) AND active!=?",
+                (active, msg, memory_id, scope.key, self.preference_scope(scope), active),
+            ).rowcount
+            self.db.execute("INSERT INTO mutations VALUES(?,?,?)", (scope.key, msg, str(changed)))
+            return bool(changed)
+
+    def snapshot(self, scope: Scope, ids=None):
+        return json.dumps(
+            sorted((r["id"], r["version"]) for r in self.memories(scope) if ids is None or r["id"] in ids)
         )
 
+    def request_clear(self, scope: Scope, source: str, ttl=600, ids=None):
+        with self.db:
+            self.db.execute(
+                "INSERT OR IGNORE INTO approvals VALUES(?,?,?,?,?,?)",
+                (
+                    uuid4().hex[:12],
+                    scope.key,
+                    source,
+                    self.snapshot(scope, ids),
+                    "all" if ids is None else "subset",
+                    time.time() + ttl,
+                ),
+            )
+        return self.db.execute(
+            "SELECT ticket FROM approvals WHERE scope=? AND source=?", (scope.key, source)
+        ).fetchone()[0]
 
-def source_location(guild_id: object) -> str:
-    return "DM" if guild_id is None else "서버"
+    def approve_clear(self, scope: Scope, ticket: str):
+        with self.db:
+            return self._approve_clear(scope, ticket)
 
+    def resolve_ticket(self, scope, source, ticket, reject):
+        with self.db:
+            if reject:
+                changed = self.db.execute(
+                    "DELETE FROM approvals WHERE scope=? AND ticket=?", (scope.key, ticket)
+                ).rowcount
+                answer = "요청을 취소했습니다." if changed else "이 위치에서 취소할 해당 요청이 없습니다."
+            else:
+                success = self._approve_clear(scope, ticket, source)
+                answer = (
+                    "승인한 메모리를 삭제했습니다."
+                    if success
+                    else "실행하지 않았습니다. 대상 변경·만료·승인 범위를 확인해 주세요."
+                )
+            self.db.execute(
+                "UPDATE inbox SET response=? WHERE id=? AND scope=?", (json.dumps(["final", answer]), source, scope.key)
+            )
+            return answer
 
-def current_timestamp() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f")
+    def _approve_clear(self, scope, ticket, source=None):
+        row = self.db.execute(
+            "DELETE FROM approvals WHERE scope=? AND ticket=? RETURNING snapshot,expires,mode,source",
+            (scope.key, ticket),
+        ).fetchone()
+        if not row or row["expires"] <= time.time():
+            return False
+        ids = None if row["mode"] == "all" else {i for i, _ in json.loads(row["snapshot"])}
+        if ids is not None:
+            # Pending tickets created by older routers can have pinned IDs for a whole-scope request.
+            incoming = self.db.execute(
+                "SELECT request FROM inbox WHERE scope=? AND id=?", (scope.key, row["source"].partition(":")[0])
+            ).fetchone()
+            if incoming and requests_all_memories(json.loads(incoming["request"])["text"]):
+                ids = None
+        if row["snapshot"] != self.snapshot(scope, ids):
+            return False
+        for memory_id, version in json.loads(row["snapshot"]):
+            self.db.execute(
+                "UPDATE memory SET active=0,source=COALESCE(?,source),version=version+1 WHERE id=? AND version=?",
+                (source, memory_id, version),
+            )
+        return True
 
-
-def task_item_from_row(row: sqlite3.Row) -> TaskItem:
-    return TaskItem(
-        id=int(row["id"]),
-        user_id=str(row["user_id"]),
-        conversation_id=str(row["conversation_id"]),
-        channel_id=str(row["channel_id"]) if row["channel_id"] else None,
-        title=str(row["title"]),
-        status=str(row["status"]),
-        priority=str(row["priority"]) if row["priority"] else "normal",
-        due_at=str(row["due_at"]) if row["due_at"] else None,
-        created_at=str(row["created_at"]),
-        completed_at=str(row["completed_at"]) if row["completed_at"] else None,
-        reminder_sent_at=str(row["reminder_sent_at"]) if row["reminder_sent_at"] else None,
-        deleted_at=str(row["deleted_at"]) if row["deleted_at"] else None,
-        source_message_id=str(row["source_message_id"]) if row["source_message_id"] else None,
-        source_location=source_location(row["guild_id"]),
-    )
-
-
-def reminder_item_from_row(row: sqlite3.Row) -> ReminderItem:
-    return ReminderItem(
-        id=int(row["id"]),
-        user_id=str(row["user_id"]),
-        conversation_id=str(row["conversation_id"]),
-        channel_id=str(row["channel_id"]) if row["channel_id"] else None,
-        text=str(row["text"]),
-        remind_at=str(row["remind_at"]),
-        created_at=str(row["created_at"]),
-        sent_at=str(row["sent_at"]) if row["sent_at"] else None,
-        source_message_id=str(row["source_message_id"]) if row["source_message_id"] else None,
-        source_location=source_location(row["guild_id"]),
-    )
-
-
-def normalize_task_priority(priority: str | None) -> str:
-    normalized = (priority or "normal").strip().casefold()
-    if normalized in {"high", "높음", "높아", "중요", "긴급", "urgent", "important"}:
-        return "high"
-    if normalized in {"low", "낮음", "낮아", "나중", "천천히"}:
-        return "low"
-    return "normal"
-
-
-def normalize_due_cutoff(value: str) -> str:
-    cleaned = value.strip()
-    if is_date_only_due(cleaned):
-        return f"{cleaned} 23:59"
-    return cleaned
-
-
-def normalize_due_start(value: str) -> str:
-    cleaned = value.strip()
-    return cleaned
-
-
-def is_date_only_due(value: str) -> bool:
-    return len(value) == 10 and value[4] == "-" and value[7] == "-" and value.replace("-", "").isdigit()
-
-
-def normalize_memory_text(text: str) -> str:
-    return " ".join(text.casefold().split())
-
-
-def normalize_document_text(text: str) -> str:
-    return "\n".join(line.strip() for line in text.casefold().splitlines() if line.strip())
-
-
-def document_content_hash(text: str) -> str:
-    normalized = normalize_document_text(text)
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-
-
-def normalize_cache_key(value: str) -> str:
-    return " ".join(value.casefold().split())
-
-
-def normalize_url_cache_key(url: str) -> str:
-    from urllib.parse import urlsplit, urlunsplit
-
-    parsed = urlsplit(normalize_naver_blog_url(url.strip()))
-    scheme = parsed.scheme.lower() or "https"
-    netloc = parsed.netloc.lower()
-    path = parsed.path.rstrip("/") or "/"
-    return urlunsplit((scheme, netloc, path, parsed.query, ""))
-
-
-def timestamp_after_minutes(minutes: int) -> str:
-    return (datetime.now(UTC) + timedelta(minutes=max(1, minutes))).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def search_result_to_cache_item(result: SearchResult) -> dict[str, str | None]:
-    return {
-        "title": result.title,
-        "url": result.url,
-        "snippet": result.snippet,
-        "category": result.category,
-        "source": result.source,
-        "published_at": result.published_at,
-    }
-
-
-def search_result_from_cache_item(item: dict[str, object]) -> SearchResult:
-    return SearchResult(
-        title=str(item.get("title", "")),
-        url=str(item.get("url", "")),
-        snippet=str(item.get("snippet", "")),
-        category=str(item.get("category", "webkr")),
-        source=str(item.get("source", "naver")),
-        published_at=str(item["published_at"]) if item.get("published_at") else None,
-    )
+    def reserve_search(self, day: str, user: str, limit: int):
+        if limit < 1:
+            return False
+        with self.db:
+            return bool(
+                self.db.execute(
+                    """INSERT INTO search_usage VALUES(?,?,1) ON CONFLICT(day,user) DO UPDATE SET
+                   count=count+1 WHERE count<? RETURNING count""",
+                    (day, user, limit),
+                ).fetchone()
+            )
