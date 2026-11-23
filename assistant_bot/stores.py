@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS inbox(
     id TEXT PRIMARY KEY, scope TEXT NOT NULL, request TEXT NOT NULL, response TEXT NOT NULL DEFAULT '',
     done INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS by_inbox_state ON inbox(done,scope);
+CREATE INDEX IF NOT EXISTS by_inbox_scope ON inbox(scope);
 CREATE TABLE IF NOT EXISTS receipts(msg TEXT PRIMARY KEY,job TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS jobs(
     id TEXT PRIMARY KEY, scope TEXT NOT NULL, epoch INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
@@ -80,6 +81,20 @@ CREATE TABLE IF NOT EXISTS search_usage(day TEXT NOT NULL,user TEXT NOT NULL, co
     PRIMARY KEY(day,user));
 CREATE INDEX IF NOT EXISTS by_conversation ON raw_messages(scope,epoch,seq);
 CREATE INDEX IF NOT EXISTS by_job_scope ON jobs(scope,state);
+CREATE TABLE IF NOT EXISTS model_calls(
+    id INTEGER PRIMARY KEY, job TEXT, model TEXT NOT NULL, purpose TEXT NOT NULL, retry INTEGER NOT NULL,
+    started REAL NOT NULL, seconds REAL, status TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER);
+CREATE INDEX IF NOT EXISTS by_call_time ON model_calls(started);
+CREATE INDEX IF NOT EXISTS by_call_job ON model_calls(job);
+CREATE TABLE IF NOT EXISTS collection_info(id INTEGER PRIMARY KEY CHECK(id=1), started REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS request_errors(job TEXT NOT NULL, created REAL NOT NULL, stage TEXT NOT NULL, error TEXT);
+CREATE INDEX IF NOT EXISTS by_error_job ON request_errors(job);
+CREATE TABLE IF NOT EXISTS memory_version_states(
+    memory_id INTEGER NOT NULL, version INTEGER NOT NULL, active INTEGER NOT NULL, PRIMARY KEY(memory_id,version));
+CREATE TRIGGER IF NOT EXISTS archive_memory_version BEFORE UPDATE ON memory WHEN NEW.version!=OLD.version BEGIN
+    INSERT OR IGNORE INTO memory_versions VALUES(OLD.scope,OLD.id,OLD.version,OLD.value,OLD.source);
+    INSERT OR IGNORE INTO memory_version_states VALUES(OLD.id,OLD.version,OLD.active);
+END;
 """
 
 
@@ -105,6 +120,12 @@ class JedaStore:
 
     def close(self):
         self.db.close()
+
+    def record_error(self, job, stage, exc):
+        with self.db:
+            self.db.execute(
+                "INSERT INTO request_errors VALUES(?,?,?,?)", (job, time.time(), stage, type(exc).__name__)
+            )
 
     def session(self, scope: Scope):
         now = time.time()
@@ -206,11 +227,6 @@ class JedaStore:
                 if seqs.get(incoming_id, 0) and seqs.get(previous_id, 0) > seqs[incoming_id]:
                     self.db.execute("INSERT INTO mutations VALUES(?,?,?)", (scope.key, msg, "0"))
                     return 0
-            self.db.execute(
-                """INSERT OR IGNORE INTO memory_versions SELECT scope,id,version,value,source FROM memory
-                   WHERE scope=? AND kind=? AND name=?""",
-                (owner, kind, name),
-            )
             row = self.db.execute(
                 """INSERT INTO memory(scope,kind,name,value,source,version,active) VALUES(?,?,?,?,?,1,1)
                    ON CONFLICT(scope,kind,name) DO UPDATE SET value=excluded.value,source=excluded.source,

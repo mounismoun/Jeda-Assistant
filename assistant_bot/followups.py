@@ -55,14 +55,35 @@ def work_item(row, *, reply=False, detailed=False):
             item = {k: v for k, v in call.items() if v and k != "pdf_mode"}
             item["query"] = excerpt(call.get("question") or call.get("query"), 90)
             item["status"] = result.get("status", "unconfirmed")
+            plan_step = step.get("plan", {})
+            for review in plan_step.get("reviews", [plan_step.get("review", {})]):
+                if review.get("index") == i:
+                    item["review_reason"] = review["reason"]
+            for ref in result.get("file_refs", []):
+                files[ref["id"]] = ref
             for k in ("source", "opened", "urls", "feeds", "unread"):
                 if result.get(k):
                     v = result[k]
                     item[k] = v[:4] if isinstance(v, list) and not detailed else v
-            if detailed or item["status"] in {"failed", "partial"}:
+            if detailed or call["name"] == "file" or item["status"] in {"failed", "partial"}:
                 item["text"] = excerpt(result.get("text"), 900 if detailed else 120)
             if detailed and result.get("records"):
                 item["records"] = result["records"]
+            if detailed and result.get("visual_attempt"):
+                item["visual_attempt"] = result["visual_attempt"]
+            elif detailed and plan_step.get("identify_image") and call["name"] == "web" and result.get("actions"):
+                # Older jobs stored source visits and queries before search strategies were tracked.
+                targets = {c["target"] for c in plan_step["calls"] if c["name"] == "file" and c.get("target")}
+                target = call.get("image_target") or (next(iter(targets)) if len(targets) == 1 else None)
+                if target:
+                    terms = [a["term"] for a in result["actions"] if a["action"] == "search"]
+                    item["visual_attempt"] = dict(
+                        target=target,
+                        approach="legacy",
+                        query=call.get("question", ""),
+                        queries=terms,
+                        pages=result.get("visited", []),
+                    )
             tools.append(item)
     # Resolve unique names only on numbered lines of the answer actually delivered.
     displayed = {}
@@ -103,8 +124,12 @@ def selected_work(store, scope, epoch, ids):
         if row:
             item = work_item(row, detailed=True)
             items.append(item)
-            if not item["tools"] and len(pending) < 12:
-                pending.extend(i for i in item["source_jobs"] if i not in pending)
+            # A web-only continuation can point at an original attachment in an earlier job.
+            needs_source = not item["tools"] or (
+                not item["files"] and any(t.get("visual_attempt") for t in item["tools"])
+            )
+            if needs_source and len(pending) < 12:
+                pending.extend([i for i in item["source_jobs"] if i not in pending][: 12 - len(pending)])
     return items
 
 

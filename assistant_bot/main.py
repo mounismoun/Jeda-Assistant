@@ -16,7 +16,8 @@ def main() -> None:
     if not token:
         raise ValueError("Discord에서 실행하려면 DISCORD_TOKEN을 설정하세요.")
     configure_logging()
-    bot = JedaDiscord(Engine(config, JedaStore(config.database), Models(config)))
+    store = JedaStore(config.database)
+    bot = JedaDiscord(Engine(config, store, Models(config, metrics_db=store.db)))
     bot.run(token)
 
 

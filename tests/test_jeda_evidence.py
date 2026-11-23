@@ -1,4 +1,5 @@
 import asyncio
+import json
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -146,12 +147,12 @@ def test_search_rechecks_mismatched_citation_only_once(recovers):
     valid = cited_page("검증한 결론", source)
     create = AsyncMock(
         side_effect=[
-            SimpleNamespace(status="completed", model_dump=lambda: invalid),
-            SimpleNamespace(status="completed", model_dump=lambda: valid if recovers else invalid),
+            SimpleNamespace(content=json.dumps({"status": "completed", **body}).encode())
+            for body in (invalid, valid if recovers else invalid)
         ]
     )
     model = object.__new__(Models)
-    model.client = SimpleNamespace(responses=SimpleNamespace(create=create))
+    model.client = SimpleNamespace(responses=SimpleNamespace(with_raw_response=SimpleNamespace(create=create)))
     task = model.search("model", "low", "근거 확인", "원래 질문")
     if recovers:
         result = asyncio.run(task)

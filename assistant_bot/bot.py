@@ -5,12 +5,15 @@ import hashlib
 import json
 import logging
 import re
+import time
 from contextlib import AsyncExitStack
 from datetime import UTC, datetime
 
 import discord
+from aiohttp import web
 from discord.http import Route
 
+from assistant_bot.dashboard import HOST, PORT, dashboard_app
 from assistant_bot.runtime import Engine, Output, Request
 from assistant_bot.stores import Scope
 
@@ -39,8 +42,35 @@ class JedaDiscord(discord.Client):
         intents.message_content = True
         super().__init__(intents=intents, allowed_mentions=discord.AllowedMentions.none())
         self.engine = engine
+        self.dashboard_runner = None
+        self.connected = False
+        self.last_connected = None
+
+    async def setup_hook(self):
+        def status():
+            return {"connected": self.connected, "last_connected": self.last_connected}
+
+        runner = web.AppRunner(dashboard_app(self.engine.cfg.database, status), access_log=None)
+        await runner.setup()
+        try:
+            await web.TCPSite(runner, HOST, PORT).start()
+        except OSError:
+            await runner.cleanup()
+            logging.getLogger(__name__).exception("로컬 관리창 포트 %s를 열 수 없습니다.", PORT)
+            return
+        self.dashboard_runner = runner
+        logging.getLogger(__name__).info("로컬 상태 관리창 http://%s:%s", HOST, PORT)
+
+    async def on_resumed(self):
+        self.connected = True
+        self.last_connected = time.time()
+
+    async def on_disconnect(self):
+        self.connected = False
 
     async def on_ready(self):
+        self.connected = True
+        self.last_connected = time.time()
         await self.change_presence(activity=discord.CustomActivity(name="Jeda Assistant · 서버에서 @멘션해 주세요"))
         # Only unfinished work owned by the Discord adapter is recoverable here.
         rows = self.engine.store.db.execute(
@@ -93,7 +123,18 @@ class JedaDiscord(discord.Client):
             text = re.sub(rf"<@!?{self.user.id}>", "", message.content).strip()
             await self.engine.submit(
                 scope,
-                Request(str(message.id), text, attachment_refs(message), reply, original=message.content),
+                Request(
+                    str(message.id),
+                    text,
+                    attachment_refs(message),
+                    reply,
+                    original=message.content,
+                    discord_names={
+                        "server": message.guild.name,
+                        "channel": message.channel.name,
+                        "user_display_name": message.author.display_name,
+                    },
+                ),
                 self.output(scope, message, first_reply=first_reply),
             )
 
@@ -178,6 +219,9 @@ class JedaDiscord(discord.Client):
 
     async def close(self):
         try:
+            if self.dashboard_runner is not None:
+                await self.dashboard_runner.cleanup()
+                self.dashboard_runner = None
             await self.engine.shutdown()
         finally:
             await super().close()

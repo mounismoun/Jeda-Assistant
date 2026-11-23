@@ -131,7 +131,7 @@ def test_steer_inherits_each_targets_effort_unless_the_task_changes(store, chang
             "INSERT INTO jobs(id,scope,epoch,state,request) VALUES(?,?,1,'running',?)",
             (key, A.key, json.dumps(payload)),
         )
-        engine.steers[key] = [asyncio.Queue(), (role, effort), 0]
+        engine.steers[key] = [asyncio.Queue(), (role, effort), 0, None]
     asyncio.run(engine.submit(A, Request("next", instruction), Output(AsyncMock(return_value="ack"), None, None)))
     for key, previous in routes.items():
         update = json.loads(engine.job(key)["updates"])[0]["plan"]
@@ -327,6 +327,50 @@ def test_router_keeps_all_unsummarized_messages_in_sequence(store):
     assert ctx["summary"] == "이전 요약"
     assert [r["text"] for r in ctx["recent"]] == content
     assert ctx["current"]["text"] == req.text
+
+
+@pytest.mark.parametrize("question", ["이 서버 이름 뭐야?", "이 채팅창 이름 뭐야?", "내 이름이 뭐야?"])
+def test_discord_names_reach_router_and_final_context(store, question):
+    names = {"server": "테스트 서버", "channel": "개발-질문", "user_display_name": "moun?"}
+    request = Request("message", question, discord_names=names)
+    engine = Engine(None, store, None)
+    engine.register(A, request)
+    stored = store.db.execute("SELECT request FROM inbox WHERE id=?", (request.id,)).fetchone()
+    restored = Request(**json.loads(stored[0]))
+    assert build_context(store, A, request)["current"]["discord_names"] == names
+    assert build_context(store, A, restored, final=True)["current"]["discord_names"] == names
+    legacy = Request(**{"id": "old", "text": question})
+    assert "discord_names" not in build_context(store, A, legacy)["current"]
+
+
+def test_name_confirmation_sends_exact_discord_value_despite_previous_typo(store):
+    store.record(A, "earlier", "assistant", "표시 이름은 𝐦𝐨𝐮?입니다.")
+    request = Request("confirm", "내 이름이 그게 확실한가", discord_names={"user_display_name": "𝐦𝐨𝐮𝐧?"})
+    plan = dict(
+        relation="new",
+        targets=[],
+        replaces=[],
+        role="everyday",
+        effort="none",
+        delivery={"direct": "short"},
+        question="",
+        unsupported="",
+        partial=False,
+        verbatim_value=False,
+        calls=[],
+        preferences=[],
+        language="ko",
+        storage_instruction="",
+        discord_name_reply=[{"prefix": "표시 이름은 ", "field": "user_display_name", "suffix": "입니다."}],
+    )
+    model = SimpleNamespace(text=AsyncMock(return_value=plan))
+    engine = Engine(Settings("test"), store, model)
+    send = AsyncMock(return_value="response")
+    asyncio.run(engine.submit(A, request, Output(send, None, None)))
+    assert send.await_args.args[:2] == ("final", "표시 이름은 𝐦𝐨𝐮𝐧?입니다.")
+    history = build_context(store, A, Request("next", "확인"))["recent"]
+    assert [entry["text"] for entry in history] == ["표시 이름은 𝐦𝐨𝐮?입니다.", request.text, "표시 이름은 𝐦𝐨𝐮𝐧?입니다."]
+    model.text.assert_awaited_once()
 
 
 def test_router_uses_summary_boundary_after_compression(store):

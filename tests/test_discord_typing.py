@@ -40,6 +40,7 @@ def test_typing_covers_reference_lookup_and_first_response(first):
         return {"id": "123"}
 
     async def submit(scope, request, output):
+        assert request.discord_names == {"server": "제다 서버", "channel": "개발 스레드", "user_display_name": "moun?"}
         events.append("route")
         await output.send(first, first, "first")
         if first == "ack":
@@ -50,11 +51,11 @@ def test_typing_covers_reference_lookup_and_first_response(first):
     bot._connection.user = SimpleNamespace(id=3)
     bot.http.request = send
     msg = SimpleNamespace(
-        guild=SimpleNamespace(id=1),
-        author=SimpleNamespace(id=5, bot=False),
+        guild=SimpleNamespace(id=1, name="제다 서버"),
+        author=SimpleNamespace(id=5, bot=False, display_name="moun?"),
         id=9,
         content="<@3> 질문",
-        channel=SimpleNamespace(id=2, typing=typing, fetch_message=fetch),
+        channel=SimpleNamespace(id=2, name="개발 스레드", typing=typing, fetch_message=fetch),
         attachments=[],
         reference=SimpleNamespace(message_id=6, channel_id=2),
     )

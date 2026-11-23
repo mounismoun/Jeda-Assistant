@@ -6,6 +6,15 @@
 !/.gitignore
 !/.env.example
 !/pyproject.toml
+!/start-bot.bat
+!/start-image-trial.bat
+!/tests/live/image_eval/trial-2026-11-21/*.json
+!/tests/live/image_eval/trial-2026-11-21/candidate.patch
+!/tests/live/image_eval/trial-2026-11-21/gallery.zip
+!/tests/live/image_eval/trial-2026-11-22/*.json
+!/tests/live/image_eval/trial-2026-11-22/candidate.patch
+!/assistant_bot/dashboard_assets/*.html
+!/assistant_bot/dashboard_assets/*.css
 
 # 실행·빌드 산출물 안의 문서와 소스 사본도 제외한다.
 /data/

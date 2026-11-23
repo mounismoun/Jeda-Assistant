@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ pages[view] }} · 제다 관리창</title>
+  {% if view=='overview' %}<meta http-equiv="refresh" content="30">{% endif %}
+  <link rel="stylesheet" href="/dashboard.css">
+</head>
+{% macro empty(message) %}<p class="empty">{{ message }}</p>{% endmacro %}
+{% macro state(value) %}<span class="tag {{ 'bad' if value in ['failed','partial','unavailable'] else '' }}">{{ states.get(value, value or '기록됨') }}</span>{% endmacro %}
+{% macro requests(rows) %}
+{% if rows %}<div class="list">{% for r in rows %}
+<a class="entry" href="{{ link('request',id=r.id) }}"><span class="avatar">{{ places[r.scope].author[:1] if r.scope is defined and r.scope in places else '›' }}</span>
+<span class="grow"><strong class="clip">{{ r.content or '첨부 메시지' }}</strong><small>{{ r.created|stamp }}{% if r.scope is defined and r.scope in places %} · {{ places[r.scope].author }} · #{{ places[r.scope].room }}{% endif %}</small></span>
+{% if r.state is defined %}{{ state(r.state) }}{% endif %}<span aria-hidden="true">›</span></a>
+{% endfor %}</div>{% else %}{{ empty('표시할 요청이 없습니다.') }}{% endif %}{% endmacro %}
+{% macro dates() %}<label>시작일<input type="date" name="start" value="{{ p.get('start','') }}"></label><label>종료일<input type="date" name="end" value="{{ p.get('end','') }}"></label>{% endmacro %}
+{% macro pager() %}<div class="pager">{% if page>1 %}<a href="{{ link(view,**dict(p,page=page-1)) }}">‹ 이전</a>{% endif %}<span>{{ page }} 페이지</span>{% if more %}<a href="{{ link(view,**dict(p,page=page+1)) }}">다음 ›</a>{% endif %}</div>{% endmacro %}
+{% macro user_links(target) %}
+<div class="directory"><strong>사용자</strong><div>
+<a class="chip {{ 'selected' if not p.user }}" href="{{ link(target) }}">전체</a>
+{% for uid,name in users.items() %}<a title="{{ uid }}" class="chip {{ 'selected' if p.user==uid }}" href="{{ link(target,user=uid) }}">{{ name }}<small>{{ uid[-5:] }}</small></a>{% endfor %}
+</div></div>{% endmacro %}
+{% macro call_table(rows, detailed=false) %}
+<div class="scroll"><table><thead><tr>{% if detailed %}<th>호출 시각</th>{% endif %}<th>모델</th><th>용도</th>
+{% if detailed %}<th>상태</th>{% else %}<th>호출</th><th>실패</th>{% endif %}<th>재시도</th><th>입력 토큰</th><th>출력 토큰</th><th>{{ '소요' if detailed else '평균 소요' }}</th></tr></thead>
+<tbody>{% for r in rows %}<tr>{% if detailed %}<td>{{ r.started|stamp }}</td>{% endif %}<td>{{ r.model }}</td><td>{{ r.purpose }}</td>
+{% if detailed %}<td>{{ state(r.status) }}</td><td>{{ '예' if r.retry else '—' }}</td><td>{{ r.input_tokens|number }}</td><td>{{ r.output_tokens|number }}</td><td>{{ ('%.2f초'|format(r.seconds)) if r.seconds is not none else '—' }}</td>
+{% else %}<td>{{ r.calls|number }}</td><td>{{ r.failures|number }}</td><td>{{ r.retries|number }}</td><td>{{ r.input|number }}</td><td>{{ r.output|number }}</td><td>{{ ('%.2f초'|format(r.latency)) if r.latency is not none else '—' }}</td>{% endif %}</tr>{% endfor %}</tbody></table></div>{% endmacro %}
+<body>
+<aside><a class="brand" href="/"><b>J</b><span>Jeda Assistant</span></a><div class="nav-label">상태 관리</div>
+<nav aria-label="주 메뉴">{% for key,symbol in [('overview','◫'),('conversations','☷'),('memories','◇'),('stats','▥')] %}
+<a href="{{ link(key) }}" {% if view==key or (view=='request' and key=='conversations') %}aria-current="page"{% endif %}><span aria-hidden="true">{{ symbol }}</span>{{ pages[key] }}</a>{% endfor %}</nav>
+<div class="side-foot"><strong><i></i>로컬 관리창</strong><small>127.0.0.1 · 읽기 전용</small></div></aside>
+<main><header><div><span class="crumb">제다 관리창 &nbsp;/&nbsp; {{ pages[view] }}</span><h1>{{ pages[view] }}</h1></div>
+<span class="connection {{ 'online' if status.connected }}"><i></i>Discord {{ '연결됨' if status.connected else '연결 대기' }}</span></header>
+{% if view=='overview' %}
+<section class="cards">{% for label in ['오늘 사용자 요청','오늘 모델 호출','진행 중인 작업','활성 메모리'] %}
+<a class="card" href="{{ [link('conversations',start=today,end=today),link('stats',start=today,end=today,period='hour'),'#running',link('memories')][loop.index0] }}"><span>{{ label }}</span><strong>{{ counts[loop.index0]|number }}</strong></a>{% endfor %}</section>
+<div class="overview-grid"><section class="panel"><div class="heading"><h2>최근 요청</h2><a href="/conversations">대화 전체 ›</a></div>{{ requests(recent) }}</section>
+<div class="stack"><section class="panel"><div class="heading"><h2>봇 연결</h2></div><dl><dt>마지막 연결</dt><dd>{{ status.last_connected|stamp }}</dd><dt>마지막 요청</dt><dd>{{ last|stamp }}</dd></dl></section>
+<section class="panel" id="running"><div class="heading"><h2>진행 중인 작업</h2></div>{% if running %}{{ requests(running) }}{% else %}{{ empty('진행 중인 작업이 없습니다.') }}{% endif %}</section>
+<section class="panel"><div class="heading"><h2>최근 오류가 발생한 요청</h2></div>{{ requests(failures) }}</section></div></div>
+{% elif view=='conversations' %}
+<section class="panel filters">{{ user_links('conversations') }}
+{% if p.user %}<div class="directory"><strong>서버</strong><div><a class="chip {{ 'selected' if not p.guild }}" href="{{ link(view,user=p.user) }}">전체</a>{% for gid,name in servers.items() %}<a class="chip {{ 'selected' if p.guild==gid }}" href="{{ link(view,user=p.user,guild=gid) }}" title="{{ gid }}">{{ name }}</a>{% endfor %}</div></div>{% endif %}
+{% if p.guild %}<div class="directory"><strong>채널</strong><div><a class="chip {{ 'selected' if not p.channel }}" href="{{ link(view,user=p.user,guild=p.guild) }}">전체</a>{% for cid,name in channels.items() %}<a class="chip {{ 'selected' if p.channel==cid }}" href="{{ link(view,user=p.user,guild=p.guild,channel=cid) }}" title="{{ cid }}"># {{ name }}</a>{% endfor %}</div></div>{% endif %}
+<form action="/conversations">
+{% for field in ['user','guild','channel'] %}{% if p.get(field) %}<input type="hidden" name="{{ field }}" value="{{ p[field] }}">{% endif %}{% endfor %}
+<label class="grow">문구 검색<input type="search" name="q" placeholder="대화 원문 검색" value="{{ p.get('q','') }}"></label>{{ dates() }}
+<label>실행 도구<select name="tool"><option value="">전체</option>{% for tool in tools %}<option {{ 'selected' if p.tool==tool }}>{{ tool }}</option>{% endfor %}</select></label>
+<label class="check"><input type="checkbox" name="attachments" value="1" {{ 'checked' if p.attachments }}>첨부 포함</label>
+<label class="check"><input type="checkbox" name="failed" value="1" {{ 'checked' if p.failed }}>오류 포함</label><button>조회</button></form></section>
+<section class="panel"><div class="heading"><h2>대화 기록</h2>{% if p.user %}<a href="{{ link('memories',user=p.user) }}">사용자 메모리 ›</a>{% endif %}</div>
+{% if not messages %}{{ empty('조건에 맞는 대화가 없습니다.') }}{% endif %}
+{% for m in messages %}{% set place=places.get(m.scope,{}) %}
+{% if p.channel and loop.changed(m.epoch) %}<div class="session">세션 {{ m.epoch }}</div>{% endif %}
+<article class="message"><div class="meta"><strong>{{ place.author if m.role=='user' else '제다' }}</strong><span>{{ place.server }} / #{{ place.room }}</span><span>세션 {{ m.epoch }}</span><time>{{ m.created|stamp }}</time></div>
+<div class="prose">{{ m.content }}</div>{% if m.files %}<small>첨부 · {{ m.files|join(', ') }}</small>{% endif %}
+{% if m.job %}<a class="detail-link" href="{{ link('request',id=m.job) }}">요청 상세 ›</a>{% endif %}</article>{% endfor %}
+{{ pager() }}</section>
+{% elif view=='request' %}
+{% set place=places.get(item.scope,{}) %}
+<section class="panel"><div class="heading"><h2>{{ place.author or '사용자' }}의 요청</h2>{{ state(item.state) }}</div>
+<div class="inside"><a href="{{ link('conversations',user=place.user,guild=place.guild,channel=place.channel) }}">{{ place.server }} / #{{ place.room }}</a>
+<p class="prose">{{ item.req.original or item.req.text or '첨부 메시지' }}</p>
+{% for a in item.req.attachments %}<span class="chip">{{ a.name }}</span>{% endfor %}
+{% if item.req.reply %}<details><summary>답장 대상</summary><pre>{{ item.req.reply|tojson(indent=2) }}</pre></details>{% endif %}
+{% if item.plan %}<p class="muted">응답 역할 {{ item.plan.role }} · 추론 {{ item.plan.effort }} · 계획한 도구 {{ item.plan.calls|map(attribute='name')|join(', ') or '없음' }}</p>{% endif %}
+{% for parent in item.parents %}<a href="{{ link('request',id=parent.id) }}">정정 대상 요청 ›</a>{% endfor %}
+{% for u in item.changes %}<p>정정 {{ loop.index }} · <a href="{{ link('request',id=u.id) }}">{{ u.text }}</a></p>{% endfor %}
+</div></section>
+<section class="panel"><div class="heading"><h2>답변과 전송</h2></div><div class="inside"><div class="prose">{{ item.answer or '아직 기록된 답변이 없습니다.' }}</div>
+<small>첫 응답 등 전송 확인 {{ item.receipts|length }}건 · 최종 답변 전송 확인 {{ item.sent|selectattr('msg')|list|length }}조각</small></div></section>
+<section class="panel"><div class="heading"><h2>실행한 도구</h2></div>
+{% for key,e in item.evidence.items() %}<details class="inside"><summary>{{ e.tool }} · {{ states.get(e.status,e.status) }}</summary>
+<div class="prose">{{ e.text }}</div>{% if e.feeds %}<small>피드 · {{ e.feeds|join(', ') }}</small>{% endif %}
+{% for url in e.urls %}<p class="mono">{{ url }}</p>{% endfor %}<details><summary>원본 근거와 판독 범위</summary><pre>{{ e|tojson(indent=2) }}</pre></details></details>{% else %}{{ empty('이 요청에 기록된 도구 실행이 없습니다.') }}{% endfor %}</section>
+<section class="panel"><div class="heading"><h2>모델 호출</h2></div>{% if item.calls %}{{ call_table(item.calls,true) }}{% else %}{{ empty('이 요청에 수집된 모델 호출이 없습니다.') }}{% endif %}</section>
+{% if item.errors %}<section class="panel"><div class="heading"><h2>오류 기록</h2></div>{% for e in item.errors %}<p class="inside">{{ e.created|stamp }} · {{ e.stage }} · {{ e.error }}</p>{% endfor %}</section>{% endif %}
+{% elif view=='memories' %}
+<section class="panel filters">{{ user_links('memories') }}</section>
+<section class="panel"><div class="heading"><h2>{{ users.get(p.user,'사용자') }} 메모리</h2>{% if p.user %}<a href="{{ link('conversations',user=p.user) }}">사용자 대화 ›</a>{% endif %}</div>
+{% for m in memories %}{% set place=places.get(m.scope) %}
+<details class="memory"><summary><span class="grow"><strong>{{ m.name }}</strong><small>{{ place.author ~ ' · ' ~ place.server ~ ' / #' ~ place.room if place else users.get(m.scope[5:],m.scope[5:]) ~ ' · 사용자 공통' }} · {{ m.kind }} · v{{ m.version }}</small></span>{{ state('삭제됨' if not m.active else '활성') }}</summary>
+<div class="prose">{{ m.value }}</div><a href="{{ link('request',id=m.job) }}">변경 요청 원문 ›</a>
+{% for v in m.versions %}<div class="version"><small>v{{ v.version }} · {{ '상태 미기록' if v.active is none else ('활성' if v.active else '삭제됨') }}</small><p class="prose">{{ v.value }}</p><a href="{{ link('request',id=v.job) }}">당시 요청 ›</a></div>{% endfor %}</details>
+{% else %}{{ empty('저장된 메모리가 없습니다.') }}{% endfor %}{{ pager() }}</section>
+{% elif view=='stats' %}
+<section class="panel filters"><form action="/stats"><label>집계 단위<select name="period">{% for key,value in periods.items() %}<option value="{{ key }}" {{ 'selected' if key==period }}>{{ value }}</option>{% endfor %}</select></label>{{ dates() }}<button>조회</button></form>
+<small>한국 시간 기준 · 주 시작 월요일 · 모델 호출 수집 시작 {{ collected|stamp }}</small></section>
+<section class="panel"><div class="heading"><h2>{{ periods[period] }} 사용량</h2></div>
+{% if buckets %}<div class="scroll"><table><thead><tr><th>기간</th><th>사용자 요청</th><th>모델 호출</th><th>실패</th><th>재시도</th><th>입력 토큰</th><th>출력 토큰</th><th>평균 소요</th></tr></thead><tbody>
+{% for r in buckets %}{% set measured=collected and r.last_at>=collected %}<tr><td>{{ r.bucket }}</td><td>{{ r.requests|number }}</td>
+<td>{{ r.calls if measured else '—' }} {% if r.calls %}<meter min="0" max="{{ peak }}" value="{{ r.calls }}"></meter>{% endif %}</td><td>{{ (r.failures or 0) if measured else '—' }}</td><td>{{ r.retries if measured else '—' }}</td><td>{{ r.input|number }}</td><td>{{ r.output|number }}</td><td>{{ ('%.2f초'|format(r.latency)) if r.latency is not none else '—' }}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}{{ empty('이 기간에 기록된 요청이나 호출이 없습니다.') }}{% endif %}</section>
+<section class="panel"><div class="heading"><h2>모델·용도별 호출</h2></div>{% if models %}{{ call_table(models) }}{% else %}{{ empty('이 기간에 수집된 모델 호출이 없습니다.') }}{% endif %}</section>
+<small>토큰 합계는 API가 반환한 사용량 기준입니다. 수집 전이거나 사용량이 제공되지 않은 값은 —로 표시합니다.</small>
+{% endif %}
+<footer>Jeda Assistant<span>한국 시간 · {{ now|stamp }} 기준 &nbsp; <a href="">새로고침 ↻</a></span></footer>
+</main></body></html>

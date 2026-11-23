@@ -11,5 +11,6 @@ class OperationResult(TypedDict):
     opened: NotRequired[bool]
     source_urls: NotRequired[list[str]]
     unread: NotRequired[list[str]]
+    file_refs: NotRequired[list[dict]]
     urls: NotRequired[list[str]]
     feeds: NotRequired[list[str]]

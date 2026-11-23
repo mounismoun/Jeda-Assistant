@@ -1,0 +1,629 @@
+{
+  "counts": {
+    "A": 49,
+    "B": 53
+  },
+  "failed": [],
+  "cases": {
+    "frog": {
+      "A": {
+        "distinct_reloaded": 1,
+        "unavailable": [],
+        "representative_urls": [
+          "https://tr.rbxcdn.com/180DAY-d08d82061e8dc266be07fad11ac87633/420/420/Hat/Webp/noFilter"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "frog-search": {
+      "A": {
+        "distinct_reloaded": 7,
+        "unavailable": [],
+        "representative_urls": [
+          "https://imagedelivery.net/znDGKaxxskgDbNUpqPVRFg/ph-collection-media/images/1783559.jpg/w=2560,q=75,metadata=keep",
+          "https://imagedelivery.net/znDGKaxxskgDbNUpqPVRFg/ph-collection-media/images/1783557.jpg/w=2560,q=75,metadata=keep",
+          "https://imagedelivery.net/znDGKaxxskgDbNUpqPVRFg/ph-collection-media/images/1783556.jpg/w=2560,q=75,metadata=keep",
+          "https://tr.rbxcdn.com/180DAY-b501d303121077532d736fdf7430f201/420/420/Hat/Webp/noFilter",
+          "https://tr.rbxcdn.com/180DAY-579878427407758f2862dcc4a726040c/420/420/ShoulderAccessory/Webp/noFilter",
+          "https://tr.rbxcdn.com/180DAY-fa6a187462ea36be4ac2b6d4723d42f7/420/420/Hat/Webp/noFilter",
+          "https://cdn.80.lv/api/upload/post/7803/images/5d640ac7aa7e5/contain_1200x630.jpg"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 8,
+        "unavailable": [],
+        "representative_urls": [
+          "https://thumbnail.image.rakuten.co.jp/@0_mall/book/cabinet/4559/4580714154559.jpg?_ex=128x128",
+          "https://kitan.jp/wp-content/uploads/2026/10/stroll_frog_fit_2.0_DP.jpg",
+          "https://kitan.jp/wp-content/uploads/2026/11/stroll_frog_fit_jewelry_DP.jpg",
+          "https://kitan.jp/wp-content/uploads/2022/05/osanpo_frog_pop_DP.jpg",
+          "https://www.kaktusfilm.com/assets/crazy-frog.jpg",
+          "https://www.cfentertainment.se/assets/axel-f-city.jpg",
+          "https://www.cfentertainment.se/assets/saxobeat-cowboy.jpg",
+          "https://www.cfentertainment.se/assets/source-3.jpg"
+        ]
+      }
+    },
+    "keyring": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "agent": {
+      "A": {
+        "distinct_reloaded": 7,
+        "unavailable": [],
+        "representative_urls": [
+          "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news/cbf4460132cdfeb2a97fad5f9dd25ba0bc058f76-128x128.png?accountingTag=VAL?w=1200&h=630&fm=webp&fit=crop&crop=center",
+          "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Riven_7.jpg",
+          "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Riven_6.jpg",
+          "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Riven_23.jpg",
+          "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Lux_29.jpg",
+          "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Lux_40.jpg",
+          "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Lux_70.jpg"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 3,
+        "unavailable": [],
+        "representative_urls": [
+          "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news/cbf4460132cdfeb2a97fad5f9dd25ba0bc058f76-128x128.png?accountingTag=VAL?w=1200&h=630&fm=webp&fit=crop&crop=center",
+          "https://stickershop.line-scdn.net/stickershop/v1/product/22466985/LINEStorePC/main.png?v=1",
+          "https://stickershop.line-scdn.net/stickershop/v1/product/24888068/LINEStorePC/main.png?v=1"
+        ]
+      }
+    },
+    "island": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "city": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "wing": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "helmet": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "cat": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "flower": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "pixel": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "helmet-identity": {
+      "A": {
+        "distinct_reloaded": 4,
+        "unavailable": [],
+        "representative_urls": [
+          "https://image.idn.media/post/20250306/set-robo-santa-pubg-mobile-640x360.jpg",
+          "https://image.9game.cn/2018/12/19/38510173.jpg",
+          "https://image.9game.cn/2018/12/19/38510176.jpg",
+          "https://image.9game.cn/2018/12/19/38510181.jpg"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 3,
+        "unavailable": [],
+        "representative_urls": [
+          "https://cdn.pubgitems.info/i-large/12031153.png",
+          "https://cdn.pubgitems.info/og/12031153/en.png",
+          "https://cdn.pubgitems.info/i-icons/13000798.png"
+        ]
+      }
+    },
+    "cat-identity": {
+      "A": {
+        "distinct_reloaded": 4,
+        "unavailable": [],
+        "representative_urls": [
+          "https://www.tekkenzone.net/static/images/banner_20260327.webp",
+          "https://tk8.tekken-official.jp/images/streamingkit/kv_01_sample.jpg",
+          "https://tk8.tekken-official.jp/images/streamingkit/kv_02_sample.jpg",
+          "https://tk8.tekken-official.jp/images/streamingkit/kv_2nd_01_sample.jpg"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 10,
+        "unavailable": [],
+        "representative_urls": [
+          "https://i.ytimg.com/vi/lhHIb2RJaxY/maxresdefault.jpg?sqp=-oaymwEmCIAKENAF8quKqQMa8AEB-AH-CYAC0AWKAgwIABABGHUgJCh_MA8=&rs=AOn4CLDEmAyuQDZJUo24FAdkGDhjJAB6hQ",
+          "https://cdn.pubgitems.info/nav/clothing/torso.png",
+          "https://cdn.pubgitems.info/nav/appearance/hair.png",
+          "https://cdn.pubgitems.info/nav/clothing/head.png",
+          "https://booth.pximg.net/5556edb1-777a-4c29-8eb8-80defe2931d2/i/8896241/144e90bf-5a18-4b55-a3ad-e476818b9d83_base_resized.jpg",
+          "https://booth.pximg.net/c/72x72_a2_g5/5556edb1-777a-4c29-8eb8-80defe2931d2/i/8896241/a7f61a5c-308a-47af-bb75-e56228abbe15_base_resized.jpg",
+          "https://booth.pximg.net/c/72x72_a2_g5/5556edb1-777a-4c29-8eb8-80defe2931d2/i/8896241/628a0cf5-21cc-4f88-a1f3-480f3eb4cb49_base_resized.jpg",
+          "https://booth.pximg.net/c/48x48/users/1958771/icon_image/45c172df-eda7-4705-b641-3ead107de06c_base_resized.jpg",
+          "https://booth.pximg.net/879b86e8-24cc-4a1e-a97d-3ce634b2d8f5/i/3934369/8e4a8c62-fd5d-4a75-be68-976c34c0f47b_base_resized.jpg",
+          "https://booth.pximg.net/c/72x72_a2_g5/879b86e8-24cc-4a1e-a97d-3ce634b2d8f5/i/3934369/6b4acdec-9199-494b-9961-43d194e03230_base_resized.jpg"
+        ]
+      }
+    },
+    "flower-identity": {
+      "A": {
+        "distinct_reloaded": 5,
+        "unavailable": [],
+        "representative_urls": [
+          "https://www.nijisanji.jp/ogp.png",
+          "https://webofficial.kakaogames.com/live/official/file/news/20230504/3114.png",
+          "https://img.newspim.com/news/2024/06/27/2406271521148620_t1.jpg",
+          "https://img.newspim.com/news/2024/06/05/2406051649357580_t1.jpg",
+          "https://img.newspim.com/news/2024/05/29/2405291549203110_t1.jpg"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 10,
+        "unavailable": [],
+        "representative_urls": [
+          "https://img.gamewith.jp/article/thumbnail/rectangle/345496.png?date=1653827008",
+          "https://img.gamewith.jp/article_tools/uma-musume/gacha/character_image_main_53_b.png",
+          "https://img.gamewith.jp/assets/images/games/icons/8bdfbeec477cad41f325b3b9e66c0206.png",
+          "https://www.famitsu.com/images/000/263/168/z_6294519adb015.jpg",
+          "https://www.famitsu.com/images/000/263/168/l_6294481d27002.jpg",
+          "https://www.famitsu.com/images/000/263/168/l_6294481d2cbc4.jpg",
+          "https://vrcfinder.net/default-ogp.png",
+          "https://booth.pximg.net/c/48x48/users/6193268/icon_image/f83cd893-18c2-4ded-bf92-c7a865ffc743_base_resized.jpg",
+          "https://booth.pximg.net/c/48x48/users/20424006/icon_image/2e860f07-f70c-48d9-8f06-a521c21ff193_base_resized.jpg",
+          "https://booth.pximg.net/c/48x48/users/4873396/icon_image/1bf1fd83-54f6-4d77-ab7d-da6cb6ecf834_base_resized.jpg"
+        ]
+      }
+    },
+    "frog-hint": {
+      "A": {
+        "distinct_reloaded": 3,
+        "unavailable": [],
+        "representative_urls": [
+          "https://images.squarespace-cdn.com/content/v1/60241cb68df65b530cd84d95/1772473444138-PZ75402XW3IQ6B9MZDCL/058a_9781797237077.jpg",
+          "https://images.squarespace-cdn.com/content/v1/60241cb68df65b530cd84d95/1772473443739-AW571IEY0IVYZ58KIQIW/060d_9781797237077.jpg",
+          "https://images.squarespace-cdn.com/content/v1/60241cb68df65b530cd84d95/570c435b-4310-4887-b50b-c60555d89eac/h899_106bT_cs.sel16.401.jpg"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 5,
+        "unavailable": [],
+        "representative_urls": [
+          "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+          "https://d23.com/app/uploads/2026/02/IMAGE-11_Fish-Queen_Hoppers-Meet-the-Characters.jpg",
+          "https://images.squarespace-cdn.com/content/v1/60241cb68df65b530cd84d95/1772481156951-M6LOQYEW9NERR5L1HUN7/h125_204e_cs.sel16.2703.jpg",
+          "https://images.squarespace-cdn.com/content/v1/60241cb68df65b530cd84d95/1772481157083-UZ6IYT7QZGXF0BUPS5WR/h138_224f_cs.sel16.1622.jpg",
+          "https://images.squarespace-cdn.com/content/v1/60241cb68df65b530cd84d95/4e41bc5a-d195-42d0-b3da-51a434e0fc4d/h320_21_cs.sel16.1598.jpg"
+        ]
+      }
+    },
+    "dog": {
+      "A": {
+        "distinct_reloaded": 3,
+        "unavailable": [],
+        "representative_urls": [
+          "https://pet-health-content-media.chewy.com/wp-content/uploads/2025/08/26234926/japanese-spitz-2.jpg",
+          "https://pet-health-content-media.chewy.com/wp-content/uploads/2025/08/26234950/japanese-spitz-4.jpg",
+          "https://pet-health-content-media.chewy.com/wp-content/uploads/2025/08/26234940/japanese-spitz-3-scaled.jpg"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "rocket": {
+      "A": {
+        "distinct_reloaded": 3,
+        "unavailable": [],
+        "representative_urls": [
+          "https://www.nasa.gov/wp-content/uploads/2023/03/2015-1309.jpg",
+          "https://www.nasa.gov/wp-content/uploads/2023/03/2015-1309.jpg?w=1041",
+          "https://d1ldvf68ux039x.cloudfront.net/thumbs/photos/2507/9147146/1000w_q95.jpg"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 5,
+        "unavailable": [],
+        "representative_urls": [
+          "https://science.nasa.gov/wp-content/uploads/2018/04/tess-pad-2.jpg",
+          "https://science.nasa.gov/wp-content/uploads/2018/04/tess-pad-1.jpg?w=200&h=200&crop=1",
+          "https://science.nasa.gov/wp-content/uploads/2018/04/tess-pad.jpg?w=200&h=200&crop=1",
+          "https://www.nasa.gov/wp-content/uploads/2023/03/361323main_2009-3748_full.jpg?w=1041",
+          "https://www.nasa.gov/wp-content/uploads/2026/11/ksc-20260411-ph-nrg01-0009large.jpg?w=1024"
+        ]
+      }
+    },
+    "new-01": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-02": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-03": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-04": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-05": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-06": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-07": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-08": {
+      "A": {
+        "distinct_reloaded": 3,
+        "unavailable": [],
+        "representative_urls": [
+          "https://scikit-image.org/docs/stable/_images/sphx_glr_plot_text_thumb.png",
+          "https://scikit-image.org/docs/stable/_images/sphx_glr_plot_3d_thumb.png",
+          "https://scikit-image.org/docs/stable/_images/sphx_glr_plot_swirl_thumb.png"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-09": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-10": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-11": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-12": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-13": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-14": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-15": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-16": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-17": {
+      "A": {
+        "distinct_reloaded": 3,
+        "unavailable": [],
+        "representative_urls": [
+          "https://raw.githubusercontent.com/rust-lang/rust-artwork/main/logo/rusty/rust-logo-512x512.png",
+          "https://raw.githubusercontent.com/rust-lang/rust-artwork/main/logo/rust-logo-rainbow-circle.png",
+          "https://raw.githubusercontent.com/rust-lang/rust-artwork/main/logo/3d/preview.png"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 1,
+        "unavailable": [],
+        "representative_urls": [
+          "https://opengraph.githubassets.com/1541cdae48b31826102017c8ba49acb050b70eb822a97497cc8fd32ebcc4c16e/rust-lang/rust-artwork"
+        ]
+      }
+    },
+    "new-18": {
+      "A": {
+        "distinct_reloaded": 2,
+        "unavailable": [],
+        "representative_urls": [
+          "https://pokemonkorea.co.kr/public-assets/home/data/data1_www/newdata/pokedex/full/018101.png",
+          "https://pokemonkorea.co.kr/public-assets/home/data/data1_www/newdata/pokedex/full/018102.png"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 2,
+        "unavailable": [],
+        "representative_urls": [
+          "https://pokemonkorea.co.kr/public-assets/home/data/data1_www/newdata/pokedex/mid/018101.png",
+          "https://pokemonkorea.co.kr/public-assets/home/data/data1_www/newdata/pokedex/mid/018102.png"
+        ]
+      }
+    },
+    "new-19": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 1,
+        "unavailable": [],
+        "representative_urls": [
+          "https://www.cia.gov/static/2958550a00127cfea909b6a91493208b/0d82a/CleanedWFB-editions-Screenshot-possible-graphic.jpg"
+        ]
+      }
+    },
+    "new-20": {
+      "A": {
+        "distinct_reloaded": 2,
+        "unavailable": [],
+        "representative_urls": [
+          "https://opengraph.githubassets.com/c276b134321f0f2fea6123b4af7ff0bf21a91ae44504df82c7a8da4b44472ab5/arduino/arduino-ide",
+          "https://flathub.org/api/appOgImage/cc.arduino.arduinoide?locale=en"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 2,
+        "unavailable": [],
+        "representative_urls": [
+          "https://cdn.mos.cms.futurecdn.net/flexiimages/h0mke6edxz1770889266-400-80.jpg",
+          "https://cdn.mos.cms.futurecdn.net/flexiimages/fhii3s5odm1784723980.jpg"
+        ]
+      }
+    },
+    "new-21": {
+      "A": {
+        "distinct_reloaded": 2,
+        "unavailable": [],
+        "representative_urls": [
+          "https://railmakers.com/wp-content/uploads/2023/02/45828-2hole-rect_lg-450x338.jpg",
+          "https://railmakers.com/wp-content/uploads/2023/02/45829-mount_lg-450x338.jpg"
+        ]
+      },
+      "B": {
+        "distinct_reloaded": 3,
+        "unavailable": [],
+        "representative_urls": [
+          "https://www.mesan.com.tr/upload/product/webp/duzlamalar_9_03122025085014.webp",
+          "https://www.mesan.com.tr/upload/product/webp/duzlamalar_10_03122025085014.webp",
+          "https://www.mesan.com.tr/upload/product/webp/duzlamalar_11_03122025085015.webp"
+        ]
+      }
+    },
+    "new-22": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-23": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    },
+    "new-24": {
+      "A": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      },
+      "B": {
+        "distinct_reloaded": 0,
+        "unavailable": [],
+        "representative_urls": []
+      }
+    }
+  }
+}

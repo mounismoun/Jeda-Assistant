@@ -16,6 +16,8 @@ import tiktoken
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+from assistant_bot.metrics import current_attempt, observed, record_usage, steer_attempt
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -190,10 +192,15 @@ def extract_web(response, required_urls=(), *, allow_weather=False):
 
 
 class Models:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, *, metrics_db=None):
         self.config = settings
+        self.metrics_db = metrics_db
+        if metrics_db is not None:
+            with metrics_db:
+                metrics_db.execute("INSERT OR IGNORE INTO collection_info VALUES(1,?)", (time.time(),))
         self.client = AsyncOpenAI(api_key=settings.api_key, timeout=settings.timeout, max_retries=0)
 
+    @observed("답변")
     async def text(self, model, effort, instructions, data, *, limit=2000, schema=None, timeout=None):
         params = dict(
             model=model,
@@ -208,6 +215,8 @@ class Models:
         started = time.monotonic()
         result = await self.client.responses.create(**params, timeout=timeout or self.config.timeout)
         usage = result.usage
+        if usage:
+            record_usage({"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens})
         logging.getLogger(__name__).info(
             "Responses model=%s effort=%s input=%s output=%s seconds=%.2f",
             model,
@@ -223,8 +232,9 @@ class Models:
             )
         return json.loads(result.output_text) if schema else result.output_text
 
-    async def discover(self, model, effort, instructions, data):
-        response = await self.client.responses.create(
+    @observed("웹 검색")
+    async def discover(self, model, effort, instructions, data, *, max_tool_calls=4):
+        response = await self.client.responses.with_raw_response.create(
             model=model,
             instructions=instructions,
             input=data,
@@ -232,17 +242,20 @@ class Models:
             reasoning={"effort": effort},
             tools=[{"type": "web_search", "external_web_access": True}],
             tool_choice="required",
-            max_tool_calls=4,
+            max_tool_calls=max_tool_calls,
             max_output_tokens=4000,
             include=["web_search_call.action.sources"],
         )
-        if response.status != "completed":
+        # Hosted feeds can include source types outside the SDK's URL-source model.
+        payload = json.loads(response.content)
+        record_usage(payload.get("usage"))
+        if payload.get("status") != "completed":
             raise ValueError("웹 검색이 완료되지 않았습니다.")
-        return response.model_dump()
+        return payload
 
     async def search(self, model, effort, instructions, data, urls=(), *, weather=False):
-        async def query(prompt, payload):
-            response = await self.discover(model, effort, prompt, payload)
+        async def query(prompt, payload, *, retry=False):
+            response = await self.discover(model, effort, prompt, payload, retry=retry)
             return extract_web(response, urls, allow_weather=weather)
 
         try:
@@ -254,8 +267,10 @@ class Models:
                 instructions + " 이전 답안에 대조되지 않는 링크가 있었다. 출처 후보를 다시 열어 확인하고 "
                 "결론만 간결히 쓰며 근거는 웹 도구의 인용 주석으로 제공한다. URL을 직접 작성하지 않는다.",
                 json.dumps({"request": data, "source_candidates": mismatch.cited}, ensure_ascii=False),
+                retry=True,
             )
 
+    @observed("답변")
     async def compose(self, model, effort, instructions, data, corrections: asyncio.Queue, *, limit, timeout):
         """변경 번호는 API가 실제로 이어 쓴 후속 응답에만 부여한다."""
         headers = {"Authorization": "Bearer " + self.config.api_key}
@@ -273,6 +288,8 @@ class Models:
                     }
                 )
                 parent, pending, applied = None, None, None
+                by_response = {}
+                opening = current_attempt()
                 read = asyncio.create_task(ws.receive_json())
                 update = None
                 try:
@@ -285,6 +302,7 @@ class Models:
                         if update in ready:
                             pending, instruction = update.result()
                             update = None
+                            opening = steer_attempt()
                             await ws.send_json(
                                 {"type": "response.steer", "previous_response_id": parent, "input": instruction}
                             )
@@ -304,6 +322,17 @@ class Models:
                                 "Responses WS event=%s response=%s", name, (event.get("response") or {}).get("id")
                             )
                         result = event.get("response", {})
+                        if name == "response.created" and opening:
+                            by_response[result["id"]] = opening
+                        attempt = by_response.get(result.get("id"))
+                        if attempt and result.get("usage"):
+                            attempt.usage = result["usage"]
+                        if attempt and name == "response.completed" and pending is not None:
+                            attempt.finish("ok")
+                        if attempt and name == "response.incomplete" and (
+                            result.get("incomplete_details") or {}
+                        ).get("reason") == "steered":
+                            attempt.finish("steered")
                         if name == "response.created":
                             if parent is not None and pending is not None and result["id"] != parent:
                                 applied, pending = pending, None

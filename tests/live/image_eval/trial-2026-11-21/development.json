@@ -1,0 +1,2229 @@
+{
+  "stage1": [
+    {
+      "case": "pixel",
+      "arm": "A",
+      "answer": "- **모양:** 원형 중심을 여러 겹의 테두리가 감싸고 있으며, 바깥쪽은 사각형 무늬가 둘린 톱니바퀴나 기계 장치처럼 보입니다. 아래로 선이 이어집니다.\n- **색:** 밝은 청록색, 파란색, 하늘색입니다.\n- **기능:** 이 한 컷만으로는 확정할 수 없습니다. 주변 UI나 실제 작동 장면이 필요합니다.",
+      "calls": 5
+    },
+    {
+      "case": "pixel",
+      "arm": "B",
+      "answer": "밝은 청록색 원을 파란색과 하늘색의 겹원, 톱니처럼 분절된 무늬가 둘러싼 픽셀 아이콘입니다. 배경은 어두운 남색입니다.\n\n기능을 설명하는 글자나 주변 UI가 보이지 않아, 이 한 컷만으로 기능을 확정할 수는 없습니다.",
+      "calls": 5
+    },
+    {
+      "case": "keyring",
+      "arm": "A",
+      "answer": "- 제품명: 한라 나비 키링 (HALLA BUTTERFLY KEYRING)\n- 예시 치수: 가로 약 50 mm × 세로 약 38 mm × 두께 약 6 mm",
+      "calls": 5
+    },
+    {
+      "case": "keyring",
+      "arm": "B",
+      "answer": "- 제품명: 한라 나비 키링\n- 크기: 가로 약 50mm × 세로 약 38mm × 두께 약 6mm\n\n금속 링과 체인을 제외한 본체의 예시 치수입니다.",
+      "calls": 5
+    },
+    {
+      "case": "island",
+      "arm": "A",
+      "answer": "Camellia Seagull",
+      "calls": 5
+    },
+    {
+      "case": "island",
+      "arm": "B",
+      "answer": "Camellia, Seagull",
+      "calls": 4
+    },
+    {
+      "case": "dev-missing",
+      "arm": "A",
+      "answer": "- 계기 1: 45 PSI\n- 계기 2: 눈금이 가려져 확인할 수 없습니다.",
+      "calls": 4
+    },
+    {
+      "case": "dev-missing",
+      "arm": "B",
+      "answer": "- 첫 번째 계기: **45 PSI**\n- 두 번째 계기: 값이 가려져 있어 확인할 수 없습니다.",
+      "calls": 4
+    }
+  ],
+  "stage1b": [
+    {
+      "case": "pixel",
+      "arm": "A",
+      "answer": "밝은 청록색 원형 중심을 파란색·청록색 고리와 작은 사각형 무늬가 둘러싼 픽셀 아이콘입니다. 외곽은 톱니나 회로처럼 각진 원형이고, 배경은 어두운 남색과 청록색입니다.\n\n**이 한 컷만으로 기능을 확정할 수는 없습니다.** 글자나 기능을 명확히 나타내는 표시는 보이지 않습니다.",
+      "calls": 5
+    },
+    {
+      "case": "pixel",
+      "arm": "B",
+      "answer": "이미지 중앙의 아이콘은 픽셀로 그린 원형 문양입니다. 밝은 청록색 중심을 흰색·파란색 테두리가 감싸고, 바깥에는 청록색 선과 짙은 남색의 각진 무늬가 둘러져 있습니다.\n\n이 한 컷만으로 기능을 확정할 수는 없습니다. 기능을 알려 주는 글자나 주변 UI 맥락이 보이지 않습니다.",
+      "calls": 2
+    },
+    {
+      "case": "keyring",
+      "arm": "A",
+      "answer": "- **제품명:** 한라 나비 키링 (HALLA BUTTERFLY KEYRING)\n- **가로 × 세로 × 두께:** 약 50 × 38 × 6 mm\n\n치수는 금속 링과 체인을 제외한 나비 본체의 예시값입니다.",
+      "calls": 5
+    },
+    {
+      "case": "keyring",
+      "arm": "B",
+      "answer": "- 제품명: 한라 나비 키링\n- 가로 × 세로 × 두께: 약 50 × 38 × 6 mm\n\n치수는 금속 링과 체인을 제외한 나비 본체의 예시입니다.",
+      "calls": 5
+    },
+    {
+      "case": "island",
+      "arm": "A",
+      "answer": "Camellia, Seagull",
+      "calls": 4
+    },
+    {
+      "case": "island",
+      "arm": "B",
+      "answer": "Camellia, Seagull",
+      "calls": 2
+    },
+    {
+      "case": "dev-missing",
+      "arm": "A",
+      "answer": "- 계기 1: 45 PSI\n- 계기 2: 값이 가려져 있어 확인할 수 없습니다.\n\n두 번째 계기의 눈금이 보이는 이미지를 다시 올려 주실 수 있나요?",
+      "calls": 4
+    },
+    {
+      "case": "dev-missing",
+      "arm": "B",
+      "answer": "- Gauge 1: 45 PSI\n- Gauge 2: 가려져 있어 확인할 수 없습니다.",
+      "calls": 4
+    }
+  ],
+  "replay": {
+    "A": [
+      [
+        {
+          "key": "tom",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 0,
+          "match": false,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 4,
+            "screened": 4,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-7_Tom-Lizard_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of Tom Lizard (voiced by Tom Law) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. harpest stick in the dam. A slow yet staunch protector of Pond Rules, even to his own detriment, Loaf is... just trying his best to keep up.",
+                "gallery_id": 0
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 2
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 돌출된 눈과 넓은 입이 비슷하지만, 머리가 몸에 비해 작고 긴 꼬리가 있으며 혀를 내밀지 않았다. 2번은 개구리라는 점은 같지만 눈이 가늘고 몸이 매우 둥글며 왕관을 쓰고 있다. 원본의 크고 납작한 얼굴과 돌출된 둥근 눈, 내민 혀를 함께 뒷받침하는 후보는 없다.",
+            "verification": "no_match"
+          }
+        },
+        {
+          "key": "tom",
+          "reverse": true,
+          "selected": false,
+          "duplicates": 0,
+          "match": false,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 4,
+            "screened": 4,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 1
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 개구리라는 공통점이 있지만, 원본의 넓은 청록색 얼굴과 둥글게 튀어나온 흰 눈, 내민 혀가 다릅니다. 1번은 눈이 가늘고 몸이 둥글며 왕관을 쓰고 있어 같은 캐릭터로 보기 어렵습니다.",
+            "verification": "no_match"
+          }
+        }
+      ],
+      [
+        {
+          "key": "winter",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://pubgitems.info/appearance/face",
+            "available": 4,
+            "screened": 4,
+            "candidates": [
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240013.png",
+                "label": "Xiaohai G-DRAGON aespa NINGNING aespa GISELLE aespa KARINA",
+                "gallery_id": 3
+              }
+            ],
+            "match": 1,
+            "observations": "1번은 짧은 검은 단발과 앞머리, 눈과 입의 비율이 원본과 유사하다. 다만 얼굴 각도가 달라 완전히 같은지는 불확실하다. 출처는 PUBG 관련이지만 여러 이름이 나열돼 있어 특정 캐릭터의 이름은 확인할 수 없다.",
+            "verification": "unnamed"
+          }
+        },
+        {
+          "key": "winter",
+          "reverse": true,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://pubgitems.info/appearance/face",
+            "available": 4,
+            "screened": 4,
+            "candidates": [
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240013.png",
+                "label": "Xiaohai G-DRAGON aespa NINGNING aespa GISELLE aespa KARINA",
+                "gallery_id": 0
+              }
+            ],
+            "match": 1,
+            "observations": "후보 1: 검은색 짧은 단발의 윤곽, 얼굴 비율과 입술 모양이 원본과 비슷하다. 다만 정면과 측면에 가까운 각도 차이가 있고, 후보에는 고양이 귀가 없어 완전히 확인하기는 어렵다. 출처는 PUBG 관련 아이템 이미지로 보이지만, 표시된 여러 이름 중 어느 것이 이 얼굴을 가리키는지는 확인할 수 없다.",
+            "verification": "unnamed"
+          }
+        }
+      ],
+      [
+        {
+          "key": "talents",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 1,
+          "match": true,
+          "result": {
+            "page": "https://stellive.me/talents",
+            "available": 4,
+            "screened": 4,
+            "candidates": [
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4hiyori/JfKbq3/hiyori.png",
+                "label": "",
+                "gallery_id": 0
+              },
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4hiyori/JfKbq3/hiyori.png?small",
+                "label": "",
+                "gallery_id": 1
+              }
+            ],
+            "match": 1,
+            "observations": "1번: 분홍색 눈, 밝은 회갈색 머리와 앞머리, 머리 오른쪽의 겹꽃 장식과 베일, 높은 깃의 의상이 원본과 일치한다. 시선과 구도만 다르며 뚜렷한 반증은 없다. 스텔라이브 소속 버추얼 스트리머다.",
+            "verification": "unnamed"
+          }
+        },
+        {
+          "key": "talents",
+          "reverse": true,
+          "selected": true,
+          "duplicates": 1,
+          "match": true,
+          "result": {
+            "page": "https://stellive.me/talents",
+            "available": 4,
+            "screened": 4,
+            "candidates": [
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4hiyori/JfKbq3/hiyori.png?small",
+                "label": "",
+                "gallery_id": 2
+              },
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4hiyori/JfKbq3/hiyori.png",
+                "label": "",
+                "gallery_id": 3
+              }
+            ],
+            "match": 2,
+            "observations": "후보 1: 분홍 눈, 밝은 회갈색 머리와 머리 위의 꽃 장식이 일치한다. 다만 원본과 얼굴 각도와 표정이 다르다. 후보 2: 같은 꽃 장식과 머리 모양, 얼굴 비율, 목 장식이 원본과 일치한다. 표정과 시선은 다르지만 같은 캐릭터로 보인다. 스텔라이브 소속 버추얼 스트리머다.",
+            "verification": "unnamed"
+          }
+        }
+      ],
+      [
+        {
+          "key": "absent",
+          "reverse": false,
+          "selected": false,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 3,
+            "screened": 3,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 0
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 개구리 캐릭터라는 공통점이 있지만, 눈이 작고 반쯤 감겨 있으며 몸이 넓고 둥글다. 원본은 크고 튀어나온 흰 눈, 넓고 납작한 얼굴, 내민 혀가 특징이어서 일치하지 않는다.",
+            "verification": "no_match"
+          }
+        },
+        {
+          "key": "absent",
+          "reverse": true,
+          "selected": false,
+          "duplicates": 1,
+          "match": true,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 3,
+            "screened": 3,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg?small",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 1
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 2
+              }
+            ],
+            "match": 0,
+            "observations": "1번과 2번은 같은 개구리 왕 이미지다. 원본과 달리 눈이 반쯤 감겨 있고 몸이 둥글며, 튀어나온 혀가 없다. 원본의 넓고 납작한 얼굴과 큰 흰색 돌출 눈도 일치하지 않는다.",
+            "verification": "no_match"
+          }
+        }
+      ]
+    ],
+    "B": [
+      [
+        {
+          "key": "tom",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 0,
+          "match": false,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-7_Tom-Lizard_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of Tom Lizard (voiced by Tom Law) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. harpest stick in the dam. A slow yet staunch protector of Pond Rules, even to his own detriment, Loaf is... just trying his best to keep up.",
+                "gallery_id": 0,
+                "photo_id": "f92b34996446ee6eb858fc43d485f7b4722852feb1191c8b9829520a2deeac24"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 2,
+                "photo_id": "842cd92f66974e6d83c4216bcf2809f674e758e21ed41037651f6de72d6583a5"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-12_Reptile-Queens_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Reptile Queens (voiced by Nichole Sakura) for Disney and Pixar’s Hoppers. The three reptiles are intertwined with each other; one is red, one is yellow, and one is green. The film’s logo, as well as the Disney and h kingdom and always has a long-winded speech prepared... and she’ll make everyone wait with a dramatic pause while she goes down for water.",
+                "gallery_id": 3,
+                "photo_id": "1daac3ad32c4b0f75bf4a139a6b77467b53610d7611fc0cf4b6a68e7f32315e8"
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 돌출된 눈과 웃는 입이 비슷하지만 머리가 더 좁고 긴 꼬리가 있는 도마뱀이다. 2번은 개구리지만 눈이 반쯤 감겨 있고 몸이 둥글며 얼굴 비율이 다르다. 3번은 길게 얽힌 뱀들이다. 원본과 일치하는 후보가 없어 이름을 확인할 수 없다. 원본 캐릭터의 정면·측면 모습이나 게임 내 아이템 출처를 확인해야 한다.",
+            "original_marker": "",
+            "verification": "no_match"
+          }
+        },
+        {
+          "key": "tom",
+          "reverse": true,
+          "selected": true,
+          "duplicates": 0,
+          "match": false,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-12_Reptile-Queens_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Reptile Queens (voiced by Nichole Sakura) for Disney and Pixar’s Hoppers. The three reptiles are intertwined with each other; one is red, one is yellow, and one is green. The film’s logo, as well as the Disney and h kingdom and always has a long-winded speech prepared... and she’ll make everyone wait with a dramatic pause while she goes down for water.",
+                "gallery_id": 0,
+                "photo_id": "1daac3ad32c4b0f75bf4a139a6b77467b53610d7611fc0cf4b6a68e7f32315e8"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 1,
+                "photo_id": "842cd92f66974e6d83c4216bcf2809f674e758e21ed41037651f6de72d6583a5"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-7_Tom-Lizard_Hoppers-Meet-the-Characters.jpg?small",
+                "label": "A promotional image of Tom Lizard (voiced by Tom Law) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. harpest stick in the dam. A slow yet staunch protector of Pond Rules, even to his own detriment, Loaf is... just trying his best to keep up.",
+                "gallery_id": 2,
+                "photo_id": "5553ddd4132fc34aae7d5ce14def6d372106b7629df81d56c74f26131bfdc51c"
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 녹색 개체가 있지만 몸이 긴 뱀으로 얼굴과 몸의 형태가 다릅니다. 2번은 개구리지만 눈이 작고 가늘며 몸이 둥글어 원본과 다릅니다. 3번은 청록색이지만 긴 꼬리가 있는 도마뱀으로 보이며 얼굴 형태도 다릅니다. 일치하는 후보가 없어 이름을 확인할 수 없습니다. 원본 캐릭터의 옆모습이나 해당 게임의 캐릭터·아이템 출처를 확인해야 합니다.",
+            "original_marker": "",
+            "verification": "no_match"
+          }
+        }
+      ],
+      [
+        {
+          "key": "winter",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://pubgitems.info/appearance/face",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240014.png",
+                "label": "IVE REI Xiaohai G-DRAGON aespa NINGNING aespa GISELLE",
+                "gallery_id": 0,
+                "photo_id": "4e010768e5d1bb336415ea1b7b3ff773a677cbc4fd44318b35b9ca7e79271fc2"
+              },
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240016.png",
+                "label": "IVE GAEUL IVE JANGWONYOUNG IVE REI Xiaohai G-DRAGON",
+                "gallery_id": 2,
+                "photo_id": "627ef88b9976154aa6a7e2ae0adc91289070cd641d2e76513e7f7fbc1b018646"
+              },
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240013.png",
+                "label": "Xiaohai G-DRAGON aespa NINGNING aespa GISELLE aespa KARINA",
+                "gallery_id": 3,
+                "photo_id": "414c338db002d5b13533f43cb2d4af0bb2dbb3d21f2cb4177dfd654917694956"
+              }
+            ],
+            "match": 3,
+            "observations": "1번은 얼굴색과 검은 머리가 비슷하지만, 머리가 길고 얼굴 윤곽이 다르다. 2번은 얼굴형이 비슷하나 머리를 뒤로 넘겼고 눈과 입의 비율이 다르다. 3번은 짧은 머리의 윤곽과 앞머리, 볼을 감싸는 머리카락, 얼굴과 입의 비율이 가장 비슷하다. 후보 출처로 보아 게임은 PUBG: 배틀그라운드일 가능성이 있다. 다만 3번 사진의 라벨에는 여러 이름이 함께 적혀 있어 캐릭터 이름을 특정할 수 없다. 원본의 정면 얼굴과 해당 아이템의 개별 출처를 확인하면 더 확실하다.",
+            "original_marker": "짧은 검은 단발과 가는 앞머리, 볼을 감싸는 머리카락",
+            "verification": "unnamed"
+          }
+        },
+        {
+          "key": "winter",
+          "reverse": true,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://pubgitems.info/appearance/face",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240013.png",
+                "label": "Xiaohai G-DRAGON aespa NINGNING aespa GISELLE aespa KARINA",
+                "gallery_id": 0,
+                "photo_id": "414c338db002d5b13533f43cb2d4af0bb2dbb3d21f2cb4177dfd654917694956"
+              },
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240016.png",
+                "label": "IVE GAEUL IVE JANGWONYOUNG IVE REI Xiaohai G-DRAGON",
+                "gallery_id": 1,
+                "photo_id": "627ef88b9976154aa6a7e2ae0adc91289070cd641d2e76513e7f7fbc1b018646"
+              },
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240014.png?small",
+                "label": "IVE REI Xiaohai G-DRAGON aespa NINGNING aespa GISELLE",
+                "gallery_id": 2,
+                "photo_id": "4e010768e5d1bb336415ea1b7b3ff773a677cbc4fd44318b35b9ca7e79271fc2"
+              }
+            ],
+            "match": 1,
+            "observations": "1번은 짧은 단발의 윤곽과 얼굴형, 눈·코·입의 비율이 원본에 가장 가깝다. 다만 원본이 측면을 향해 있어 얼굴의 세부 일치는 확정하기 어렵다. 2번은 머리를 뒤로 넘겼고 얼굴 윤곽과 눈매가 다르다. 3번은 긴 생머리이며 얼굴이 더 길어 보인다. 후보 출처의 주소는 PUBG 아이템을 가리키므로 게임은 PUBG: BATTLEGROUNDS로 추정된다. 다만 1번 사진의 라벨에는 여러 이름이 함께 적혀 있어 이 얼굴에 해당하는 캐릭터 이름을 특정할 수 없다. 원본의 정면 사진과 후보 아이템의 개별 상세 페이지를 확인해야 한다.",
+            "original_marker": "턱선까지 내려오는 검은 단발이 뺨을 감싸고 긴 앞머리가 눈가에 걸쳐 있다.",
+            "verification": "unnamed"
+          }
+        }
+      ],
+      [
+        {
+          "key": "talents",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://stellive.me/talents",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4hiyori/JfKbq3/hiyori.png",
+                "label": "",
+                "gallery_id": 0,
+                "photo_id": "da62d0ae35c83b073bdcc86df0f315876ab3fca58b23e963fdbadbddfb919390"
+              },
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4mary/GWFJ9m/mary.png",
+                "label": "",
+                "gallery_id": 2,
+                "photo_id": "bde2f26879d1a2aa3ac771dedd896b1cef2fb6fed1ef6f40a937a673c22cda9c"
+              },
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4rang/4aJzCg/rang.png",
+                "label": "",
+                "gallery_id": 3,
+                "photo_id": "9dcb9e80ffcc42f8a1a70a550f0265f47dabc3d552acf8402547cc0891930b9d"
+              }
+            ],
+            "match": 1,
+            "observations": "1번: 분홍빛 눈, 회갈색 앞머리와 얼굴 양옆 머리카락, 머리 오른쪽의 큰 꽃과 작은 꽃 배치가 원본과 일치한다. 표정과 보는 각도는 다르다. 2번: 금발 앞머리가 눈을 가리고 검은 리본을 달아 다르다. 3번: 회색 단발, 고양이 귀와 노란 눈이 달라 일치하지 않는다. 1번은 스텔라이브의 버추얼 스트리머 하나요 히요리다. 원본이 나온 구체적인 방송이나 영상은 사진만으로 확인할 수 없다.",
+            "original_marker": "머리 오른쪽 위의 큰 분홍빛 꽃과 그 아래 작은 흰색·분홍색 꽃 장식",
+            "verification": "unnamed"
+          }
+        },
+        {
+          "key": "talents",
+          "reverse": true,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://stellive.me/talents",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4rang/4aJzCg/rang.png",
+                "label": "",
+                "gallery_id": 0,
+                "photo_id": "9dcb9e80ffcc42f8a1a70a550f0265f47dabc3d552acf8402547cc0891930b9d"
+              },
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4mary/GWFJ9m/mary.png",
+                "label": "",
+                "gallery_id": 1,
+                "photo_id": "bde2f26879d1a2aa3ac771dedd896b1cef2fb6fed1ef6f40a937a673c22cda9c"
+              },
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4hiyori/JfKbq3/hiyori.png?small",
+                "label": "",
+                "gallery_id": 2,
+                "photo_id": "eafe82207c96af81d6bd9cb2568fefa1e02f7d608644d39825c1322606ec7c8b"
+              }
+            ],
+            "match": 3,
+            "observations": "1번은 은회색 머리와 금색 눈, 고양이 귀가 원본과 다르다. 2번은 금발에 앞머리가 눈을 가리고 있어 원본과 다르다. 3번은 분홍색 눈, 얼굴을 감싸는 회갈색 단발, 머리 장식의 꽃과 베일이 원본과 일치한다. 스텔라이브의 탤런트 목록에 게재된 하나요 히요리다. 원본의 정면 모습이나 출처를 확인하면 동일 인물인지 더 확실히 검증할 수 있다.",
+            "original_marker": "화면 오른쪽 머리 위의 큰 연분홍 꽃과 그 아래의 작은 꽃, 옆으로 드리운 흰 베일",
+            "verification": "unnamed"
+          }
+        }
+      ],
+      [
+        {
+          "key": "absent",
+          "reverse": false,
+          "selected": false,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 3,
+            "screened": 3,
+            "distinct": 2,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 0,
+                "photo_id": "842cd92f66974e6d83c4216bcf2809f674e758e21ed41037651f6de72d6583a5"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-12_Reptile-Queens_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Reptile Queens (voiced by Nichole Sakura) for Disney and Pixar’s Hoppers. The three reptiles are intertwined with each other; one is red, one is yellow, and one is green. The film’s logo, as well as the Disney and h kingdom and always has a long-winded speech prepared... and she’ll make everyone wait with a dramatic pause while she goes down for water.",
+                "gallery_id": 2,
+                "photo_id": "1daac3ad32c4b0f75bf4a139a6b77467b53610d7611fc0cf4b6a68e7f32315e8"
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 개구리라는 점은 같지만 눈이 작고 몸이 둥글어, 원본의 큰 돌출 눈과 납작하고 넓은 얼굴과 다릅니다. 2번은 뱀들이어서 얼굴과 몸의 형태가 다릅니다. 원본에는 꽃무늬와 내민 혀도 보이지만 어느 후보와도 일치하지 않습니다. 원본 캐릭터의 정면 이미지나 게임 내 캐릭터 정보를 확인해야 이름을 알 수 있습니다.",
+            "original_marker": "",
+            "verification": "no_match"
+          }
+        },
+        {
+          "key": "absent",
+          "reverse": true,
+          "selected": false,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 3,
+            "screened": 3,
+            "distinct": 2,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-12_Reptile-Queens_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Reptile Queens (voiced by Nichole Sakura) for Disney and Pixar’s Hoppers. The three reptiles are intertwined with each other; one is red, one is yellow, and one is green. The film’s logo, as well as the Disney and h kingdom and always has a long-winded speech prepared... and she’ll make everyone wait with a dramatic pause while she goes down for water.",
+                "gallery_id": 0,
+                "photo_id": "1daac3ad32c4b0f75bf4a139a6b77467b53610d7611fc0cf4b6a68e7f32315e8"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg?small",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 1,
+                "photo_id": "491b7ac1912119c4a71e363b4ad3457b81921182155c8307ee75b5fc97f5b229"
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 뱀 세 마리로, 원본의 넓은 개구리 얼굴과 돌출된 눈이 다릅니다. 2번은 개구리라는 점은 같지만 둥근 몸과 노란 배, 왕관이 있고 원본의 큰 흰 눈과 내민 혀가 보이지 않습니다. 원본의 정면·측면과 캐릭터 출처를 더 확인해야 합니다.",
+            "original_marker": "",
+            "verification": "no_match"
+          }
+        }
+      ]
+    ],
+    "B1": [
+      [
+        {
+          "key": "tom",
+          "reverse": false,
+          "selected": false,
+          "duplicates": 0,
+          "match": false,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 2,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 2,
+                "photo_id": "842cd92f66974e6d83c4216bcf2809f674e758e21ed41037651f6de72d6583a5"
+              }
+            ],
+            "match": 0,
+            "observations": "1번: 둘 다 개구리 캐릭터이지만, 원본은 큰 흰색 돌출 눈과 넓고 납작한 얼굴, 꽃무늬와 내민 혀가 특징이다. 1번은 반쯤 감긴 작은 눈과 둥글고 통통한 몸, 노란 배를 지녀 같은 캐릭터로 보기 어렵다.",
+            "verification": "no_match"
+          }
+        },
+        {
+          "key": "tom",
+          "reverse": true,
+          "selected": false,
+          "duplicates": 0,
+          "match": false,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 2,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 1,
+                "photo_id": "842cd92f66974e6d83c4216bcf2809f674e758e21ed41037651f6de72d6583a5"
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 개구리라는 점은 같지만, 원본의 크고 둥근 흰 눈과 튀어나온 혀가 없고 얼굴과 몸의 비율도 다릅니다. 같은 캐릭터로 보기 어렵습니다.",
+            "verification": "no_match"
+          }
+        }
+      ],
+      [
+        {
+          "key": "winter",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://pubgitems.info/appearance/face",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 2,
+            "candidates": [
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240013.png",
+                "label": "Xiaohai G-DRAGON aespa NINGNING aespa GISELLE aespa KARINA",
+                "gallery_id": 3,
+                "photo_id": "414c338db002d5b13533f43cb2d4af0bb2dbb3d21f2cb4177dfd654917694956"
+              }
+            ],
+            "match": 1,
+            "observations": "1번: 짧은 검은 단발, 가는 앞머리, 얼굴 윤곽과 눈·입의 비율이 원본과 유사하다. 다만 원본은 측면에 가깝고 고양이 귀를 착용해 완전히 확인하기는 어렵다. 출처 도메인상 게임은 PUBG: BATTLEGROUNDS로 보이지만, 사진에 연결된 라벨에 여러 이름이 나열돼 있어 특정 캐릭터 이름은 확인할 수 없다.",
+            "verification": "unnamed"
+          }
+        },
+        {
+          "key": "winter",
+          "reverse": true,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://pubgitems.info/appearance/face",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 2,
+            "candidates": [
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240013.png",
+                "label": "Xiaohai G-DRAGON aespa NINGNING aespa GISELLE aespa KARINA",
+                "gallery_id": 0,
+                "photo_id": "414c338db002d5b13533f43cb2d4af0bb2dbb3d21f2cb4177dfd654917694956"
+              }
+            ],
+            "match": 1,
+            "observations": "1번: 짧은 검은 단발의 윤곽과 앞머리, 눈·코·입의 비율이 원본과 유사하다. 원본은 측면, 후보는 정면이라 세부 얼굴 특징을 확정하기는 어렵다. 후보 출처는 PUBG 아이템 사이트이므로 게임은 PUBG: BATTLEGROUNDS일 가능성이 높다. 다만 사진에 연결된 라벨에는 여러 이름이 나열되어 있어 특정 캐릭터의 이름은 확인할 수 없다.",
+            "verification": "unnamed"
+          }
+        }
+      ],
+      [
+        {
+          "key": "talents",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://stellive.me/talents",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 2,
+            "candidates": [
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4hiyori/JfKbq3/hiyori.png",
+                "label": "",
+                "gallery_id": 0,
+                "photo_id": "da62d0ae35c83b073bdcc86df0f315876ab3fca58b23e963fdbadbddfb919390"
+              }
+            ],
+            "match": 1,
+            "observations": "1번: 분홍색 눈, 회갈색 단발 앞머리, 머리 오른쪽의 분홍 꽃 장식과 흰 베일, 목 부분 의상이 원본과 일치한다. 얼굴 각도와 표정은 다르지만 같은 캐릭터로 보인다. 스텔라이브 소속 버추얼 스트리머다.",
+            "verification": "unnamed"
+          }
+        },
+        {
+          "key": "talents",
+          "reverse": true,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://stellive.me/talents",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 2,
+            "candidates": [
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4hiyori/JfKbq3/hiyori.png?small",
+                "label": "",
+                "gallery_id": 2,
+                "photo_id": "eafe82207c96af81d6bd9cb2568fefa1e02f7d608644d39825c1322606ec7c8b"
+              }
+            ],
+            "match": 1,
+            "observations": "1번: 분홍색 눈, 짧은 잿빛 머리, 머리 옆의 분홍·흰색 꽃 장식과 얼굴 비율이 원본과 일치한다. 구도와 표정은 다르지만 일치를 반박할 만한 특징은 없다. 스텔라이브에 소속된 버추얼 스트리머다.",
+            "verification": "unnamed"
+          }
+        }
+      ],
+      [
+        {
+          "key": "absent",
+          "reverse": false,
+          "selected": false,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 3,
+            "screened": 3,
+            "distinct": 2,
+            "remaining": 1,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 0,
+                "photo_id": "842cd92f66974e6d83c4216bcf2809f674e758e21ed41037651f6de72d6583a5"
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 개구리라는 점은 같지만, 눈이 작고 반쯤 감겨 있으며 몸이 둥글고 크다. 원본의 커다란 흰 눈, 납작한 얼굴, 내민 혀와는 달라 같은 캐릭터로 보기 어렵다.",
+            "verification": "no_match"
+          }
+        },
+        {
+          "key": "absent",
+          "reverse": true,
+          "selected": false,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 3,
+            "screened": 3,
+            "distinct": 2,
+            "remaining": 1,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg?small",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 1,
+                "photo_id": "491b7ac1912119c4a71e363b4ad3457b81921182155c8307ee75b5fc97f5b229"
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 개구리라는 공통점이 있지만, 원본의 크게 돌출된 흰 눈, 납작하고 넓은 얼굴, 내민 혀와 다르다. 같은 캐릭터로 보기 어렵다.",
+            "verification": "no_match"
+          }
+        }
+      ]
+    ],
+    "B2": [
+      [
+        {
+          "key": "tom",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 0,
+          "match": false,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-7_Tom-Lizard_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of Tom Lizard (voiced by Tom Law) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. harpest stick in the dam. A slow yet staunch protector of Pond Rules, even to his own detriment, Loaf is... just trying his best to keep up.",
+                "gallery_id": 0,
+                "photo_id": "f92b34996446ee6eb858fc43d485f7b4722852feb1191c8b9829520a2deeac24"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 2,
+                "photo_id": "842cd92f66974e6d83c4216bcf2809f674e758e21ed41037651f6de72d6583a5"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-12_Reptile-Queens_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Reptile Queens (voiced by Nichole Sakura) for Disney and Pixar’s Hoppers. The three reptiles are intertwined with each other; one is red, one is yellow, and one is green. The film’s logo, as well as the Disney and h kingdom and always has a long-winded speech prepared... and she’ll make everyone wait with a dramatic pause while she goes down for water.",
+                "gallery_id": 3,
+                "photo_id": "1daac3ad32c4b0f75bf4a139a6b77467b53610d7611fc0cf4b6a68e7f32315e8"
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 돌출된 흰 눈과 웃는 입이 비슷하지만, 머리가 훨씬 작고 긴 꼬리가 있는 도마뱀이다. 2번은 넓은 개구리 얼굴이 비슷하지만 눈이 작고 반쯤 감겨 있으며 몸이 둥글다. 3번은 눈이 돌출되어 있지만 길쭉한 뱀 세 마리다. 원본의 큰 눈, 넓은 청록색 얼굴과 혀를 함께 뒷받침하는 후보는 없다.",
+            "verification": "no_match"
+          }
+        },
+        {
+          "key": "tom",
+          "reverse": true,
+          "selected": true,
+          "duplicates": 0,
+          "match": false,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-12_Reptile-Queens_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Reptile Queens (voiced by Nichole Sakura) for Disney and Pixar’s Hoppers. The three reptiles are intertwined with each other; one is red, one is yellow, and one is green. The film’s logo, as well as the Disney and h kingdom and always has a long-winded speech prepared... and she’ll make everyone wait with a dramatic pause while she goes down for water.",
+                "gallery_id": 0,
+                "photo_id": "1daac3ad32c4b0f75bf4a139a6b77467b53610d7611fc0cf4b6a68e7f32315e8"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 1,
+                "photo_id": "842cd92f66974e6d83c4216bcf2809f674e758e21ed41037651f6de72d6583a5"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-7_Tom-Lizard_Hoppers-Meet-the-Characters.jpg?small",
+                "label": "A promotional image of Tom Lizard (voiced by Tom Law) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. harpest stick in the dam. A slow yet staunch protector of Pond Rules, even to his own detriment, Loaf is... just trying his best to keep up.",
+                "gallery_id": 2,
+                "photo_id": "5553ddd4132fc34aae7d5ce14def6d372106b7629df81d56c74f26131bfdc51c"
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 동그란 눈이 아닌 가늘고 긴 뱀 세 마리다. 2번은 개구리라는 점은 같지만 눈이 가늘고 몸이 둥글며, 원본의 큰 흰 눈과 내민 혀가 없다. 3번은 청록색 계열의 작은 도마뱀이지만 꼬리와 몸의 윤곽이 다르다. 일치하는 후보가 없어 이름을 확인할 수 없다.",
+            "verification": "no_match"
+          }
+        }
+      ],
+      [
+        {
+          "key": "winter",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://pubgitems.info/appearance/face",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240014.png",
+                "label": "IVE REI Xiaohai G-DRAGON aespa NINGNING aespa GISELLE",
+                "gallery_id": 0,
+                "photo_id": "4e010768e5d1bb336415ea1b7b3ff773a677cbc4fd44318b35b9ca7e79271fc2"
+              },
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240016.png",
+                "label": "IVE GAEUL IVE JANGWONYOUNG IVE REI Xiaohai G-DRAGON",
+                "gallery_id": 2,
+                "photo_id": "627ef88b9976154aa6a7e2ae0adc91289070cd641d2e76513e7f7fbc1b018646"
+              },
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240013.png",
+                "label": "Xiaohai G-DRAGON aespa NINGNING aespa GISELLE aespa KARINA",
+                "gallery_id": 3,
+                "photo_id": "414c338db002d5b13533f43cb2d4af0bb2dbb3d21f2cb4177dfd654917694956"
+              }
+            ],
+            "match": 3,
+            "observations": "1번: 검은 머리와 이목구비는 비슷하지만 긴 가르마 머리와 얼굴 윤곽이 다르다. 2번: 눈과 입의 비율은 비슷하지만 머리를 뒤로 넘겼고 얼굴이 더 길어 보인다. 3번: 짧은 검은 단발, 눈을 덮는 앞머리, 얼굴과 입술 비율이 원본과 가장 가깝다. 다만 원본은 측면에 가까운 각도이고 고양이 귀를 착용했다. 후보 출처로 보아 게임은 PUBG: 배틀그라운드로 추정된다. 3번 사진의 라벨에는 여러 이름이 함께 있어 특정 캐릭터 이름은 확정할 수 없다.",
+            "verification": "unnamed"
+          }
+        },
+        {
+          "key": "winter",
+          "reverse": true,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://pubgitems.info/appearance/face",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240013.png",
+                "label": "Xiaohai G-DRAGON aespa NINGNING aespa GISELLE aespa KARINA",
+                "gallery_id": 0,
+                "photo_id": "414c338db002d5b13533f43cb2d4af0bb2dbb3d21f2cb4177dfd654917694956"
+              },
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240016.png",
+                "label": "IVE GAEUL IVE JANGWONYOUNG IVE REI Xiaohai G-DRAGON",
+                "gallery_id": 1,
+                "photo_id": "627ef88b9976154aa6a7e2ae0adc91289070cd641d2e76513e7f7fbc1b018646"
+              },
+              {
+                "url": "https://cdn.pubgitems.info/i-icons/17240014.png?small",
+                "label": "IVE REI Xiaohai G-DRAGON aespa NINGNING aespa GISELLE",
+                "gallery_id": 2,
+                "photo_id": "4e010768e5d1bb336415ea1b7b3ff773a677cbc4fd44318b35b9ca7e79271fc2"
+              }
+            ],
+            "match": 1,
+            "observations": "1번은 짧은 검은 머리의 윤곽과 눈·코·입의 배치가 원본과 가장 가깝다. 다만 원본은 얼굴이 비스듬하고 고양이 귀 장식을 착용해 완전히 확인하기는 어렵다. 2번은 얼굴과 눈매의 비율이 다르고, 3번은 얼굴이 더 길어 보여 일치 근거가 약하다. 출처 도메인으로 보아 게임은 PUBG: 배틀그라운드로 추정되지만, 사진에 연결된 라벨에 여러 이름이 함께 있어 캐릭터의 이름은 특정할 수 없다.",
+            "verification": "unnamed"
+          }
+        }
+      ],
+      [
+        {
+          "key": "talents",
+          "reverse": false,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://stellive.me/talents",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4hiyori/JfKbq3/hiyori.png",
+                "label": "",
+                "gallery_id": 0,
+                "photo_id": "da62d0ae35c83b073bdcc86df0f315876ab3fca58b23e963fdbadbddfb919390"
+              },
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4mary/GWFJ9m/mary.png",
+                "label": "",
+                "gallery_id": 2,
+                "photo_id": "bde2f26879d1a2aa3ac771dedd896b1cef2fb6fed1ef6f40a937a673c22cda9c"
+              },
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4rang/4aJzCg/rang.png",
+                "label": "",
+                "gallery_id": 3,
+                "photo_id": "9dcb9e80ffcc42f8a1a70a550f0265f47dabc3d552acf8402547cc0891930b9d"
+              }
+            ],
+            "match": 1,
+            "observations": "1번: 분홍 눈, 회갈색 머리, 꽃 두 송이와 흰 베일이 원본과 일치한다. 표정과 보는 각도만 다르다. 2번: 머리카락이 눈을 가리고 꽃 장식도 없어 다르다. 3번: 회색 머리, 고양이 귀와 금색 눈이 원본과 다르다. 원본은 스텔라이브의 버추얼 스트리머 1번이다.",
+            "verification": "unnamed"
+          }
+        },
+        {
+          "key": "talents",
+          "reverse": true,
+          "selected": true,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://stellive.me/talents",
+            "available": 4,
+            "screened": 4,
+            "distinct": 3,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4rang/4aJzCg/rang.png",
+                "label": "",
+                "gallery_id": 0,
+                "photo_id": "9dcb9e80ffcc42f8a1a70a550f0265f47dabc3d552acf8402547cc0891930b9d"
+              },
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4mary/GWFJ9m/mary.png",
+                "label": "",
+                "gallery_id": 1,
+                "photo_id": "bde2f26879d1a2aa3ac771dedd896b1cef2fb6fed1ef6f40a937a673c22cda9c"
+              },
+              {
+                "url": "https://stellive.me/files/attach/images/talents/list/4hiyori/JfKbq3/hiyori.png?small",
+                "label": "",
+                "gallery_id": 2,
+                "photo_id": "eafe82207c96af81d6bd9cb2568fefa1e02f7d608644d39825c1322606ec7c8b"
+              }
+            ],
+            "match": 3,
+            "observations": "1번은 단발머리는 비슷하지만 금색 눈과 고양이 귀가 달라요. 2번은 밝은 머리색은 비슷하지만 긴 머리가 눈을 가리고 있어요. 3번은 분홍색 눈, 밝은 단발머리, 머리의 분홍 꽃과 흰 베일까지 원본과 일치해요. 스텔라이브 소속 캐릭터예요.",
+            "verification": "unnamed"
+          }
+        }
+      ],
+      [
+        {
+          "key": "absent",
+          "reverse": false,
+          "selected": false,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 3,
+            "screened": 3,
+            "distinct": 2,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 0,
+                "photo_id": "842cd92f66974e6d83c4216bcf2809f674e758e21ed41037651f6de72d6583a5"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-12_Reptile-Queens_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Reptile Queens (voiced by Nichole Sakura) for Disney and Pixar’s Hoppers. The three reptiles are intertwined with each other; one is red, one is yellow, and one is green. The film’s logo, as well as the Disney and h kingdom and always has a long-winded speech prepared... and she’ll make everyone wait with a dramatic pause while she goes down for water.",
+                "gallery_id": 2,
+                "photo_id": "1daac3ad32c4b0f75bf4a139a6b77467b53610d7611fc0cf4b6a68e7f32315e8"
+              }
+            ],
+            "match": 0,
+            "observations": "1번: 둘 다 개구리지만, 후보는 눈이 작고 몸이 둥글며 원본의 큰 흰 눈과 내민 혀가 없다. 2번: 녹색과 튀어나온 눈은 비슷하지만, 후보는 길게 얽힌 뱀들이어서 윤곽이 다르다. 일치하는 후보가 없다.",
+            "verification": "no_match"
+          }
+        },
+        {
+          "key": "absent",
+          "reverse": true,
+          "selected": false,
+          "duplicates": 0,
+          "match": true,
+          "result": {
+            "page": "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+            "available": 3,
+            "screened": 3,
+            "distinct": 2,
+            "remaining": 0,
+            "candidates": [
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-12_Reptile-Queens_Hoppers-Meet-the-Characters.jpg",
+                "label": "A promotional image of the Reptile Queens (voiced by Nichole Sakura) for Disney and Pixar’s Hoppers. The three reptiles are intertwined with each other; one is red, one is yellow, and one is green. The film’s logo, as well as the Disney and h kingdom and always has a long-winded speech prepared... and she’ll make everyone wait with a dramatic pause while she goes down for water.",
+                "gallery_id": 0,
+                "photo_id": "1daac3ad32c4b0f75bf4a139a6b77467b53610d7611fc0cf4b6a68e7f32315e8"
+              },
+              {
+                "url": "https://d23.com/app/uploads/2026/02/IMAGE-10_Amphibian-King_Hoppers-Meet-the-Characters.jpg?small",
+                "label": "A promotional image of the Amphibian King (voiced by Steve Purcell) for Disney and Pixar’s Hoppers. The film’s logo, as well as the Disney and Pixar logo and the film’s release date, are seen below the character image. he’s jumpy, paranoid, and loud. Bird King likes to look down upon his fellow Council members, figuratively and literally—as he flies away...",
+                "gallery_id": 1,
+                "photo_id": "491b7ac1912119c4a71e363b4ad3457b81921182155c8307ee75b5fc97f5b229"
+              }
+            ],
+            "match": 0,
+            "observations": "1번은 왕관을 쓴 뱀들로, 원본 개구리와 머리와 몸의 윤곽이 다릅니다. 2번은 개구리라는 공통점은 있지만, 왕관과 노란 배가 있고 눈과 머리의 비율이 원본의 크고 흰 돌출 눈, 넓은 청록색 얼굴과 다릅니다. 두 후보 모두 일치한다고 보기 어렵습니다.",
+            "verification": "no_match"
+          }
+        }
+      ]
+    ]
+  },
+  "scope": {
+    "A": [
+      {
+        "case": "frog",
+        "scope": false,
+        "plan": {
+          "approach": "origin",
+          "hypothesis": "머리 모델의 카탈로그 이미지로 같은 얼굴을 찾고, 제작자 설명과 원본 게시물에서 기존 캐릭터의 재현인지 독자 디자인인지 확인한다.",
+          "query": "Roblox UGC frog head flower decals tongue out original character creator",
+          "seeds": [
+            "roblox marketplace"
+          ],
+          "subject": "화면 맨 앞 중앙에서 오른쪽에 있는, 둥글게 솟은 두 눈과 내민 혀, 입 주변의 작은 꽃무늬가 특징인 캐릭터",
+          "relation": "앞쪽 캐릭터가 재현하거나 모티브로 삼은 원형",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            414,
+            390,
+            781,
+            692
+          ],
+          "alternative_query": "puppet mascot character gallery bulging eyes tongue out flower face"
+        },
+        "urls": [
+          "https://www.rolimons.com/item/129084234940234?utm_source=openai",
+          "https://corporate.sanrio.co.jp/en/business-info/brands/kerokerokeroppi/index.html?utm_source=openai"
+        ],
+        "terms": [
+          "Roblox UGC frog head flower decals tongue out original character creator",
+          "puppet mascot character gallery bulging eyes tongue out flower face",
+          "Roblox catalog frog head tongue out flower frog UGC",
+          "site:roblox.com/catalog frog \"tongue\" head frog",
+          "site:rolimons.com/item frog tongue frog head silly pepe",
+          "site:roblox.com/catalog frog flower head frog cute flower hat",
+          "frog cartoon character flower head tongue out mascot frog flower cheeks character keroppi flip lily sanrio"
+        ]
+      },
+      {
+        "case": "frog",
+        "scope": true,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "‘호퍼스’가 픽사 영화 《Hoppers》를 가리킨다면, 공식 캐릭터 갤러리에서 이름과 이미지를 함께 확인해 앞 캐릭터의 원형을 찾는다.",
+          "query": "Pixar Hoppers official character guide animal character names images",
+          "seeds": [
+            "disney",
+            "pixar"
+          ],
+          "subject": "화면 앞쪽 중앙에서 좌우로 크게 돌출된 두 눈과 입 밖으로 나온 혀가 보이는 캐릭터",
+          "relation": "앞 캐릭터가 재현하거나 변형한 원형 캐릭터의 이름",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            416,
+            389,
+            782,
+            691
+          ],
+          "alternative_query": "\"Hoppers\" puppet mascot character gallery protruding eyes tongue"
+        },
+        "urls": [
+          "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/"
+        ],
+        "terms": [
+          "Pixar Hoppers official character guide animal character names images Pixar Disney Hoppers character gallery",
+          "\"Hoppers\" puppet mascot character gallery protruding eyes tongue",
+          "Hoppers Tom Lizard mascot photo eyes tongue site:disney.com OR site:thewaltdisneycompany.com OR site:d23.com OR site:pixar.com",
+          "Hoppers Tom Lizard mascot tongue bulging eyes puppet photo Hoppers Disney"
+        ]
+      },
+      {
+        "case": "helmet-identity",
+        "scope": false,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "배틀그라운드의 공식 겨울 이벤트 보상 목록과 스킨 갤러리에서 이미지와 한글 이름이 일치하는 항목을 찾는다.",
+          "query": "PUBG 크리스마스 3레벨 헬멧 스킨 목록 산타",
+          "seeds": [
+            "pubg: battlegrounds"
+          ],
+          "subject": "이미지 중앙의 빨간 물체. 검은 가로창 아래에 흰 콧수염이 붙어 있고, 위에는 흰 방울이 달린 산타 모자가 씌워져 있다.",
+          "relation": "이미지 속 스킨과 동일한 항목의 정확한 이름",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            144,
+            170,
+            868,
+            958
+          ],
+          "alternative_query": "\"Santa\" \"visor\" \"mustache\" skin Christmas reward"
+        },
+        "urls": [
+          "https://pubgitems.info/ko/equip/helmet/12031153-stylin-santa-helmet-level-3",
+          "https://pubgitems.info/ko/boxes/sets/13000798-stylin-santa-set"
+        ],
+        "terms": [
+          "PUBG 크리스마스 3레벨 헬멧 스킨 목록 산타",
+          "\"Santa\" \"visor\" \"mustache\" skin Christmas reward",
+          "PUBG santa christmas level 3 helmet skin santa beard helmet PUBG Battlegrounds mobile",
+          "site:pubg.com \"산타 스타일 - 헬멧\"",
+          "site:pubg.com \"Stylin' Santa\" helmet PUBG December 2022",
+          "site:pubg.com PUBG \"싸움꾼 눈사람\" \"헬멧\""
+        ]
+      },
+      {
+        "case": "helmet-identity",
+        "scope": true,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "배틀그라운드의 연말 이벤트 공지와 헬멧 스킨 도감에서 아이템명과 썸네일을 대조한다.",
+          "query": "PUBG 산타 헬멧 크리스마스 스킨 이미지 목록",
+          "seeds": [],
+          "subject": "이미지 중앙의 빨간 산타 모자, 검은 가로 바이저, 흰 콧수염이 결합된 머리 장비",
+          "relation": "이미지 속 장비와 동일한 스킨의 공식 아이템명",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            130,
+            164,
+            867,
+            954
+          ],
+          "alternative_query": "Santa combat helmet white mustache black visor game cosmetic gallery"
+        },
+        "urls": [
+          "https://pubgitems.info/equip/helmet/12031153-stylin-santa-helmet-level-3",
+          "https://pubgitems.info/boxes/sets/13000798-stylin-santa-set",
+          "https://www.namu.moe/w/PUBG%3A%20BATTLEGROUNDS/%EB%AC%B4%EA%B8%B0%20%EC%8A%A4%ED%82%A8?utm_source=openai",
+          "https://wallpapers.com/wallpapers/christmas-helmet-pubg-logo-t2c5kkv549u8ili3.html?utm_source=openai"
+        ],
+        "terms": [
+          "PUBG 산타 헬멧 크리스마스 스킨 이미지 목록 산타 헬멧",
+          "Santa combat helmet white mustache black visor game cosmetic gallery",
+          "PUBG Santa helmet Christmas Santa helmet skin level 3 image Santa beard battlegrounds mobile",
+          "\"Stylin' Santa\" \"helmet\" PUBG site:pubg.com OR site:kakaogames.com",
+          "\"Stylin' Santa\" PUBG 산타 헬멧",
+          "PUBG \"Giftwrap\" helmet \"Christmas\" helmet image PUBG Christmas Santa 2020",
+          "game santa helmet white moustache black visor skin PUBG Stylin Santa other game helmet"
+        ]
+      },
+      {
+        "case": "device",
+        "scope": false,
+        "plan": {
+          "approach": "context",
+          "hypothesis": "화면 아래에 적힌 ‘F-91W’를 카시오 공식 제품 페이지의 모델명과 정면 사진으로 확인한다.",
+          "query": "Casio F-91W official product photos F-91W-1",
+          "seeds": [
+            "casio",
+            "f-91w",
+            "f-91w-1"
+          ],
+          "subject": "이미지 중앙의 둥근 모서리 사각형 장비. ‘10:08’이 표시된 화면 아래에 ‘F-91W’와 ‘WATER RESIST’가 적혀 있다.",
+          "relation": "그림 속 장비에 대응하는 실제 제품의 모델명",
+          "answer_kind": "product_model",
+          "subject_box": [
+            79,
+            115,
+            918,
+            869
+          ],
+          "alternative_query": "vintage digital watch catalog rectangular LCD WATER RESIST front photos"
+        },
+        "urls": [
+          "https://www.casio.com/intl/watches/casio/product.F-91W-1/",
+          "https://www.casio.com/us/watches/casio/product.F-91W-1/"
+        ],
+        "terms": [
+          "Casio F-91W official product photos F-91W-1 Casio",
+          "vintage digital watch catalog rectangular LCD WATER RESIST front photos Casio official"
+        ]
+      },
+      {
+        "case": "device",
+        "scope": true,
+        "plan": {
+          "approach": "recognition",
+          "hypothesis": "화면 아래의 ‘F-91W’ 표기는 카시오 F-91W를 가리킨다. 공식 제품 목록의 모델명과 정면 사진으로 확인한다.",
+          "query": "site:casio.com F-91W F-91WM 시계 모델 사진",
+          "seeds": [
+            "f-91w",
+            "f-91wm"
+          ],
+          "subject": "이미지 중앙의 둥근 직사각형 본체. 숫자 화면 아래에 ‘F-91W’와 ‘WATER RESIST’가 적혀 있다.",
+          "relation": "그림이 나타내는 카시오 장비의 제품 모델명",
+          "answer_kind": "product_model",
+          "subject_box": [
+            79,
+            115,
+            918,
+            869
+          ],
+          "alternative_query": "\"WATER RESIST\" \"10:08\" digital watch SVG illustration"
+        },
+        "urls": [
+          "https://www.casio.com/us/watches/casio/about/f-91w/",
+          "https://www.casio.com/us/watches/casio/product.F-91W-1/",
+          "https://www.casio.com/us/watches/casio/product.F-91WM-7A/",
+          "https://gshock.casio.com/content/dam/casio/global/watch/g_shock/catalog/G-SHOCK_Catalog_all.pdf?utm_source=openai"
+        ],
+        "terms": [
+          "site:casio.com F-91W F-91WM 시계 모델 사진",
+          "\"WATER RESIST\" \"10:08\" digital watch SVG illustration"
+        ]
+      },
+      {
+        "case": "place",
+        "scope": false,
+        "plan": {
+          "approach": "context",
+          "hypothesis": "파리 관광청의 샹드마르스 주변 명소 목록과 사진에서 에펠탑이 그림의 지명 단서와 맞는지 확인한다.",
+          "query": "Champ de Mars Paris office de tourisme monuments photos",
+          "seeds": [
+            "tour eiffel"
+          ],
+          "subject": "그림 중앙의 갈색 실루엣. 위로 갈수록 좁아지고 아래쪽은 두 다리처럼 좌우로 벌어진다.",
+          "relation": "그림이 나타내는 실제 명소의 이름을 찾는다.",
+          "answer_kind": "work_or_place",
+          "subject_box": [
+            197,
+            108,
+            797,
+            869
+          ],
+          "alternative_query": "world landmark pictogram gallery tower split base silhouette"
+        },
+        "urls": [
+          "https://parisjetaime.com/eng/culture/parc-du-champ-de-mars-p936",
+          "https://thenounproject.com/icon/eiffel-tower-4722902/?utm_source=openai"
+        ],
+        "terms": [
+          "Champ de Mars Paris office de tourisme monuments photos",
+          "world landmark pictogram gallery tower split base silhouette",
+          "world landmark pictogram gallery tower split base silhouette",
+          "Eiffel Tower pictogram world landmarks Eiffel Tower Tokyo Tower Noun Project icon",
+          "site:parisjetaime.com tour Eiffel photos Champ de Mars École Militaire"
+        ]
+      },
+      {
+        "case": "place",
+        "scope": true,
+        "plan": {
+          "approach": "context",
+          "hypothesis": "‘Champ de Mars’가 명소 자체의 이름인지 위치 단서인지 파리 공식 관광 지도와 사진 목록에서 확인한다. 위치 단서라면 에펠탑이 유력하다.",
+          "query": "Champ de Mars Paris monuments plan photos site officiel",
+          "seeds": [
+            "tour eiffel"
+          ],
+          "subject": "그림 중앙에서 위로 좁아지고 아래로 두 갈래가 벌어지는 짙은 실루엣",
+          "relation": "실루엣이 나타내는 파리 명소의 이름",
+          "answer_kind": "work_or_place",
+          "subject_box": [
+            197,
+            108,
+            797,
+            869
+          ],
+          "alternative_query": "pictogrammes monuments Paris silhouette pointe centrale deux pieds évasés"
+        },
+        "urls": [
+          "https://www.toureiffel.paris/fr/le-monument",
+          "https://cdn.paris.fr/paris/2026/01/23/charte-des-manifestations-evenementielles-sur-le-champ-de-mars-2qV9.pdf",
+          "https://www.paris.fr/lieux/parc-du-champ-de-mars-1807",
+          "https://mairie07.paris.fr/pages/le-parc-du-champ-de-mars-et-ses-pelouses-14075",
+          "https://commons.wikimedia.org/wiki/File%3AEiffel_Tower_Silhouette.svg?utm_source=openai"
+        ],
+        "terms": [
+          "Champ de Mars Paris monuments plan photos site officiel",
+          "pictogrammes monuments Paris silhouette pointe centrale deux pieds évasés",
+          "pictogramme silhouette Tour Eiffel monument Paris icône deux pieds arche"
+        ]
+      }
+    ],
+    "B": [
+      {
+        "case": "place",
+        "scope": false,
+        "plan": {
+          "approach": "context",
+          "hypothesis": "그림의 ‘Champ de Mars’ 표기를 단서로 파리 관광청의 명소 사진 목록에서 에펠탑이 실루엣과 일치하는지 확인한다.",
+          "query": "Champ de Mars Tour Eiffel Paris tourisme monuments photos",
+          "seeds": [
+            "champ de mars",
+            "tour eiffel"
+          ],
+          "subject": "그림 중앙의 갈색 실루엣. 꼭대기가 좁고 아래쪽 두 다리가 좌우로 벌어져 있다.",
+          "relation": "실루엣이 나타내는 실제 명소의 이름",
+          "answer_kind": "work_or_place",
+          "subject_box": [
+            197,
+            108,
+            797,
+            869
+          ],
+          "alternative_query": "pictogramme monument français silhouette deux pieds évasés quiz"
+        },
+        "urls": [
+          "https://www.toureiffel.paris/en/news/visit/what-see-around-eiffel-tower",
+          "https://commons.wikimedia.org/wiki/File:Champ_de_Mars,_Paris,_France.jpg",
+          "https://www.ma-lereseau.org/sites/default/files/2020-10/jnac-livret_jeux_cartographie.pdf?utm_source=openai"
+        ],
+        "terms": [
+          "Champ de Mars Tour Eiffel Paris tourisme monuments photos",
+          "pictogramme monument français silhouette deux pieds évasés quiz",
+          "pictogramme monument français silhouette deux pieds évasés quiz"
+        ]
+      },
+      {
+        "case": "place",
+        "scope": true,
+        "plan": {
+          "approach": "context",
+          "hypothesis": "왼쪽 위의 ‘Champ de Mars’가 명소 이름이라면, 그림은 파리의 샹드마르스 공원을 나타낸다. 파리시 공식 사진과 지도로 확인한다.",
+          "query": "site:paris.fr \"Champ de Mars\" jardin Paris photos",
+          "seeds": [
+            "champ de mars"
+          ],
+          "subject": "‘Champ de Mars’ 글자 아래, 위로 좁아지고 아래에서 좌우로 벌어지는 갈색 도형",
+          "relation": "그림이 나타내는 파리 명소의 이름",
+          "answer_kind": "work_or_place",
+          "subject_box": [
+            197,
+            108,
+            797,
+            869
+          ],
+          "alternative_query": "Paris tourist map Eiffel Tower pictogram silhouette"
+        },
+        "urls": [
+          "https://www.paris.fr/lieux/parc-du-champ-de-mars-1807",
+          "https://pro.visitparisregion.com/en/content/download/60293/file/PARIS_REGION_INTERNATIONAL_PRESS_KIT_2026.pdf?utm_source=openai"
+        ],
+        "terms": [
+          "site:paris.fr \"Champ de Mars\" jardin Paris photos",
+          "Paris tourist map Eiffel Tower pictogram silhouette"
+        ]
+      },
+      {
+        "case": "device",
+        "scope": false,
+        "plan": {
+          "approach": "context",
+          "hypothesis": "하단에 적힌 F-91W를 카시오 공식 제품 페이지의 모델명과 정면 사진으로 확인한다.",
+          "query": "Casio F-91W official product photos WATER RESIST",
+          "seeds": [
+            "casio",
+            "f-91w"
+          ],
+          "subject": "이미지 중앙의 모서리가 둥근 직사각형 장비 정면. 화면에 10:08, 그 아래에 F-91W와 WATER RESIST가 표시되어 있다.",
+          "relation": "그림 속 장비에 해당하는 실제 제품의 모델명",
+          "answer_kind": "product_model",
+          "subject_box": [
+            79,
+            115,
+            918,
+            869
+          ],
+          "alternative_query": "vintage digital watch photo catalog WATER RESIST rectangular LCD -Casio"
+        },
+        "urls": [
+          "https://www.casio.com/us/watches/casio/product.F-91W-1/",
+          "https://timex.com/products/timex-t80-34mm-stainless-steel-bracelet-watch-tw2r79300?variant=40430892679251&utm_source=openai"
+        ],
+        "terms": [
+          "Casio F-91W official product photos WATER RESIST",
+          "vintage digital watch photo catalog WATER RESIST rectangular LCD -Casio",
+          "vintage digital watch photo catalog WATER RESIST rectangular LCD -Casio Timex Armitron Seiko",
+          "official Timex T80 black resin digital watch water resist photo Armitron griffy water resist"
+        ]
+      },
+      {
+        "case": "device",
+        "scope": true,
+        "plan": {
+          "approach": "context",
+          "hypothesis": "화면 아래에 적힌 ‘F-91W’를 카시오 공식 제품 페이지의 모델명과 사진으로 확인한다.",
+          "query": "Casio F-91W WATER RESIST 공식 제품 사진",
+          "seeds": [
+            "f-91w"
+          ],
+          "subject": "이미지 중앙의 둥근 모서리 사각형 장비. 액정 아래 왼쪽에 ‘F-91W’, 오른쪽에 ‘WATER RESIST’가 적혀 있다.",
+          "relation": "그림 속 장비가 재현한 카시오 제품의 모델명 확인",
+          "public_scope": "카시오",
+          "answer_kind": "product_model",
+          "subject_box": [
+            79,
+            115,
+            918,
+            869
+          ],
+          "alternative_query": "카시오 클래식 사각 디지털 시계 모델별 정면 사진 비교"
+        },
+        "urls": [
+          "https://www.casio.com/us/watches/casio/product.F-91W-1/?utm_source=openai",
+          "https://www.casio.com/jp/watches/casio/casio-collection/products/standard/f-91w/?utm_source=openai"
+        ],
+        "terms": [
+          "Casio F-91W WATER RESIST 공식 제품 사진 Casio F-91W-1 official front photo",
+          "카시오 클래식 사각 디지털 시계 모델별 정면 사진 비교 카시오 공식 F-91W W-59 A158WA",
+          "Casio F-91W WATER RESIST 공식 제품 사진 Casio F-91W-1 official front photo",
+          "카시오 클래식 사각 디지털 시계 모델별 정면 사진 비교 카시오 공식 F-91W W-59 A158WA"
+        ]
+      },
+      {
+        "case": "helmet-identity",
+        "scope": false,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "검은 가로형 바이저가 배틀그라운드 3레벨 헬멧과 닮았다. PC판과 모바일판의 크리스마스 헬멧 스킨 이미지 목록을 대조해 공식 명칭을 찾는다.",
+          "query": "PUBG PUBG MOBILE Christmas Santa level 3 helmet skins gallery item names",
+          "seeds": [
+            "pubg mobile",
+            "pubg: battlegrounds"
+          ],
+          "subject": "화면 중앙의 산타 모자와 흰 콧수염이 달린 붉은 헬멧. 전면에 검은 가로형 바이저가 있다.",
+          "relation": "이미지에 나온 동일 스킨의 공식 명칭",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            147,
+            171,
+            863,
+            856
+          ],
+          "alternative_query": "\"보너스\" 산타 헬멧 크리스마스 번들 스킨 상점 -PUBG -배틀그라운드"
+        },
+        "urls": [
+          "https://pubgitems.info/equip/helmet/12031153-stylin-santa-helmet-level-3",
+          "https://pubgitems.info/boxes/sets/13000178-holiday-helmet-bundle",
+          "https://www.ggwp.id/esports/battle-royale/set-robo-santa-pubg-mobile-00-y7wmr-l1zyw7/amp?utm_source=openai",
+          "https://www.gamepur.com/guides/pubg-mobile-royale-pass-month-6-release-date-all-free-and-premium-rewards?utm_source=openai"
+        ],
+        "terms": [
+          "PUBG PUBG MOBILE Christmas Santa level 3 helmet skins gallery item names",
+          "\"보너스\" 산타 헬멧 크리스마스 번들 스킨 상점 -PUBG -배틀그라운드",
+          "PUBG Mobile Christmas Santa helmet level 3 skin holiday helmet Santa Claus helmet name",
+          "site:pubg.com \"Stylin' Santa\" \"Helmet\" May shop",
+          "site:pubg.com \"Starred Antler\" Holiday Helmet",
+          "PUBG Mobile \"Jelly Festival Helmet\" Level 3 Royale Pass Mythic Winter",
+          "PUBG mobile santa christmas helmet skin \"helmet\" christmas santa helmet Jolly Festival naughty christmas present helmet"
+        ]
+      },
+      {
+        "case": "helmet-identity",
+        "scope": true,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "PC·콘솔판 헬멧 스킨 도감에서 산타 모자와 흰 콧수염이 달린 썸네일을 찾아 등록명을 확인한다.",
+          "query": "PUBG 배틀그라운드 PC 콘솔 크리스마스 3레벨 헬멧 스킨 이미지 목록",
+          "seeds": [],
+          "subject": "이미지 중앙의 산타 모자와 흰 콧수염이 달린 붉은 바이저 헬멧",
+          "relation": "이미지에 표시된 스킨의 정식 명칭",
+          "public_scope": "배틀그라운드",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            138,
+            173,
+            867,
+            865
+          ],
+          "alternative_query": "배틀그라운드 모바일 크리스마스 보너스 보상 산타 헬멧"
+        },
+        "urls": [
+          "https://pubgitems.info/equip/helmet/12031153-stylin-santa-helmet-level-3?utm_source=openai",
+          "https://pubgitems.info/boxes/sets/13000178-holiday-helmet-bundle",
+          "https://pubgitems.info/equip/helmet",
+          "https://www.youtube.com/watch?v=C3Zfl9EKgvc&utm_source=openai"
+        ],
+        "terms": [
+          "PUBG PC console christmas level 3 helmet skins santa christmas helmet PUBG battlegrounds",
+          "배틀그라운드 PC 콘솔 크리스마스 3레벨 헬멧 스킨 산타 헬멧",
+          "배틀그라운드 모바일 크리스마스 보너스 보상 산타 헬멧",
+          "PUBG Christmas lvl 3 helmet skin reindeer snowman holiday helmet site:pubg.com OR site:pubgitems.info",
+          "PUBG \"싸움꾼 눈사람\" 헬멧 Level 3",
+          "PUBG \"Starred Antler\" \"Helmet\" PUBG official Holiday helmet bundle",
+          "PUBG battlegrounds Santa Helmet Level 3 Stylin Santa Snowman let it snow helmet site:pubg.com OR site:pubgitems.info",
+          "PUBG Mobile \"Christmas Bonus\" \"Santa Helmet\""
+        ]
+      },
+      {
+        "case": "frog",
+        "scope": false,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "Roblox의 《Frogge》 캐릭터·스킨 갤러리에서 눈과 입의 조형이 일치하는 항목을 찾아, 기본 캐릭터인지 변형 디자인인지 확인한다.",
+          "query": "Roblox Frogge killer skins wiki names images",
+          "seeds": [
+            "frogge"
+          ],
+          "subject": "화면 앞쪽 중앙에서 흰 눈 두 개가 크게 돌출되고 혀를 내민 캐릭터",
+          "relation": "앞쪽 캐릭터가 본뜬 원형",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            415,
+            389,
+            780,
+            690
+          ],
+          "alternative_query": "Jim Henson puppet character photo gallery bulging eyes tongue out"
+        },
+        "urls": [
+          "https://frogge-roblox.fandom.com/wiki/Frogge_Skins?utm_source=openai",
+          "https://frogge-roblox.fandom.com/wiki/Killer_Shoppe",
+          "https://www.si.edu/spotlight/puppets-muppets-jim-henson?utm_source=openai"
+        ],
+        "terms": [
+          "Roblox Frogge killer skins wiki names images",
+          "Jim Henson puppet character photo gallery bulging eyes tongue out"
+        ]
+      },
+      {
+        "case": "frog",
+        "scope": true,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "공식 캐릭터 명단의 이름과 이미지를 대조해 앞 캐릭터의 원형을 찾는다.",
+          "query": "Pixar Hoppers amphibian characters names official images",
+          "seeds": [],
+          "subject": "화면 앞쪽 중앙 오른편에 있으며, 양옆으로 돌출된 둥근 눈과 혀가 나온 넓은 입을 가진 캐릭터",
+          "relation": "이 캐릭터 디자인의 원형이 된 등장인물",
+          "public_scope": "호퍼스",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            416,
+            390,
+            782,
+            690
+          ],
+          "alternative_query": "Pixar Hoppers character concept art turnarounds bulging eyes wide mouth"
+        },
+        "urls": [
+          "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+          "https://www.pixar.com/hoppers"
+        ],
+        "terms": [
+          "Pixar Hoppers amphibian characters names official images frog",
+          "Pixar Hoppers character concept art turnarounds bulging eyes wide mouth",
+          "Hoppers Amphibian King character design frog art Pixar model sheet",
+          "Hoppers Pixar character designer frog frog king art Tom Lizard model sheet The Art of Hoppers Chronicle"
+        ]
+      }
+    ],
+    "B1": [
+      {
+        "case": "place",
+        "scope": false,
+        "plan": {
+          "approach": "context",
+          "hypothesis": "그림의 ‘Champ de Mars’ 표기를 단서로 파리 관광 명소 목록에서 에펠탑의 이름과 사진을 확인하고 실루엣을 대조한다.",
+          "query": "Champ de Mars Paris monuments photos Tour Eiffel",
+          "seeds": [
+            "tour eiffel"
+          ],
+          "subject": "그림 중앙의 갈색 실루엣. 위로 갈수록 좁아지는 몸체 아래로 두 다리가 좌우로 벌어진다.",
+          "relation": "그림이 나타내는 실제 명소의 이름",
+          "answer_kind": "work_or_place",
+          "subject_box": [
+            197,
+            108,
+            798,
+            869
+          ],
+          "alternative_query": "Paris landmark pictogram tall tapered spire splayed legs icon gallery"
+        },
+        "urls": [
+          "https://fr.wikipedia.org/wiki/Tour_Eiffel?utm_source=openai",
+          "https://thenounproject.com/browse/collection-icon/eiffel-tower-33141/?utm_source=openai"
+        ],
+        "terms": [
+          "Champ de Mars Paris monuments photos Tour Eiffel",
+          "Paris landmark pictogram tall tapered spire splayed legs icon gallery Eiffel Tower",
+          "Paris landmark pictogram tall tapered spire splayed legs icon gallery",
+          "site:toureiffel.paris Eiffel tower photo gallery champ de mars official",
+          "Eiffel tower icon pictogram noun project Eiffel tower"
+        ]
+      },
+      {
+        "case": "place",
+        "scope": true,
+        "plan": {
+          "approach": "context",
+          "hypothesis": "파리 공식 관광 안내에서 ‘Champ de Mars’가 공원 이름인지 확인하고, 주변 명소의 이름과 사진을 비교해 에펠탑이 그림의 대상인지 검증한다.",
+          "query": "Paris je t’aime Champ de Mars monuments photos",
+          "seeds": [
+            "paris je t’aime",
+            "tour eiffel"
+          ],
+          "subject": "그림 중앙에서 위로 한 갈래, 아래 양옆으로 두 갈래가 뻗은 짙은 실루엣",
+          "relation": "실루엣이 나타내는 파리 명소의 이름",
+          "answer_kind": "work_or_place",
+          "subject_box": [
+            197,
+            108,
+            797,
+            869
+          ],
+          "alternative_query": "Paris pictogrammes monuments silhouette trois branches Champ de Mars"
+        },
+        "urls": [
+          "https://parisjetaime.com/culture/parc-du-champ-de-mars-p936",
+          "https://www.paris.fr/pages/l-histoire-au-coin-de-la-rue-la-revolution-16749",
+          "https://www.filmfrance.net/films/paris-je-taime/?utm_source=openai"
+        ],
+        "terms": [
+          "Paris je t’aime Champ de Mars monuments photos",
+          "Paris pictogrammes monuments silhouette trois branches Champ de Mars",
+          "Paris Champ de Mars sculpture fontaine trois branches monument silhouette trois Champ de Mars art arbre",
+          "Paris je t'aime film Champ de Mars Tour Eiffel Tuileries monuments film lieux de tournage"
+        ]
+      },
+      {
+        "case": "device",
+        "scope": false,
+        "plan": {
+          "approach": "context",
+          "hypothesis": "화면 아래에 적힌 ‘F-91W’가 카시오 공식 제품 페이지의 모델명과 일치하는지 제품 사진으로 확인한다.",
+          "query": "Casio F-91W 공식 제품 사진 모델",
+          "seeds": [
+            "casio f-91w"
+          ],
+          "subject": "이미지 중앙의 모서리가 둥근 사각 장비. 표시창에는 ‘10:08’, 그 아래에는 ‘F-91W’와 ‘WATER RESIST’가 보인다.",
+          "relation": "그림에 묘사된 장비의 제품 모델 식별",
+          "answer_kind": "product_model",
+          "subject_box": [
+            79,
+            110,
+            918,
+            831
+          ],
+          "alternative_query": "retro digital watch face illustration 10:08 WATER RESIST gallery"
+        },
+        "urls": [
+          "https://www.casio.com/kr/watches/casio/product.F-91W-1/"
+        ],
+        "terms": [
+          "Casio F-91W 공식 제품 사진 모델 Casio F-91W-1 official product photo",
+          "retro digital watch face illustration 10:08 WATER RESIST gallery",
+          "retro digital watch face illustration \"10:08\" \"water resist\" watch gallery"
+        ]
+      },
+      {
+        "case": "device",
+        "scope": true,
+        "plan": {
+          "approach": "recognition",
+          "hypothesis": "화면 아래의 ‘F-91W’ 표기는 카시오 F-91W를 가리킨다. 공식 제품 사진에서 표기와 배치를 대조한다.",
+          "query": "카시오 Casio 공식 F-91W F-91W-1 제품 사진",
+          "seeds": [
+            "f-91w",
+            "f-91w-1"
+          ],
+          "subject": "이미지 중앙의 둥근 직사각형 본체. 숫자 화면 아래에 ‘F-91W’와 ‘WATER RESIST’가 적혀 있다.",
+          "relation": "그림이 재현한 카시오 장비의 실제 제품 모델명",
+          "public_scope": "카시오",
+          "answer_kind": "product_model",
+          "subject_box": [
+            79,
+            115,
+            918,
+            869
+          ],
+          "alternative_query": "카시오 Casio vintage digital watch catalog WATER RESIST face photos"
+        },
+        "urls": [
+          "https://www.casio.com/kr/watches/casio/product.F-91W-1/",
+          "https://www.casio.com/kr/watches/casio/standard/standard/products/f-91w/"
+        ],
+        "terms": [
+          "카시오 Casio 공식 F-91W F-91W-1 제품 사진 Casio Korea",
+          "카시오 Casio vintage digital watch catalog WATER RESIST face photos"
+        ]
+      },
+      {
+        "case": "helmet-identity",
+        "scope": false,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "PUBG: BATTLEGROUNDS의 3레벨 헬멧 스킨 도감에서 크리스마스 디자인의 이미지와 정식 이름을 대조한다.",
+          "query": "PUBG Battlegrounds level 3 helmet skins Christmas Santa catalog",
+          "seeds": [
+            "pubg: battlegrounds"
+          ],
+          "subject": "카드 중앙에 있는 산타 모자와 흰 콧수염이 달린 붉은 헬멧 형태의 아이템. 앞면에 검은 가로형 시야창이 있다.",
+          "relation": "이미지에 표시된 아이템과 동일한 스킨의 정식 이름",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            145,
+            165,
+            865,
+            860
+          ],
+          "alternative_query": "크리스마스 산타 콧수염 스킨 \"보너스\" 상점 패키지 공지"
+        },
+        "urls": [
+          "https://pubg.fandom.com/wiki/Category%3ALevel_3_Helmet_Skins?utm_source=openai",
+          "https://pubgitems.info/boxes/sets/13000178-holiday-helmet-bundle",
+          "https://pubg.com/ko/game-info/probability/pc/9825?utm_source=openai"
+        ],
+        "terms": [
+          "PUBG Battlegrounds level 3 helmet skins Christmas Santa catalog",
+          "크리스마스 산타 콧수염 스킨 \"보너스\" 상점 패키지 공지 PUBG 배틀그라운드",
+          "\"Stylin' Santa\" \"Helmet\" site:pubg.com OR site:steamcommunity.com PUBG December",
+          "\"Stylin' Santa\" \"Helmet\" PUBG December Christmas mustache bonus",
+          "PUBG 배틀그라운드 \"산타\" \"콧수염\" 헬멧 크리스마스 상점",
+          "\"Starred Antler\" \"Helmet\" PUBG official December"
+        ]
+      },
+      {
+        "case": "helmet-identity",
+        "scope": true,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "시즌별 헬멧 스킨 도감에서 이미지와 등록명을 대조한다.",
+          "query": "배틀그라운드 산타 헬멧 크리스마스 스킨 목록 이미지",
+          "seeds": [],
+          "subject": "중앙의 붉은 헬멧. 검은 가로 바이저 아래에 흰 콧수염이 달려 있고, 위에는 방울 달린 산타 모자가 씌워져 있다.",
+          "relation": "이미지에 나온 헬멧과 동일한 스킨의 공식 이름",
+          "public_scope": "배틀그라운드",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            121,
+            173,
+            918,
+            868
+          ],
+          "alternative_query": "배틀그라운드 크리스마스 상점 보너스 산타 헬멧 세트"
+        },
+        "urls": [
+          "https://www.namu.moe/w/PUBG%3A%20BATTLEGROUNDS/%EB%AC%B4%EA%B8%B0%20%EC%8A%A4%ED%82%A8?utm_source=openai",
+          "https://m.namu.moe/w/%EB%B0%B0%ED%8B%80%EA%B7%B8%EB%9D%BC%EC%9A%B4%EB%93%9C%20%EB%AA%A8%EB%B0%94%EC%9D%BC/%EC%8A%A4%ED%82%A8?utm_source=openai",
+          "https://bbs-pubg.kakaogames.com/gaia/do/pubg/update/read?articleId=351&bbsId=PN002&objCate1=255&pageIndex=5&utm_source=openai"
+        ],
+        "terms": [
+          "배틀그라운드 산타 헬멧 크리스마스 스킨 목록 이미지",
+          "배틀그라운드 크리스마스 상점 보너스 산타 헬멧 세트",
+          "PUBG Santa helmet Christmas skin Santa helmet store bonus PUBG Battlegrounds",
+          "배틀그라운드 산타 헬멧 크리스마스 스킨 목록 이미지",
+          "배틀그라운드 크리스마스 상점 보너스 산타 헬멧 세트",
+          "PUBG Santa helmet Christmas skin Santa helmet store bonus PUBG Battlegrounds"
+        ]
+      },
+      {
+        "case": "frog",
+        "scope": false,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "인형극이나 영상에 나온 캐릭터가 원형일 수 있다. 이름과 사진이 함께 있는 캐릭터 갤러리에서 눈의 배치와 입·혀의 형태를 대조한다.",
+          "query": "puppet character gallery googly eyes tongue sticking out",
+          "seeds": [],
+          "subject": "화면 앞쪽 중앙에서 오른쪽으로 치우쳐 있으며, 둥글게 돌출된 두 눈과 입 밖으로 내민 혀가 있는 캐릭터",
+          "relation": "이 캐릭터 디자인의 원형",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            416,
+            389,
+            780,
+            691
+          ],
+          "alternative_query": "Roblox UGC flower frog head tongue out"
+        },
+        "urls": [
+          "https://puppetsireland.ie/products/living-puppets-flob-hand-puppet?utm_source=openai",
+          "https://www.heyyouthedoodlydoos.com/?utm_source=openai"
+        ],
+        "terms": [
+          "puppet character gallery \"googly eyes\" \"tongue\" sticking out puppet character",
+          "Roblox UGC flower frog head tongue out googly eyes",
+          "puppet character gallery \"googly eyes\" \"tongue\" sticking out puppet character",
+          "Roblox UGC flower frog head tongue out googly eyes",
+          "puppet googly eyes red tongue sticking out muppet character gallery tongue"
+        ]
+      },
+      {
+        "case": "frog",
+        "scope": true,
+        "plan": {
+          "approach": "roster",
+          "hypothesis": "《호퍼스》의 등장인물 이름과 이미지가 함께 실린 자료에서 톰 리저드를 우선 비교하되, 다른 후보도 확인한다.",
+          "query": "호퍼스 Pixar Hoppers character guide names pictures Tom Lizard",
+          "seeds": [
+            "tom lizard"
+          ],
+          "subject": "화면 맨 앞 중앙에서 둥글게 튀어나온 두 눈과 혀가 보이는 캐릭터",
+          "relation": "앞 캐릭터가 재현한 원작 캐릭터",
+          "public_scope": "호퍼스",
+          "answer_kind": "named_subject",
+          "subject_box": [
+            417,
+            400,
+            781,
+            690
+          ],
+          "alternative_query": "호퍼스 Pixar Hoppers official teaser animal tongue out close up"
+        },
+        "urls": [
+          "https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/",
+          "https://pixarpost.com/2026/01/5-hoppers-facts.html?utm_source=openai"
+        ],
+        "terms": [
+          "호퍼스 Pixar Hoppers character guide names pictures Tom Lizard",
+          "호퍼스 Pixar Hoppers official teaser animal tongue out close up",
+          "Disney Pixar Tom Lizard Hoppers teaser tongue phone lizard director image Tom Law official"
+        ]
+      }
+    ]
+  },
+  "review": {
+    "A": [
+      [
+        {
+          "case": "marker",
+          "reverse": false,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "두 후보의 외피가 같고 Z17 표식은 후보 사진에만 있어, 원본이 어느 모델인지 구분할 근거가 없습니다.",
+            "coverage": [
+              "현재 자료만으로는 대조한 모델을 확정할 수 없습니다."
+            ]
+          }
+        },
+        {
+          "case": "marker",
+          "reverse": true,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "두 후보의 외형이 같고 Z17 표식은 후보 사진에만 있어, 현재 자료로는 원본을 어느 모델과도 확실히 일치시킬 수 없습니다.",
+            "coverage": [
+              "모델을 확정할 수 없습니다. 원본 원통에는 식별 표식이 없어 Z17 모델인지도 확인할 수 없습니다."
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "case": "denied",
+          "reverse": false,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "파일과 웹 실행 기록 모두 카탈로그 접근이 HTTP 403으로 막혔고 사진 다운로드와 대조가 각각 0건이었다고 보고합니다.",
+            "coverage": [
+              "아니요. 원본을 공개 사진과 직접 대조하지 않았습니다."
+            ]
+          }
+        },
+        {
+          "case": "denied",
+          "reverse": true,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "실행 기록에 따르면 카탈로그 접근이 HTTP 403으로 차단됐으며, 사진 다운로드와 원본 대조는 모두 0건이었습니다.",
+            "coverage": [
+              "아니요. 원본을 공개 사진과 직접 대조하지 않았습니다(대조 0건)."
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "case": "tie",
+          "reverse": false,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "Q와 R은 앞면이 같고, 확인된 자료도 같은 사진의 축소판뿐이라 두 모델을 구별할 단서가 없습니다.",
+            "coverage": [
+              "아니요. 이 앞면 사진 한 장으로는 Q와 R 중 어느 모델인지 구별할 수 없어요. 확인하려면 모델명이 적힌 라벨이나 옆면 사진 같은 추가 단서가 필요해요."
+            ]
+          }
+        },
+        {
+          "case": "tie",
+          "reverse": true,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "확인한 자료에서 Q와 R의 앞면은 동일하고, 공개 자료에도 같은 사진의 축소판만 있어 두 모델을 구별할 근거가 없습니다.",
+            "coverage": [
+              "아니요. 이 앞면 사진 한 장만으로는 Q와 R 중 어느 모델인지 구별할 수 없어요."
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "case": "side",
+          "reverse": false,
+          "expected": true,
+          "call": true,
+          "assessment": {
+            "action": "call",
+            "reason": "원본과 두 후보의 앞면은 같고 원본 옆면에는 홈이 두 개 보이지만, Q와 R의 옆면 사진은 아직 확인하지 않아 제품을 구분할 수 없습니다.",
+            "coverage": [
+              "Q인지 R인지 판별하려면 두 후보의 옆면 사진을 열어 원본과 홈의 개수와 위치를 대조해야 합니다."
+            ],
+            "call": {
+              "name": "web",
+              "question": "제품 목록의 Q와 R 옆면 사진을 열고, 두 후보의 홈 개수와 위치를 원본 제품 사진과 대조해 어느 모델이 일치하는지 확인",
+              "constraints": [],
+              "start_urls": [
+                "https://example.org/products"
+              ],
+              "image_target": "file1"
+            }
+          }
+        },
+        {
+          "case": "side",
+          "reverse": true,
+          "expected": true,
+          "call": true,
+          "assessment": {
+            "action": "call",
+            "reason": "Q와 R의 앞면은 같고 원본 옆면에는 홈이 두 개 있으므로, 아직 열지 않은 명단에서 두 후보의 옆면 사진을 대조해야 한다.",
+            "coverage": [
+              "Q와 R 중 어느 제품인지 아직 확인되지 않았다. 두 후보의 옆면 홈 개수와 위치를 원본과 비교한다."
+            ],
+            "call": {
+              "name": "web",
+              "question": "제품 Q와 R의 옆면 사진을 file1의 원본 옆면과 대조해 홈 두 개의 개수와 위치가 일치하는 후보를 확인",
+              "constraints": [],
+              "start_urls": [
+                "https://example.org/products"
+              ],
+              "image_target": "file1"
+            }
+          }
+        }
+      ]
+    ],
+    "B": [
+      [
+        {
+          "case": "marker",
+          "reverse": false,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "두 후보의 외피가 같고 원본 원통에는 글자가 없으며 Z17 표식은 후보 사진에만 있어, 현재 자료로는 두 모델을 구분할 수 없습니다.",
+            "coverage": [
+              "현재 자료만으로는 모델을 확정할 수 없습니다. 후보 사진의 Z17 표식만으로 원본이 Z17 모델이라고 판단할 수 없습니다."
+            ]
+          }
+        },
+        {
+          "case": "marker",
+          "reverse": true,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "두 모델의 외형이 같고 Z17 표식은 후보 사진에만 있어 원본이 어느 모델인지 구분할 근거가 없습니다.",
+            "coverage": [
+              "현재 자료만으로는 원본이 두 후보 중 어느 모델인지 확정할 수 없습니다."
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "case": "denied",
+          "reverse": false,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "카탈로그 접근이 HTTP 403으로 차단됐으며, 공개 사진 다운로드와 원본 대조는 모두 0건으로 기록됐습니다.",
+            "coverage": [
+              "아니요. 원본을 공개 사진과 직접 대조하지 않았습니다."
+            ]
+          }
+        },
+        {
+          "case": "denied",
+          "reverse": true,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "실행 기록에 카탈로그 접근이 HTTP 403으로 차단됐고 사진 대조가 0건으로 표시되어 있습니다.",
+            "coverage": [
+              "아니요. 카탈로그에 접근할 수 없어 원본을 공개 사진과 직접 대조하지 않았습니다."
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "case": "tie",
+          "reverse": false,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "파일과 웹에서 확인한 자료는 같은 사진의 축소판뿐이며, Q와 R의 앞면이 동일해 이 사진으로는 두 모델을 구별할 수 없습니다.",
+            "coverage": [
+              "아니요. 이 앞면 사진 한 장만으로는 Q와 R 중 어느 모델인지 구별할 수 없습니다. 옆면 사진이나 모델 번호가 적힌 라벨이 있으면 확인에 도움이 됩니다."
+            ]
+          }
+        },
+        {
+          "case": "tie",
+          "reverse": true,
+          "expected": false,
+          "call": false,
+          "assessment": {
+            "action": "answer",
+            "reason": "Q와 R은 앞면이 동일하고, 확인한 자료에도 같은 사진의 축소판만 있어 이 한 장으로는 두 모델을 구별할 수 없습니다.",
+            "coverage": [
+              "앞면 사진만으로는 모델 Q인지 R인지 판별할 수 없습니다."
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "case": "side",
+          "reverse": false,
+          "expected": true,
+          "call": true,
+          "assessment": {
+            "action": "call",
+            "reason": "Q와 R은 앞면으로 구분할 수 없고 원본 옆면에는 홈 두 개가 보이므로, 아직 열지 않은 제품 명단에서 두 후보의 옆면 사진을 원본과 대조해야 한다.",
+            "coverage": [
+              "제품의 정체(Q 또는 R): 아직 미확정이며, 두 후보의 옆면 홈 개수와 위치를 원본과 비교해야 한다."
+            ],
+            "discriminator": "Q와 R을 같은 방향의 옆면 사진으로 비교해 한 후보만 원본의 홈 두 개와 위치가 일치하는지 확인한다. 두 후보가 모두 일치하거나 사진에서 홈을 확인할 수 없으면 이 단서만으로는 판정하지 않는다.",
+            "call": {
+              "name": "web",
+              "question": "제품 Q와 R의 옆면 사진이 있는 제품 명단에서 두 후보의 홈 개수와 위치를 확인하고 원본 이미지와 대조",
+              "constraints": [],
+              "start_urls": [
+                "https://example.org/products"
+              ],
+              "image_target": "file1"
+            }
+          }
+        },
+        {
+          "case": "side",
+          "reverse": true,
+          "expected": true,
+          "call": true,
+          "assessment": {
+            "action": "call",
+            "reason": "원본의 앞면만으로는 Q와 R을 구분할 수 없고 옆면에는 홈 두 개가 보이므로, 아직 열지 않은 제품 목록에서 두 후보의 옆면 사진을 원본과 비교해야 한다.",
+            "coverage": [
+              "제품 1개: Q와 R 중 미확정. 원본 옆면의 홈 두 개가 어느 후보와 일치하는지 확인 필요."
+            ],
+            "discriminator": "제품 목록에서 Q와 R의 같은 쪽 옆면 사진을 열어 file1과 대조한다. 홈의 개수·위치·모양이 한 후보에만 일치하면 그 후보로 식별하고, 두 후보가 모두 일치하거나 옆면이 명확히 보이지 않으면 판정을 보류한다.",
+            "call": {
+              "name": "web",
+              "question": "Q R 제품 옆면 사진 비교 홈",
+              "constraints": [],
+              "start_urls": [
+                "https://example.org/products"
+              ],
+              "image_target": "file1"
+            }
+          }
+        }
+      ]
+    ]
+  },
+  "page-cost": {
+    "A": [
+      {
+        "case": "tom",
+        "notes": 0,
+        "tokens": 3236,
+        "preserves": true
+      },
+      {
+        "case": "winter",
+        "notes": 0,
+        "tokens": 1371,
+        "preserves": true
+      },
+      {
+        "case": "talents",
+        "notes": 0,
+        "tokens": 1033,
+        "preserves": true
+      }
+    ],
+    "B": [
+      {
+        "case": "tom",
+        "notes": 0,
+        "tokens": 1289,
+        "preserves": true
+      },
+      {
+        "case": "winter",
+        "notes": 0,
+        "tokens": 1301,
+        "preserves": true
+      },
+      {
+        "case": "talents",
+        "notes": 0,
+        "tokens": 2712,
+        "preserves": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,209 @@
+{
+  "A": {
+    "assistant_bot\\bot.py": "d90d937315c4dc1c3515f3fb8ee28f9a1b5fbf8eab9a3b0bff8f8084148eac71",
+    "assistant_bot\\cli.py": "1a7ec91d2bc475e21dd84b2bb64bd1d20f613471860896f8c15988f9b762b44a",
+    "assistant_bot\\context_builder.py": "6c1b7f53923281b87c60166b7df9ec52bafcfb9251103ff2e09439b8ae926e8a",
+    "assistant_bot\\dashboard.py": "6b0d181192fac0583dad9011ed79534b1879d35639f7b14e32e2b0cf6e4a78ff",
+    "assistant_bot\\document_reader.py": "e07018877a14c84152cbda791df271a79e56005fe55a9821d677a883bea9655d",
+    "assistant_bot\\evidence_review.py": "d2e4c8adec9989b2e8a46f30affa45295f2ebb24dae63112fd06bcde5fa85777",
+    "assistant_bot\\file_extractor.py": "fa3712743816804f08dff80fd21aa78156197bedc0988d420cc2f382a1049f69",
+    "assistant_bot\\followups.py": "afbfd896c2611d2e7987cf9fd3d2c01179c20ff67aaa42cd12d0e80c7c6293ee",
+    "assistant_bot\\jeda_server.py": "15725eef3e038aa0b19a0c8fd301ed1eb9af2a1bebeebd241d4f565af025b630",
+    "assistant_bot\\main.py": "40a8b0fcce916edd839d7c7e61f4f75eb69c58fe17517008d77818a65183c89f",
+    "assistant_bot\\metrics.py": "8ce638408762966914b72fe260794b57e271f8e929587f3b3886c9b8be13b845",
+    "assistant_bot\\openai_service.py": "0adb071c236df2224e27daaeab287672be096ecf5f6c7420b67811e87ba2de70",
+    "assistant_bot\\operation_result.py": "6f1a415a610962f5882c3fff03371ce54aa819638eb61efe98c75048c2ba8603",
+    "assistant_bot\\pdf_reader.py": "a5579bca49c26624fa498ee688bd175e4eb3c9c9c9b4b90b24b1ea7dd1241365",
+    "assistant_bot\\runtime.py": "7406ffb65a254865d8d98905fd08e72a7d9258381e5116cd1e858887e20e8224",
+    "assistant_bot\\stores.py": "93673bd370ebaa7b93765d46c62aba206aaa493d15c4d12c84a0dda82f1187a9",
+    "assistant_bot\\text_utils.py": "40185863a260fe890ae466a935e3c7a4a7f6aaf9fdc31b5c65969a07b7ba0c49",
+    "assistant_bot\\tool_calling.py": "80becfee4e7701050ee9f4ae54a1441043acb3b1f814d45191cebf0d734724ac",
+    "assistant_bot\\visual_evidence.py": "aa5901b0688aae58f431d8f46a9e76b138669a4580e612f30d6f9f028038599b",
+    "assistant_bot\\web_agent.py": "5067ec686c3d76adb4281b85e334289e6450f7108d00b389cd6430220d452195",
+    "assistant_bot\\__init__.py": "c07b91b8d7b44448d6113add7fb035ce89ef5d098eaf3b3b177be3fa075e2147"
+  },
+  "B": {
+    "assistant_bot\\bot.py": "d90d937315c4dc1c3515f3fb8ee28f9a1b5fbf8eab9a3b0bff8f8084148eac71",
+    "assistant_bot\\cli.py": "1a7ec91d2bc475e21dd84b2bb64bd1d20f613471860896f8c15988f9b762b44a",
+    "assistant_bot\\context_builder.py": "6c1b7f53923281b87c60166b7df9ec52bafcfb9251103ff2e09439b8ae926e8a",
+    "assistant_bot\\dashboard.py": "6b0d181192fac0583dad9011ed79534b1879d35639f7b14e32e2b0cf6e4a78ff",
+    "assistant_bot\\document_reader.py": "0a8920e682992c60a2cfbe07cf6efc65cb9cd380bec1aa6b383b505cf93ffbfb",
+    "assistant_bot\\evidence_review.py": "ee48a5fb21d8b5508195d5718c282939dc514e4e18f716cdb2e997781d645acf",
+    "assistant_bot\\file_extractor.py": "fa3712743816804f08dff80fd21aa78156197bedc0988d420cc2f382a1049f69",
+    "assistant_bot\\followups.py": "afbfd896c2611d2e7987cf9fd3d2c01179c20ff67aaa42cd12d0e80c7c6293ee",
+    "assistant_bot\\jeda_server.py": "15725eef3e038aa0b19a0c8fd301ed1eb9af2a1bebeebd241d4f565af025b630",
+    "assistant_bot\\main.py": "40a8b0fcce916edd839d7c7e61f4f75eb69c58fe17517008d77818a65183c89f",
+    "assistant_bot\\metrics.py": "8ce638408762966914b72fe260794b57e271f8e929587f3b3886c9b8be13b845",
+    "assistant_bot\\openai_service.py": "0adb071c236df2224e27daaeab287672be096ecf5f6c7420b67811e87ba2de70",
+    "assistant_bot\\operation_result.py": "6f1a415a610962f5882c3fff03371ce54aa819638eb61efe98c75048c2ba8603",
+    "assistant_bot\\pdf_reader.py": "a5579bca49c26624fa498ee688bd175e4eb3c9c9c9b4b90b24b1ea7dd1241365",
+    "assistant_bot\\runtime.py": "b1bdbc3ca3c1f0033444150c39db7130ece2679fbf1ca7145cd71bf157c879ad",
+    "assistant_bot\\stores.py": "93673bd370ebaa7b93765d46c62aba206aaa493d15c4d12c84a0dda82f1187a9",
+    "assistant_bot\\text_utils.py": "40185863a260fe890ae466a935e3c7a4a7f6aaf9fdc31b5c65969a07b7ba0c49",
+    "assistant_bot\\tool_calling.py": "80becfee4e7701050ee9f4ae54a1441043acb3b1f814d45191cebf0d734724ac",
+    "assistant_bot\\visual_evidence.py": "b59e0c417a8b7144694da6924623f354d3396e9b9ddadcbb4e8b5174aa41dc97",
+    "assistant_bot\\web_agent.py": "0c3949477f3b669a4f17ddf08d9b7563d071ec950eff7c3d0b406e3f94af932f",
+    "assistant_bot\\__init__.py": "c07b91b8d7b44448d6113add7fb035ce89ef5d098eaf3b3b177be3fa075e2147"
+  },
+  "settings": {
+    "database": "./data/jeda.sqlite",
+    "router": "gpt-6-luna",
+    "everyday": "gpt-6-luna",
+    "vision": "gpt-6.1-terra",
+    "reasoning": "gpt-6.2-sol",
+    "max_bytes": 10485760,
+    "daily_search": 50,
+    "timeout": 60.0
+  },
+  "original_manifest_hashes": {
+    "inputs.json": "fb7455cab499e6f5e974e3f7111e9e40e680e622b81713e0d34a17baed59ec21",
+    "grading.json": "a71198ae8207b7df802ea9a22acdb8937259bfada64d8f71c07262d4e980c041"
+  },
+  "blind_rubric": {
+    "new-01": {
+      "group": "direct",
+      "expected": "KT-729 AND 36",
+      "source": "",
+      "sha256": "ac789bdd952ac5c619bd696c6472d5fee16785ee32cf56b1f6d18fbcb6b976af"
+    },
+    "new-02": {
+      "group": "direct",
+      "expected": "PUMP AND 42 °C",
+      "source": "",
+      "sha256": "ae1befdec97637a95d4679d317f1b315203e741482a39078f5865db6987b1e61"
+    },
+    "new-03": {
+      "group": "direct",
+      "expected": "B AND 5",
+      "source": "",
+      "sha256": "165ea8c0b59c8483d27459970883c231bf4922de17902b027caca401f09beab4"
+    },
+    "new-04": {
+      "group": "direct",
+      "expected": "275 mL AND Peru",
+      "source": "",
+      "sha256": "f26360704a5f211525c54a80d933dc7bc204d2a8607901e771da9410333df830"
+    },
+    "new-05": {
+      "group": "scope",
+      "expected": "파비코리|Altaria",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/334.png",
+      "sha256": "b15d5e2619c2ab525be5ada069dae68aa0d46b63a227cc3253244a98dc47dda7"
+    },
+    "new-06": {
+      "group": "scope",
+      "expected": "Elixir|엘릭서",
+      "source": "https://raw.githubusercontent.com/github/explore/main/topics/elixir/elixir.png",
+      "sha256": "b0128e07c9d194b57e518cf7016ccee18204b57a67fbd87e1d3f9cdccbdb946e"
+    },
+    "new-07": {
+      "group": "scope",
+      "expected": "에스토니아|Estonia",
+      "source": "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/ee.svg",
+      "sha256": "00697d8b9c9053dcdec75018877102953fc8c27374fc0903fdd4c3351e5f85fe"
+    },
+    "new-08": {
+      "group": "scope",
+      "expected": "Chelsea|첼시",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/v0.24.0/skimage/data/chelsea.png",
+      "sha256": "adbb6c59da5251983dfca65bd3d055e3d2cb9d49f85af5d473852a9033e42f24"
+    },
+    "new-09": {
+      "group": "open",
+      "expected": "PostgreSQL|포스트그레",
+      "source": "https://raw.githubusercontent.com/github/explore/main/topics/postgresql/postgresql.png",
+      "sha256": "7da1d6f42d43b58ec5b927a68cd7ca0aad012ab2b305ef9b9e95b512d15a44ca"
+    },
+    "new-10": {
+      "group": "open",
+      "expected": "부탄|Bhutan",
+      "source": "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/bt.svg",
+      "sha256": "162154f00ffe71850964e76301a95f8cfcdaabb0ac70fbaf3747631b4ed7d13e"
+    },
+    "new-11": {
+      "group": "open",
+      "expected": "앱솔|Absol",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/359.png",
+      "sha256": "3e093b1cdd8299db4f3333b0640acbf8a29e046b72b9b9d4840c8d0f01777650"
+    },
+    "new-12": {
+      "group": "open",
+      "expected": "Raspberry Pi|라즈베리 파이|라즈베리파이",
+      "source": "https://raw.githubusercontent.com/github/explore/main/topics/raspberry-pi/raspberry-pi.png",
+      "sha256": "360615bf4487e90f160bcd296558ed2a8bca739dce3d5b166fb8a3eda12d0e89"
+    },
+    "new-13": {
+      "group": "derived",
+      "expected": "Docker|도커",
+      "source": "https://raw.githubusercontent.com/github/explore/main/topics/docker/docker.png",
+      "sha256": "184168068ff7cbfc1f29ebdd48696900a58af2b123d000d13183e6c5ce2546b1"
+    },
+    "new-14": {
+      "group": "derived",
+      "expected": "라프라스|Lapras",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/131.png",
+      "sha256": "0f45d33766b71ba5f0fbc446fc0f5bc21c9f8feda161816ad01f40246b7c09c4"
+    },
+    "new-15": {
+      "group": "derived",
+      "expected": "브라질|Brazil",
+      "source": "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/br.svg",
+      "sha256": "b63964009b814f3f7ef1ffe2e386306c1e408048e8af9891a751fe2cf2d256b5"
+    },
+    "new-16": {
+      "group": "derived",
+      "expected": "Kubernetes|쿠버네티스",
+      "source": "https://raw.githubusercontent.com/github/explore/main/topics/kubernetes/kubernetes.png",
+      "sha256": "6cf0f928c8e1d17ccc5d379c3700ccec28601fff5761a86f7938642d38ab5a5c"
+    },
+    "new-17": {
+      "group": "compare",
+      "expected": "Rust|러스트",
+      "source": "https://raw.githubusercontent.com/github/explore/main/topics/rust/rust.png",
+      "sha256": "b13ec4a989d8490f9fb19aaade6083d55243b303ef17ea41e35724bdd5792c23"
+    },
+    "new-18": {
+      "group": "compare",
+      "expected": "전룡|Ampharos",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/181.png",
+      "sha256": "766c24c8efd047b6fc367ad6f5d563c2eae9a2004b4b487debe032dc9a27e420"
+    },
+    "new-19": {
+      "group": "compare",
+      "expected": "스리랑카|Sri Lanka",
+      "source": "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/lk.svg",
+      "sha256": "51da2d17a4c589564e3c321d4b4057b512c4ad84f9b92542cc5271bb0087cbfd"
+    },
+    "new-20": {
+      "group": "compare",
+      "expected": "Arduino|아두이노",
+      "source": "https://raw.githubusercontent.com/github/explore/main/topics/arduino/arduino.png",
+      "sha256": "406e195fdb8c340b9b0b2686b7553fe9f7d5766a5d25604f73764fb763e48bd8"
+    },
+    "new-21": {
+      "group": "insufficient",
+      "expected": "제조사 식별 불가 + 제조사 표기나 포장 요청",
+      "source": "",
+      "sha256": "99feea9b070c9db3abe8ab97df3105dc54991a73b532a4151849ec3f770ba62f"
+    },
+    "new-22": {
+      "group": "insufficient",
+      "expected": "끝 두 자리 미확인 + 가리지 않은 원본 요청",
+      "source": "",
+      "sha256": "d2b34cda75effd7f752a4caf0afddd98365a4f90b85c8ec317c0fb135691db52"
+    },
+    "new-23": {
+      "group": "insufficient",
+      "expected": "날짜 미확인 + 촬영 메타데이터나 날짜 단서 요청",
+      "source": "",
+      "sha256": "2e31deb3edc486e1347f4f7f19309fe8a04daeb94fbce8692bb2e6b0740b29b3"
+    },
+    "new-24": {
+      "group": "insufficient",
+      "expected": "호실 미확인 + 방 번호나 주변 사진 요청",
+      "source": "",
+      "sha256": "69d3fc041be0198a38f3cf3e226b85afc058dc2be8c8b19dc7f310cdacee2b46"
+    }
+  },
+  "candidate_patch_sha256": "6b439f957456580b2f902a90bb3de384935b6d1a1fa3b35ccefe2c5f7c2c0924"
+}

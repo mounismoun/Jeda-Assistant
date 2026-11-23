@@ -1,0 +1,238 @@
+{
+  "A": {
+    "answer": "《호퍼스》의 **톰 리저드(Tom Lizard)**로 보입니다. 개구리처럼 보이지만 원작에서는 도마뱀입니다. [출처](<https://www.disneyplus.com/en-gb/explore/articles/hoppers-cast-character-guide>)\n\n다만 첨부 이미지는 원작과 얼굴 형태가 조금 달라 확실하게 단정하기는 어렵습니다.",
+    "metrics": [
+      {
+        "model": "gpt-6-luna",
+        "purpose": "라우팅",
+        "status": "ok",
+        "seconds": 3.276486399990972,
+        "input_tokens": 3809,
+        "output_tokens": 254
+      },
+      {
+        "model": "gpt-6.2-sol",
+        "purpose": "문서 판독",
+        "status": "ok",
+        "seconds": 6.9353909000055864,
+        "input_tokens": 1332,
+        "output_tokens": 368
+      },
+      {
+        "model": "gpt-6.2-sol",
+        "purpose": "근거 검토",
+        "status": "ok",
+        "seconds": 4.580009400000563,
+        "input_tokens": 1350,
+        "output_tokens": 282
+      },
+      {
+        "model": "gpt-6.2-sol",
+        "purpose": "이미지 탐색 경로 선택",
+        "status": "ok",
+        "seconds": 5.087661400000798,
+        "input_tokens": 2268,
+        "output_tokens": 346
+      },
+      {
+        "model": "gpt-6.2-sol",
+        "purpose": "웹 검색",
+        "status": "ok",
+        "seconds": 13.838170800008811,
+        "input_tokens": 13451,
+        "output_tokens": 587
+      },
+      {
+        "model": "gpt-6-luna",
+        "purpose": "후보 사진 선택",
+        "status": "ok",
+        "seconds": 5.531999099999666,
+        "input_tokens": 12052,
+        "output_tokens": 317
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "purpose": "후보 이미지 대조",
+        "status": "ok",
+        "seconds": 3.737499300012132,
+        "input_tokens": 5616,
+        "output_tokens": 178
+      },
+      {
+        "model": "gpt-6-luna",
+        "purpose": "후보 출처 선택",
+        "status": "ok",
+        "seconds": 2.185771999997087,
+        "input_tokens": 7376,
+        "output_tokens": 106
+      },
+      {
+        "model": "gpt-6-luna",
+        "purpose": "후보 사진 선택",
+        "status": "ok",
+        "seconds": 6.716723799996544,
+        "input_tokens": 3710,
+        "output_tokens": 530
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "purpose": "후보 이미지 대조",
+        "status": "ok",
+        "seconds": 4.651667600002838,
+        "input_tokens": 2491,
+        "output_tokens": 246
+      },
+      {
+        "model": "gpt-6.2-sol",
+        "purpose": "근거 검토",
+        "status": "ok",
+        "seconds": 3.2413593999808654,
+        "input_tokens": 6004,
+        "output_tokens": 186
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "purpose": "웹 근거 검토",
+        "status": "ok",
+        "seconds": 4.0670093999942765,
+        "input_tokens": 3626,
+        "output_tokens": 234
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "purpose": "웹 근거 검토",
+        "status": "ok",
+        "seconds": 4.741677399986656,
+        "input_tokens": 29242,
+        "output_tokens": 231
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "purpose": "답변",
+        "status": "ok",
+        "seconds": 2.1861383999930695,
+        "input_tokens": 9065,
+        "output_tokens": 74
+      }
+    ],
+    "seconds": 77.49359560001176
+  },
+  "B": {
+    "answer": "《호퍼스》의 **톰 리저드(Tom Lizard)**로 보입니다. 개구리처럼 생겼지만 원작에서는 도마뱀입니다. [출처](<https://www.disneyplus.com/en-gb/explore/articles/hoppers-cast-character-guide>)\n\n돌출된 눈과 둥근 주둥이가 공식 이미지와 닮았지만, 첨부 이미지의 꽃무늬와 내민 혀는 공식 이미지에 보이지 않습니다.",
+    "metrics": [
+      {
+        "model": "gpt-6-luna",
+        "purpose": "라우팅",
+        "status": "ok",
+        "seconds": 3.0923160999955144,
+        "input_tokens": 3812,
+        "output_tokens": 239
+      },
+      {
+        "model": "gpt-6.2-sol",
+        "purpose": "문서 판독",
+        "status": "ok",
+        "seconds": 8.309680100006517,
+        "input_tokens": 1332,
+        "output_tokens": 409
+      },
+      {
+        "model": "gpt-6.2-sol",
+        "purpose": "근거 검토",
+        "status": "ok",
+        "seconds": 4.966509699996095,
+        "input_tokens": 1347,
+        "output_tokens": 319
+      },
+      {
+        "model": "gpt-6.2-sol",
+        "purpose": "이미지 탐색 경로 선택",
+        "status": "ok",
+        "seconds": 5.17596200000844,
+        "input_tokens": 2190,
+        "output_tokens": 330
+      },
+      {
+        "model": "gpt-6.2-sol",
+        "purpose": "웹 검색",
+        "status": "ok",
+        "seconds": 14.870769200002542,
+        "input_tokens": 21552,
+        "output_tokens": 580
+      },
+      {
+        "model": "gpt-6-luna",
+        "purpose": "후보 사진 선택",
+        "status": "ok",
+        "seconds": 4.950553400005447,
+        "input_tokens": 17165,
+        "output_tokens": 248
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "purpose": "후보 이미지 대조",
+        "status": "ok",
+        "seconds": 5.56618389999494,
+        "input_tokens": 5314,
+        "output_tokens": 208
+      },
+      {
+        "model": "gpt-6-luna",
+        "purpose": "후보 출처 선택",
+        "status": "ok",
+        "seconds": 1.6827706999902148,
+        "input_tokens": 7443,
+        "output_tokens": 78
+      },
+      {
+        "model": "gpt-6-luna",
+        "purpose": "후보 사진 선택",
+        "status": "ok",
+        "seconds": 3.7671201000048313,
+        "input_tokens": 4517,
+        "output_tokens": 227
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "purpose": "후보 이미지 대조",
+        "status": "ok",
+        "seconds": 5.119556200021179,
+        "input_tokens": 3884,
+        "output_tokens": 232
+      },
+      {
+        "model": "gpt-6.2-sol",
+        "purpose": "근거 검토",
+        "status": "ok",
+        "seconds": 3.5582697999780066,
+        "input_tokens": 7176,
+        "output_tokens": 207
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "purpose": "웹 근거 검토",
+        "status": "ok",
+        "seconds": 3.8822672000096645,
+        "input_tokens": 5056,
+        "output_tokens": 197
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "purpose": "웹 근거 검토",
+        "status": "ok",
+        "seconds": 4.938646399998106,
+        "input_tokens": 30170,
+        "output_tokens": 340
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "purpose": "답변",
+        "status": "ok",
+        "seconds": 2.170617499999935,
+        "input_tokens": 11249,
+        "output_tokens": 90
+      }
+    ],
+    "seconds": 78.71467709998251
+  }
+}

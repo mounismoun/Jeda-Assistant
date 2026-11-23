@@ -1,0 +1,170 @@
+{
+  "A": [
+    {
+      "case": "helmet-identity",
+      "arm": "A",
+      "answer": "《PUBG: 배틀그라운드》의 3레벨 헬멧 스킨일 가능성이 높습니다. 산타 모자와 흰 콧수염이 보이는 산타 테마의 헬멧으로 보이지만, 이미지에 아이템명이 표시되어 있지 않아 공식 스킨 이름은 확인할 수 없습니다. [출처](<https://pubgitems.info/equip/helmet/12031153-stylin-santa-helmet-level-3>)",
+      "calls": [
+        {
+          "purpose": "답변",
+          "status": "ok",
+          "input_tokens": 8462,
+          "output_tokens": 88
+        },
+        {
+          "purpose": "응답 항목 대조",
+          "status": "ok",
+          "input_tokens": 495,
+          "output_tokens": 277
+        }
+      ]
+    },
+    {
+      "case": "dog",
+      "arm": "A",
+      "answer": "사진 속 개는 **아메리칸 에스키모 도그**일 가능성이 가장 커 보입니다. 다만 **재패니즈 스피츠**와 외형이 매우 비슷해 사진 한 장만으로 품종을 확정할 수는 없습니다.\n\n- **사진에서 보이는 단서:** 흰 장모와 갈기처럼 풍성한 목·가슴 털, 곧게 선 삼각형 귀, 짙은 눈과 코, 깃털처럼 퍼진 꼬리가 보입니다. 주둥이 밑동이 비교적 넓어 보이는 점과 풍성한 목둘레 털 때문에 아메리칸 에스키모 도그를 우선 후보로 봤습니다. 다만 개가 앉아 있어 꼬리를 등에 어떻게 올리는지는 확인하기 어렵고, 촬영 각도와 털의 볼륨도 인상에 영향을 줄 수 있습니다.\n- **공개 품종 사진과의 대조:** [AKC 아메리칸 에스키모 도그 품종 페이지](https://www.akc.org/dog-breeds/american-eskimo-dog)의 사진에서 보이는 흰 장모, 풍성한 목둘레, 직립 귀와 짙은 눈·코가 사진 속 개와 잘 맞습니다. 하지만 [AKC 재패니즈 스피츠 품종 페이지](https://www.akc.org/dog-breeds/japanese-spitz)의 사진에도 이 특징들이 겹쳐 나타나므로, 사진만으로 두 품종을 확실히 구분하기는 어렵습니다. 혈통 기록이 품종 확인에 가장 확실한 자료입니다.",
+      "calls": [
+        {
+          "purpose": "답변",
+          "status": "ok",
+          "input_tokens": 4730,
+          "output_tokens": 294
+        },
+        {
+          "purpose": "응답 항목 대조",
+          "status": "ok",
+          "input_tokens": 931,
+          "output_tokens": 696
+        }
+      ]
+    },
+    {
+      "case": "new-18",
+      "arm": "A",
+      "answer": "첨부 이미지의 캐릭터는 **전룡(Ampharos, 포켓몬 도감 No. 0181)**일 가능성이 높습니다. 이마와 꼬리 끝의 붉은 구슬, 귀의 검은 줄무늬, 목의 검은 띠와 흰 배가 전룡의 알려진 디자인과 일치하며, 메가전룡의 긴 흰 갈기와 풍성한 흰 꼬리는 보이지 않습니다. [출처](<https://pokemonkorea.co.kr/pokedex/view/253?utm_source=openai>)\n\n다만 이번 판독에서는 공개 사진이나 포켓몬코리아의 공식 일러스트를 직접 열어 대조하지 않았으므로, 공식 그림과의 직접 비교 근거는 제시할 수 없습니다. 첨부 이미지 자체가 공식 사이트에서 가져온 파일인지도 확인되지 않았습니다.",
+      "calls": [
+        {
+          "purpose": "답변",
+          "status": "ok",
+          "input_tokens": 8117,
+          "output_tokens": 156
+        },
+        {
+          "purpose": "응답 항목 대조",
+          "status": "ok",
+          "input_tokens": 551,
+          "output_tokens": 605
+        }
+      ]
+    },
+    {
+      "case": "frog-hint",
+      "arm": "A",
+      "answer": "《호퍼스》 캐릭터가 맞다면 **톰 리저드(Tom Lizard)**가 가장 유력합니다. 톰은 개구리가 아니라 초록색 도마뱀입니다. 공식 소개에 나오는 개구리 **양서류 왕(Amphibian King)**은 사진 속 캐릭터와 눈과 입 모양이 달라, 이 이미지로는 이름을 확정하기 어렵습니다. [출처](<https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/>)\n\n이 캐릭터를 본 영상이나 게시물 링크가 있나요?",
+      "calls": [
+        {
+          "purpose": "웹 근거 검토",
+          "status": "ok",
+          "input_tokens": 8269,
+          "output_tokens": 363
+        },
+        {
+          "purpose": "웹 근거 검토",
+          "status": "ok",
+          "input_tokens": 29924,
+          "output_tokens": 366
+        },
+        {
+          "purpose": "답변",
+          "status": "ok",
+          "input_tokens": 21472,
+          "output_tokens": 118
+        }
+      ]
+    }
+  ],
+  "B": [
+    {
+      "case": "helmet-identity",
+      "arm": "B",
+      "answer": "《PUBG: 배틀그라운드》의 **Stylin' Santa - Helmet (Level 3)**, 즉 **산타 스타일 3레벨 헬멧**입니다. 검은 바이저 옆의 금색 리벳판과 오른쪽으로 휘어진 흰 콧수염이 아이템 이미지와 일치합니다. [출처](<https://pubgitems.info/equip/helmet/12031153-stylin-santa-helmet-level-3>)",
+      "calls": [
+        {
+          "purpose": "답변",
+          "status": "ok",
+          "input_tokens": 8903,
+          "output_tokens": 86
+        },
+        {
+          "purpose": "응답 항목 대조",
+          "status": "ok",
+          "input_tokens": 846,
+          "output_tokens": 126
+        }
+      ]
+    },
+    {
+      "case": "dog",
+      "arm": "B",
+      "answer": "사진 속 개는 **아메리칸 에스키모 도그**로 가장 추정됩니다. 다만 **재패니즈 스피츠**도 외형이 매우 비슷해 이 사진만으로는 확정하기 어렵습니다.\n\n- **사진에서 보이는 근거:** 흰 장모와 갈기처럼 풍성한 목·가슴 털, 곧게 선 삼각 귀, 짙은 눈과 코, 긴 털의 꼬리가 보입니다. 두 품종에 공통적인 특징입니다. 주둥이 밑동이 비교적 넓어 보이고 목둘레 털이 특히 풍성해 아메리칸 에스키모 도그를 우선 후보로 보았지만, 촬영 각도에 따라 달라 보일 수 있습니다.\n- **공개 사진 대조 근거와 한계:** 아메리칸 켄넬 클럽(AKC)의 [아메리칸 에스키모 도그 품종 페이지](https://www.akc.org/dog-breeds/american-eskimo-dog)와 [재패니즈 스피츠 품종 페이지](https://www.akc.org/dog-breeds/japanese-spitz)를 참고 대상으로 제시할 수 있습니다. 두 품종의 공개 사진에서 비교할 특징은 흰 장모, 목둘레의 풍성한 털, 직립 귀와 짙은 눈·코입니다. 다만 이번 확인에서는 해당 사진들을 실제로 열어 나란히 대조하지 못했으므로, 이를 직접 대조해 얻은 결론이라고 할 수는 없습니다. 위 품종 판단은 올려주신 사진의 외형에 따른 추정입니다. 위키미디어 공용 검색 결과도 확인했지만 원문 사진을 열지 못했습니다 [출처](<https://commons.wikimedia.org/wiki/File%3AAmerican-Eskimo-dog.jpg?utm_source=openai>).\n\n서 있는 옆모습과 실제 어깨높이가 있으면 두 후보를 더 좁히는 데 도움이 됩니다. 품종을 확정하려면 혈통 기록이 필요합니다.",
+      "calls": [
+        {
+          "purpose": "답변",
+          "status": "ok",
+          "input_tokens": 4945,
+          "output_tokens": 304
+        },
+        {
+          "purpose": "응답 항목 대조",
+          "status": "ok",
+          "input_tokens": 1068,
+          "output_tokens": 844
+        }
+      ]
+    },
+    {
+      "case": "new-18",
+      "arm": "B",
+      "answer": "이 캐릭터는 **전룡(Ampharos, 도감 번호 0181)**입니다.\n\n포켓몬코리아 공식 도감의 일러스트와 직접 대조한 결과, **이마와 꼬리 끝에 하나씩 달린 붉은 구슬**, 검은 줄무늬가 있는 귀와 목, 흰 배, 서 있는 자세까지 일치합니다. 함께 비교한 메가전룡은 풍성한 흰 털과 꼬리의 여러 구슬이 있어 첨부 이미지와 다릅니다. [출처](<https://pokemonkorea.co.kr/pokedex/view/253?utm_source=openai>)\n\n캐릭터는 기본 모습의 전룡으로 확인되지만, 첨부 이미지 파일 자체가 공식 사이트에서 가져온 것인지는 확인되지 않았습니다.",
+      "calls": [
+        {
+          "purpose": "답변",
+          "status": "ok",
+          "input_tokens": 8632,
+          "output_tokens": 165
+        },
+        {
+          "purpose": "응답 항목 대조",
+          "status": "ok",
+          "input_tokens": 987,
+          "output_tokens": 174
+        }
+      ]
+    },
+    {
+      "case": "frog-hint",
+      "arm": "B",
+      "answer": "《호퍼스》의 개구리 캐릭터는 **앰피비언 킹(Amphibian King)**입니다. 다만 공식 이미지와 비교해 보니 눈과 입 모양이 달라서, 사진 속 청록색 캐릭터가 앰피비언 킹인지는 확인하지 못했습니다. 또 다른 후보인 **톰 리저드(Tom Lizard)**는 개구리가 아니라 도마뱀입니다. [출처](<https://d23.com/meet-the-characters-in-disney-and-pixars-hoppers/>)\n\n그 캐릭터를 본 영상이나 게임 링크가 있나요?",
+      "calls": [
+        {
+          "purpose": "웹 근거 검토",
+          "status": "ok",
+          "input_tokens": 8269,
+          "output_tokens": 441
+        },
+        {
+          "purpose": "웹 근거 검토",
+          "status": "ok",
+          "input_tokens": 29924,
+          "output_tokens": 382
+        },
+        {
+          "purpose": "답변",
+          "status": "ok",
+          "input_tokens": 22179,
+          "output_tokens": 123
+        }
+      ]
+    }
+  ]
+}

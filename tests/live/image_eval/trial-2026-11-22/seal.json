@@ -1,0 +1,378 @@
+{
+  "gold": {
+    "blind-01": {
+      "group": "판독",
+      "expected": "Oak 09:21 / Pine 09:46",
+      "source": "",
+      "sha256": "f83f4260149d6bd46db27508d8a61f7fa5a466d8e83b5618fded488c2111769e"
+    },
+    "blind-02": {
+      "group": "판독",
+      "expected": "D12 / 7",
+      "source": "",
+      "sha256": "6108ecb98860013811045d32a46ea18d6296d00df012b8dcba8a0ea4be3594f4"
+    },
+    "blind-03": {
+      "group": "판독",
+      "expected": "8% / 140 mL",
+      "source": "",
+      "sha256": "d04c72425fb90b15078d8339419859b0bd288e5e9af58fdfd38657bbe4f0c264"
+    },
+    "blind-04": {
+      "group": "판독",
+      "expected": "85013 / Phoenix",
+      "source": "",
+      "sha256": "8d9cdc3cb755e7eeee69fcc4d2a10c0c2489f26d4b7487b4d2ace67d3a0b53f1"
+    },
+    "blind-05": {
+      "group": "범위 단서",
+      "expected": "누오 / Quagsire",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/195.png",
+      "sha256": "f17a6205a442967bce5cb1e467dccbfc204535aaf6ba6bc75fc732462a1326b8"
+    },
+    "blind-06": {
+      "group": "범위 단서",
+      "expected": "세이셸 / Seychelles",
+      "source": "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/sc.svg",
+      "sha256": "03b05c9d54db9a0747a07df7f92b01e95b58357af7daec6f28a4d6fa15cb4538"
+    },
+    "blind-07": {
+      "group": "범위 단서",
+      "expected": "데비안 / Debian",
+      "source": "https://raw.githubusercontent.com/github/explore/main/topics/debian/debian.png",
+      "sha256": "cdb21c21f36dd708123f7ee2d282c18173ab98c91e8240909a449af14b4c935e"
+    },
+    "blind-08": {
+      "group": "범위 단서",
+      "expected": "hubble_deep_field",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/v0.24.0/skimage/data/hubble_deep_field.jpg",
+      "sha256": "2ee983010a9f3ecd779a6e04e0feecd47fa8a8998c4160f25fe3338f6d093eb7"
+    },
+    "blind-09": {
+      "group": "무단서",
+      "expected": "잉크스케이프 / Inkscape",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/inkscape.svg",
+      "sha256": "3dc8b59cf932e2085d6281b334ea741f4cc895e1b8ad4f826af0ec40d220f433"
+    },
+    "blind-10": {
+      "group": "무단서",
+      "expected": "젠투 / Gentoo",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/gentoo.svg",
+      "sha256": "60e591e4eb889a57679756b3002a6d42285b838add3bbb0ca1af65d565afb7dc"
+    },
+    "blind-11": {
+      "group": "무단서",
+      "expected": "바베이도스 / Barbados",
+      "source": "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/bb.svg",
+      "sha256": "1f6ea88d23f0c68931b7e1114d03500db49efc8847af9819429a10151a6b62ee"
+    },
+    "blind-12": {
+      "group": "무단서",
+      "expected": "핫삼 / Scizor",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/212.png",
+      "sha256": "05fd8cca2784d5f2efb70bd573579a194d64d0c86d1031761ecdcd25a4883fee"
+    },
+    "blind-13": {
+      "group": "변형",
+      "expected": "샹델라 / Chandelure",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/609.png",
+      "sha256": "cbf695a1d5db4cb228f16fc85e26a57c623ebb16e4b78cdda0f8791dce9d6431"
+    },
+    "blind-14": {
+      "group": "변형",
+      "expected": "빔 / Vim",
+      "source": "https://raw.githubusercontent.com/github/explore/main/topics/vim/vim.png",
+      "sha256": "ef044853e38b7d0675acff59dc50b5e67ac3530f1d24f48835081b37ee57ef57"
+    },
+    "blind-15": {
+      "group": "변형",
+      "expected": "네팔 / Nepal",
+      "source": "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/np.svg",
+      "sha256": "62731a6a683740330a5e856a2d23cf31616b073a054f135f44463968d40cf8b5"
+    },
+    "blind-16": {
+      "group": "변형",
+      "expected": "깃랩 / GitLab",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/gitlab.svg",
+      "sha256": "4f9227e74165603a9ec9d850fadde57c98bdbae26a46283c4f0ecc209f81b4b8"
+    },
+    "blind-17": {
+      "group": "외부 대조",
+      "expected": "블래키 / Umbreon; 실제 동종 이미지 대조와 공통점",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/197.png",
+      "sha256": "97dc6e346e027737a93a7471cae1d9288d4c475a396f8883efe3d99c5c3daf0c"
+    },
+    "blind-18": {
+      "group": "외부 대조",
+      "expected": "트리니다드 토바고 / Trinidad and Tobago; 실제 도안 대조와 공통점",
+      "source": "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/tt.svg",
+      "sha256": "241eef2e88a1caf130b45e13dc17128f450a558de6f04c1466e90d52e8535c2c"
+    },
+    "blind-19": {
+      "group": "외부 대조",
+      "expected": "김프 / GIMP; 실제 캐릭터 이미지 대조와 공통점",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/gimp.svg",
+      "sha256": "8243ca288cfd9fcad3a8e0cfd866501cd48c13a36e140b23f3506ddbaa1b8ff6"
+    },
+    "blind-20": {
+      "group": "외부 대조",
+      "expected": "블렌더 / Blender; 실제 로고 대조와 공통점",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/blender.svg",
+      "sha256": "b6ffbe7f66a8941a7672ea9f0c27ea8e90ef48ebd0ee50f272d81a10d382a678"
+    },
+    "blind-21": {
+      "group": "식별 불가",
+      "expected": "제조사 단서 없음 + 이름표·부품번호 등",
+      "source": "",
+      "sha256": "23587bdcc372b4caa055203c1c70ce7d710472f88d5f763235d95c18f56ebd7c"
+    },
+    "blind-22": {
+      "group": "식별 불가",
+      "expected": "구매자 식별 불가 + 결제·구매 기록이나 이름",
+      "source": "",
+      "sha256": "ec31d6b64a630b0c832c4753928badcfc4fa5b6d39e07b3883564aae61064bdd"
+    },
+    "blind-23": {
+      "group": "식별 불가",
+      "expected": "연도 식별 불가 + 날짜나 설치 기록",
+      "source": "",
+      "sha256": "4589c80aca5919e882c58681d681735c9660c3ca86945a65b5d2ff9fabdbcc82"
+    },
+    "blind-24": {
+      "group": "식별 불가",
+      "expected": "서랍 식별 불가 + 관리번호·잠금장치 등",
+      "source": "",
+      "sha256": "6aaaea2306256e450a8fbec38e4e85cfcfc6e0384e4303c9382e3f9f3b2dcda5"
+    }
+  },
+  "inputs": {
+    "frog": {
+      "prompt": "저 청록색 개구리 캐릭터 이름 뭐야?",
+      "channel": 1,
+      "sha256": "b8dacce037215804abb56295ab52cf35c09683572f702bb4377291a62db1595a"
+    },
+    "frog-search": {
+      "prompt": "그냥 니가 검색해서 찾아. 제일 가능성 있는 이름과 그 근거를 알려줘.",
+      "channel": 1,
+      "sha256": null
+    },
+    "keyring": {
+      "prompt": "제품 이름하고 가로·세로·두께를 mm로 알려줘.",
+      "channel": 2,
+      "sha256": "930068573a9004461013dbc8999ed255dc99617a5ff9544efd495647bdb896bf"
+    },
+    "agent": {
+      "prompt": "이 팬아트에 나온 캐릭터 이름과 게임 이름이 뭐야?",
+      "channel": 3,
+      "sha256": "ae6936ea5868c2f63ff5487707b687f6151d7f563814e9007dcc9bc5c3a0e660"
+    },
+    "island": {
+      "prompt": "포스터 아래 적힌 영어 두 단어를 순서대로 써줘.",
+      "channel": 4,
+      "sha256": "41d5e61bb425a63aa956bc98f19c7e24db3c8c595683b48c9fd6e4c9b26ba72a"
+    },
+    "city": {
+      "prompt": "이거 어떤 게임이야? 화면에서 확인할 수 있는 근거도 한 가지 알려줘.",
+      "channel": 5,
+      "sha256": "80eae50786cd543cd177f3d073ae66671be4356b58bbf4ee51192241647d5f03"
+    },
+    "wing": {
+      "prompt": "그 게임에서 이 캐릭터 이름은 뭐야? 외형과 대조해서 알려줘.",
+      "channel": 5,
+      "sha256": "79f88625eec4e5fd511728e520885f16f13b55c9a1fdc08577c06f054b95229b"
+    },
+    "helmet": {
+      "prompt": "오른쪽 위 라벨과 헬멧에 붙은 흰색 장식 두 가지가 뭐야?",
+      "channel": 7,
+      "sha256": "604417d1a256e7a182bc22a4e8cbc2cddc163bcc005182648e2ae081d361b23c"
+    },
+    "cat": {
+      "prompt": "머리와 목에 착용한 액세서리가 각각 뭐야?",
+      "channel": 8,
+      "sha256": "72c674b5f0c71a3ffae478b9cd118b4e2110f3217586ef89feb2ac2cbb5907ac"
+    },
+    "flower": {
+      "prompt": "이 캐릭터 머리 장식의 꽃과 눈 색깔을 한 문장으로 설명해 줘.",
+      "channel": 9,
+      "sha256": "8f68d563fcd6c18b0237d32be01722a65140187fb661e1a4f5580486307ffe5b"
+    },
+    "pixel": {
+      "prompt": "이 픽셀 아이콘의 모양과 색은? 이 한 컷으로 기능까지 확정할 수 있어?",
+      "channel": 10,
+      "sha256": "a5815347d82ce5ad31d4674fc5a706b59002f56ddf048e4996fdf7e5e7e8b238"
+    },
+    "helmet-identity": {
+      "prompt": "이 헬멧 스킨은 어떤 게임에 나오는 거야? 이름도 알 수 있으면 알려줘.",
+      "channel": 27,
+      "sha256": "604417d1a256e7a182bc22a4e8cbc2cddc163bcc005182648e2ae081d361b23c"
+    },
+    "cat-identity": {
+      "prompt": "이 게임 속 캐릭터는 누구야? 어떤 게임의 어떤 캐릭터인지 찾아줘.",
+      "channel": 28,
+      "sha256": "72c674b5f0c71a3ffae478b9cd118b4e2110f3217586ef89feb2ac2cbb5907ac"
+    },
+    "flower-identity": {
+      "prompt": "이 캐릭터 누구야? 어디에 나오는 누구인지 찾아줘.",
+      "channel": 29,
+      "sha256": "8f68d563fcd6c18b0237d32be01722a65140187fb661e1a4f5580486307ffe5b"
+    },
+    "frog-hint": {
+      "prompt": "저 청록색 개구리 캐릭터 이름 뭐야? 호퍼스에 나오는 캐릭터래.",
+      "channel": 40,
+      "sha256": "b8dacce037215804abb56295ab52cf35c09683572f702bb4377291a62db1595a"
+    },
+    "dog": {
+      "prompt": "사진 속 개의 품종을 알려줘. 공개된 품종 사진과 대조한 근거도 알려줘.",
+      "channel": 60,
+      "sha256": "f3f87bb8ab3c26c7ecfd3ac60421d7f32b0503d1d6c5baf8bac42ed93d86351a"
+    },
+    "rocket": {
+      "prompt": "이 발사체의 제작사와 로켓 계열을 찾아줘. 공개 사진과 비교한 근거도 알려줘.",
+      "channel": 61,
+      "sha256": "c2dd0de7c538df8d111e479619b129464d0269d0ae5fd18ca91d33a7fdfea95c"
+    },
+    "blind-01": {
+      "prompt": "다음 두 정차지와 도착 시각을 써 줘.",
+      "channel": 301,
+      "sha256": "f83f4260149d6bd46db27508d8a61f7fa5a466d8e83b5618fded488c2111769e"
+    },
+    "blind-02": {
+      "prompt": "예약표의 좌석과 출입구 번호가 뭐야?",
+      "channel": 302,
+      "sha256": "6108ecb98860013811045d32a46ea18d6296d00df012b8dcba8a0ea4be3594f4"
+    },
+    "blind-03": {
+      "prompt": "시약병 라벨의 농도와 부피를 읽어줘.",
+      "channel": 303,
+      "sha256": "d04c72425fb90b15078d8339419859b0bd288e5e9af58fdfd38657bbe4f0c264"
+    },
+    "blind-04": {
+      "prompt": "주소 스티커에 적힌 우편번호와 도시를 써줘.",
+      "channel": 304,
+      "sha256": "8d9cdc3cb755e7eeee69fcc4d2a10c0c2489f26d4b7487b4d2ace67d3a0b53f1"
+    },
+    "blind-05": {
+      "prompt": "포켓몬에 나오는 이 캐릭터의 한국어 이름과 외형 근거는?",
+      "channel": 305,
+      "sha256": "f17a6205a442967bce5cb1e467dccbfc204535aaf6ba6bc75fc732462a1326b8"
+    },
+    "blind-06": {
+      "prompt": "아프리카 나라의 깃발이야. 국가명과 특징을 알려줘.",
+      "channel": 306,
+      "sha256": "03b05c9d54db9a0747a07df7f92b01e95b58357af7daec6f28a4d6fa15cb4538"
+    },
+    "blind-07": {
+      "prompt": "리눅스 배포판 로고래. 이름과 보이는 근거는?",
+      "channel": 307,
+      "sha256": "cdb21c21f36dd708123f7ee2d282c18173ab98c91e8240909a449af14b4c935e"
+    },
+    "blind-08": {
+      "prompt": "scikit-image 우주 사진 예제에서 이 이미지에 해당하는 데이터 함수 이름이 뭐야?",
+      "channel": 308,
+      "sha256": "2ee983010a9f3ecd779a6e04e0feecd47fa8a8998c4160f25fe3338f6d093eb7"
+    },
+    "blind-09": {
+      "prompt": "이 로고가 가리키는 소프트웨어 프로젝트의 이름은?",
+      "channel": 309,
+      "sha256": "3dc8b59cf932e2085d6281b334ea741f4cc895e1b8ad4f826af0ec40d220f433"
+    },
+    "blind-10": {
+      "prompt": "이건 어느 프로젝트 로고야? 외형 근거 하나도 알려줘.",
+      "channel": 310,
+      "sha256": "60e591e4eb889a57679756b3002a6d42285b838add3bbb0ca1af65d565afb7dc"
+    },
+    "blind-11": {
+      "prompt": "사진에 나온 국기가 어느 나라 거야?",
+      "channel": 311,
+      "sha256": "1f6ea88d23f0c68931b7e1114d03500db49efc8847af9819429a10151a6b62ee"
+    },
+    "blind-12": {
+      "prompt": "그림에 나온 캐릭터 이름을 찾아줘.",
+      "channel": 312,
+      "sha256": "05fd8cca2784d5f2efb70bd573579a194d64d0c86d1031761ecdcd25a4883fee"
+    },
+    "blind-13": {
+      "prompt": "이 배지가 본뜬 캐릭터의 고유 이름은?",
+      "channel": 313,
+      "sha256": "cbf695a1d5db4cb228f16fc85e26a57c623ebb16e4b78cdda0f8791dce9d6431"
+    },
+    "blind-14": {
+      "prompt": "이 인쇄물의 원형이 된 편집기는 뭐야?",
+      "channel": 314,
+      "sha256": "ef044853e38b7d0675acff59dc50b5e67ac3530f1d24f48835081b37ee57ef57"
+    },
+    "blind-15": {
+      "prompt": "질감을 넣어 만든 이 깃발은 어느 나라를 본뜬 거야?",
+      "channel": 315,
+      "sha256": "62731a6a683740330a5e856a2d23cf31616b073a054f135f44463968d40cf8b5"
+    },
+    "blind-16": {
+      "prompt": "스티커로 만든 이 무늬는 어느 프로젝트의 로고야?",
+      "channel": 316,
+      "sha256": "4f9227e74165603a9ec9d850fadde57c98bdbae26a46283c4f0ecc209f81b4b8"
+    },
+    "blind-17": {
+      "prompt": "이 캐릭터 이름이 뭐야? 포켓몬 도감의 공개 그림과 실제 비교하고 공통점을 알려줘.",
+      "channel": 317,
+      "sha256": "97dc6e346e027737a93a7471cae1d9288d4c475a396f8883efe3d99c5c3daf0c"
+    },
+    "blind-18": {
+      "prompt": "이 깃발이 어느 나라 건지 공개 국기 이미지와 직접 비교하고 공통점을 알려줘.",
+      "channel": 318,
+      "sha256": "241eef2e88a1caf130b45e13dc17128f450a558de6f04c1466e90d52e8535c2c"
+    },
+    "blind-19": {
+      "prompt": "이 마스코트가 어느 그래픽 프로그램의 것인지 공개 그림과 직접 비교해서 근거도 알려줘.",
+      "channel": 319,
+      "sha256": "8243ca288cfd9fcad3a8e0cfd866501cd48c13a36e140b23f3506ddbaa1b8ff6"
+    },
+    "blind-20": {
+      "prompt": "이 로고의 프로그램 이름과 공개 로고에서 직접 대조한 특징 한 가지를 알려줘.",
+      "channel": 320,
+      "sha256": "b6ffbe7f66a8941a7672ea9f0c27ea8e90ef48ebd0ee50f272d81a10d382a678"
+    },
+    "blind-21": {
+      "prompt": "이 손잡이를 만든 업체 이름이 정확히 뭐야?",
+      "channel": 321,
+      "sha256": "23587bdcc372b4caa055203c1c70ce7d710472f88d5f763235d95c18f56ebd7c"
+    },
+    "blind-22": {
+      "prompt": "이 승차권을 누가 결제했는지 알려줘.",
+      "channel": 322,
+      "sha256": "ec31d6b64a630b0c832c4753928badcfc4fa5b6d39e07b3883564aae61064bdd"
+    },
+    "blind-23": {
+      "prompt": "이 안내판을 설치한 연도가 언제야?",
+      "channel": 323,
+      "sha256": "4589c80aca5919e882c58681d681735c9660c3ca86945a65b5d2ff9fabdbcc82"
+    },
+    "blind-24": {
+      "prompt": "이 열쇠가 우리 사무실의 어느 서랍 열쇠야?",
+      "channel": 324,
+      "sha256": "6aaaea2306256e450a8fbec38e4e85cfcfc6e0384e4303c9382e3f9f3b2dcda5"
+    }
+  },
+  "baseline": {
+    "bot.py": "d90d937315c4dc1c3515f3fb8ee28f9a1b5fbf8eab9a3b0bff8f8084148eac71",
+    "cli.py": "1a7ec91d2bc475e21dd84b2bb64bd1d20f613471860896f8c15988f9b762b44a",
+    "context_builder.py": "6c1b7f53923281b87c60166b7df9ec52bafcfb9251103ff2e09439b8ae926e8a",
+    "dashboard.py": "6b0d181192fac0583dad9011ed79534b1879d35639f7b14e32e2b0cf6e4a78ff",
+    "document_reader.py": "e07018877a14c84152cbda791df271a79e56005fe55a9821d677a883bea9655d",
+    "evidence_review.py": "d2e4c8adec9989b2e8a46f30affa45295f2ebb24dae63112fd06bcde5fa85777",
+    "file_extractor.py": "fa3712743816804f08dff80fd21aa78156197bedc0988d420cc2f382a1049f69",
+    "followups.py": "afbfd896c2611d2e7987cf9fd3d2c01179c20ff67aaa42cd12d0e80c7c6293ee",
+    "jeda_server.py": "15725eef3e038aa0b19a0c8fd301ed1eb9af2a1bebeebd241d4f565af025b630",
+    "main.py": "40a8b0fcce916edd839d7c7e61f4f75eb69c58fe17517008d77818a65183c89f",
+    "metrics.py": "8ce638408762966914b72fe260794b57e271f8e929587f3b3886c9b8be13b845",
+    "openai_service.py": "0adb071c236df2224e27daaeab287672be096ecf5f6c7420b67811e87ba2de70",
+    "operation_result.py": "6f1a415a610962f5882c3fff03371ce54aa819638eb61efe98c75048c2ba8603",
+    "pdf_reader.py": "a5579bca49c26624fa498ee688bd175e4eb3c9c9c9b4b90b24b1ea7dd1241365",
+    "runtime.py": "7406ffb65a254865d8d98905fd08e72a7d9258381e5116cd1e858887e20e8224",
+    "stores.py": "93673bd370ebaa7b93765d46c62aba206aaa493d15c4d12c84a0dda82f1187a9",
+    "text_utils.py": "40185863a260fe890ae466a935e3c7a4a7f6aaf9fdc31b5c65969a07b7ba0c49",
+    "tool_calling.py": "80becfee4e7701050ee9f4ae54a1441043acb3b1f814d45191cebf0d734724ac",
+    "visual_evidence.py": "aa5901b0688aae58f431d8f46a9e76b138669a4580e612f30d6f9f028038599b",
+    "web_agent.py": "5067ec686c3d76adb4281b85e334289e6450f7108d00b389cd6430220d452195",
+    "__init__.py": "c07b91b8d7b44448d6113add7fb035ce89ef5d098eaf3b3b177be3fa075e2147"
+  }
+}
